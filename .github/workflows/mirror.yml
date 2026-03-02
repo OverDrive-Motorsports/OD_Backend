@@ -1,0 +1,46 @@
+name: Mirror Repository
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    name: Mirror Repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "Mirror Bot"
+          git config --global user.email "mirror-bot@example.com"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GIT_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: Add remote mirror
+        run: git remote add mirror ${{ secrets.MIRROR_REPO_URL }}
+
+      - name: Push to mirror
+        run: |
+          git push mirror --all --force
+          git push mirror --tags --force
+
+      - name: Verify mirror
+        run: |
+          echo "Mirroring completed successfully"
+          echo "Source: ${{ github.repository }}"
+          echo "Target: ${{ secrets.MIRROR_REPO_URL }}"
+
+

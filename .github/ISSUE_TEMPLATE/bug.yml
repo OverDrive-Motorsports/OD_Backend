@@ -1,0 +1,46 @@
+name: Bug
+description: Signaler un probleme
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      description: Niveau d'urgence du bug
+      options:
+        - P0 - CRITICAL
+        - P1 – HIGH
+        - P2 – MEDIUM
+        - P3 – LOW
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Probleme
+      description: Decris ce qui ne fonctionne pas.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Etapes pour reproduire
+      description: 1) ... 2) ... 3) ...
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexte
+      description: Appareil, navigateur, version, capture si besoin.
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Vérifications
+      description: Merci de confirmer les points suivants
+      options:
+        - label: J’ai recherché dans les tickets existants et ce bug n’a pas déjà été signalé
+          required: true

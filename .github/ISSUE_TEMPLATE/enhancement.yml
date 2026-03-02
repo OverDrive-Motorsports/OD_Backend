@@ -1,0 +1,44 @@
+name: Amelioration
+description: Ameliorer une fonctionnalite existante
+title: "[Amelioration]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      description: Importance de cette amélioration
+      options:
+        - P0 - CRITICAL
+        - P1 – HIGH
+        - P2 – MEDIUM
+        - P3 – LOW
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Demande
+      description: Decris simplement ce que tu veux ameliorer.
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: Pourquoi
+      description: Qu'est-ce qui ne va pas ou peut etre mieux ?
+  - type: textarea
+    id: links
+    attributes:
+      label: Liens / exemples
+      description: Lien, capture, exemple si besoin.
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Vérifications
+      description: Merci de confirmer
+      options:
+        - label: Cette amélioration concerne une fonctionnalité existante
+          required: true
+        - label: Ce n’est pas un bug bloquant
+          required: true

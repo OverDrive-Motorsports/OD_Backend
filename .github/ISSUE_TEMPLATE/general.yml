@@ -1,0 +1,53 @@
+name: Demande générale
+description: Ticket générique pour besoin produit/tech/doc
+title: "[Demande]: "
+labels: ["A EVALUER"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      description: Importance
+      options:
+        - P0 - Obligatoire
+        - P1 - Important
+        - P2 - Optionnel
+        - P3 - Faible priorité
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Merci de détailler la demande.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Décris la demande et le résultat attendu.
+      placeholder: "En tant que [persona], je veux [besoin] afin de [bénéfice]."
+    validations:
+      required: true
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Découpe en tâches concrètes si possible.
+      value: |
+        - [ ] ...
+        - [ ] ...
+  - type: textarea
+    id: references
+    attributes:
+      label: Références
+      description: Liens vers specs, maquettes, discussions, tickets liés.
+      placeholder:  lien vers doc / code ou screenshot
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Vérifications
+      description: Merci de confirmer
+      options:
+        - label: Cette feature n'existe pas déjà dans les tickets ou dans l’application
+          required: true
+        - label: Cette demande est alignée avec la roadmap
+          required: true
