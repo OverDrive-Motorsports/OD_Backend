@@ -1,0 +1,65 @@
+name: Mirror to Main Repository
+
+on:
+  push:
+    branches: [ "Staging" ]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set variables
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
+
+      - name: Clone main repository
+        run: |
+          git clone https://github.com/OverDrive-Motorsports/OverDrive.git main-repo
+
+      - name: Configure authenticated remote
+        run: |
+          cd main-repo
+          git remote set-url origin https://x-access-token:${{ secrets.MAIN_REPO_TOKEN }}@github.com/OverDrive-Motorsports/OverDrive.git
+
+      - name: Sync content
+        run: |
+          WORKDIR=$(pwd)
+
+          mkdir "$WORKDIR/source-copy"
+
+          rsync -av --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'main-repo' \
+            "$WORKDIR/" "$WORKDIR/source-copy/"
+
+          cd main-repo
+
+          git checkout Staging || git checkout -b Staging
+
+          mkdir -p "$WORKDIR/main-repo/$REPO_NAME"
+
+          rsync -av --delete \
+            "$WORKDIR/source-copy/" \
+            "$WORKDIR/main-repo/$REPO_NAME/"
+
+      - name: Commit and push if changes
+        run: |
+          cd main-repo
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add .
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Sync $REPO_NAME from Staging"
+            git push origin Staging
+          else
+            echo "No changes to commit"
+          fi
