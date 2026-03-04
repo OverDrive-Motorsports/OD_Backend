@@ -1,0 +1,240 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## database_scheme.sql - Database scheme file for PostgreSQL
+ ##
+*/
+
+//-------------------------
+// Setup
+//-------------------------
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator db {
+  provider = "go run github.com/steebchen/prisma-client-go"
+}
+
+//-------------------------
+// Types
+//-------------------------
+enum ProviderStatus {
+  active
+  beta
+  disabled
+}
+
+enum WidgetType {
+  video
+}
+
+enum EventStatus {
+  scheduled
+  live
+  finished
+}
+
+enum SessionType {
+  race
+  quali
+  practice
+}
+
+enum SessionStatus {
+  live
+  finished
+}
+
+//-------------------------
+// User
+//-------------------------
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique @db.VarChar(255)
+  displayName   String   @db.VarChar(50)
+  passwordHash  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  authSessions        AuthSession[]
+  providerConnections ProviderConnection[]
+  presets             UserPreset[]
+}
+
+//-------------------------
+// Auth Session
+//-------------------------
+model AuthSession {
+  id               String   @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+//-------------------------
+// Provider
+//-------------------------
+model Provider {
+  id        String         @id @default(uuid())
+  code      String         @unique @db.VarChar(20)
+  name      String         @db.VarChar(50)
+  status    ProviderStatus @default(active)
+  createdAt DateTime       @default(now())
+
+  connections ProviderConnection[]
+  events      Event[]
+  teams       Team[]
+  drivers     Driver[]
+}
+
+//-------------------------
+// Provider Connection
+//-------------------------
+model ProviderConnection {
+  id         String   @id @default(uuid())
+  userId     String
+  providerId String
+  configJson Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, providerId])
+  @@index([providerId])
+}
+
+//-------------------------
+// User Preset
+//-------------------------
+model UserPreset {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String   @db.VarChar(50)
+  isDefault Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  widgets PresetWidget[]
+
+  @@index([userId])
+}
+
+//-------------------------
+// Preset Widget
+//-------------------------
+model PresetWidget {
+  id        String   @id @default(uuid())
+  presetId  String
+  type      WidgetType
+  settings  Json
+  posX      Float
+  posY      Float
+  posZ      Float
+  rotX      Float
+  rotY      Float
+  rotZ      Float
+  width     Float
+  height    Float
+  orderIndex Int     @default(0)
+
+  preset UserPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+
+  @@index([presetId])
+}
+
+//-------------------------
+// Event
+//-------------------------
+model Event {
+  id            String      @id @default(uuid())
+  providerId    String
+  seasonYear    Int
+  name          String      @db.VarChar(50)
+  location      String      @db.VarChar(255)
+  startTimeUtc  DateTime
+  endTimeUtc    DateTime
+  status        EventStatus
+  createdAt     DateTime    @default(now())
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  sessions Session[]
+
+  @@index([providerId])
+}
+
+//-------------------------
+// Session
+//-------------------------
+model Session {
+  id           String        @id @default(uuid())
+  eventId      String
+  type         SessionType
+  status       SessionStatus
+  startedAtUtc DateTime
+  endedAtUtc   DateTime?
+
+  event      Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  highlights RaceHighlight[]
+
+  @@index([eventId])
+}
+
+//-------------------------
+// Race Highlight
+//-------------------------
+model RaceHighlight {
+  id          String   @id @default(uuid())
+  sessionId   String
+  timestampMs Int
+  type        String   @db.VarChar(50)
+  summary     String
+  metadata    Json
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+//-------------------------
+// Team
+//-------------------------
+model Team {
+  id         String   @id @default(uuid())
+  providerId String
+  name       String   @db.VarChar(50)
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  drivers  Driver[]
+
+  @@index([providerId])
+}
+
+//-------------------------
+// Driver
+//-------------------------
+model Driver {
+  id         String @id @default(uuid())
+  providerId String
+  teamId     String
+  displayName String @db.VarChar(50)
+  code       String @unique @db.VarChar(20)
+  number     Int
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([teamId])
+}
