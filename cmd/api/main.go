@@ -57,6 +57,13 @@ func main() {
 	fmt.Println("- GET  /api/v1/race/getrace?year=2025&country=Australia&meeting=Australian+Grand+Prix&driver_number=63")
 	fmt.Println("- POST /api/v1/race/sendrace")
 	fmt.Println("- GET  /api/v1/race/cache")
+	fmt.Println("- GET  /api/v1/race/championship/drivers")
+	fmt.Println("- GET  /api/v1/race/championship/constructors")
+	fmt.Println("- GET  /api/v1/race/weather")
+	fmt.Println("- GET  /api/v1/race/facts")
+	fmt.Println("- GET  /api/v1/race/driver?driver_number=63")
+	fmt.Println("- GET  /api/v1/race/standings/race")
+	fmt.Println("- GET  /api/v1/race/video-url")
 	fmt.Println("- Legacy: /getrace and /sendrace kept for compatibility")
 
 	go func() {

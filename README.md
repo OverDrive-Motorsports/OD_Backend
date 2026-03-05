@@ -100,6 +100,13 @@ go run ./cmd/api
 - `GET /api/v1/race/getrace`
 - `POST /api/v1/race/sendrace`
 - `GET /api/v1/race/cache`
+- `GET /api/v1/race/championship/drivers`
+- `GET /api/v1/race/championship/constructors`
+- `GET /api/v1/race/weather`
+- `GET /api/v1/race/facts`
+- `GET /api/v1/race/driver?driver_number=63`
+- `GET /api/v1/race/standings/race`
+- `GET /api/v1/race/video-url`
 
 Example flow:
 
