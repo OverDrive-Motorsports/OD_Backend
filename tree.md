@@ -25,14 +25,6 @@ OD_Backend/
 │   ├── app/
 │   │   └── server.go
 │   │      Role:/**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## [FileName] - [Brief description of the file's purpose]
- ## Example: "HomePage - Main component for the showcase website's homepage."
- ##
- */
 │   │      - Runtime dependency wiring (provider -> usecase -> service -> cache -> handler -> router).
 │   │      - Builds `http.Server` with server timeouts.
 │   │      - Single place to plug in new adapters (DB/Redis/etc.).

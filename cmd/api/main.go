@@ -13,10 +13,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"overdrive/internal/database"
 	"syscall"
 
 	"overdrive/internal/api"
@@ -27,6 +29,18 @@ import (
 // main boots the API server and handles graceful startup and shutdown.
 func main() {
 	cfg := config.Load()
+	err := database.Connect()
+	if err != nil {
+		fmt.Println("Failed to connect to database")
+		log.Fatal(err)
+		return
+	}
+	if database.IsConnected() {
+		fmt.Println("Successfully connected to database")
+	} else {
+		log.Fatal("Failed to connect to database")
+		return
+	}
 
 	var (
 		addr           = flag.String("addr", cfg.APIAddr, "HTTP listen address")
@@ -84,4 +98,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "graceful shutdown failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Print("Disconnecting from database... ")
+	if database.IsConnected() {
+		err := database.Disconnect()
+		if err != nil {
+			fmt.Println("Failed to disconnect from database")
+			log.Fatal(err)
+		}
+	}
+	fmt.Println("Done.")
 }
