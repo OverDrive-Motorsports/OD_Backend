@@ -1,2 +1,11 @@
 .idea/
 .vscode/
+package-lock.json
+node_modules/
+dist/
+coverage/
+logs/
+*.log
+*.env
+*.tmp
+*.cache
