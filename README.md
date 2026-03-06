@@ -1,3 +1,12 @@
+<!--
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## README.md - Project overview and backend quick-start documentation.
+##
+-->
+
 <div align="center">
 
 # OverDrive – VR Experience for Motorsport
@@ -74,6 +83,40 @@ Project developed by the **OverDrive Team – Epitech Paris (2026)**.
 ## Installation & Usage
 
 The project is currently under development. No public version is available at this time.
+
+## Backend V1 (Go)
+
+Current backend entrypoint:
+
+```bash
+go run ./cmd/api
+```
+
+### Available endpoints
+
+- `GET /health`
+- `GET /getrace` (legacy alias)
+- `POST /sendrace` (legacy alias)
+- `GET /api/v1/race/getrace`
+- `POST /api/v1/race/sendrace`
+- `GET /api/v1/race/cache`
+- `GET /api/v1/race/championship/drivers`
+- `GET /api/v1/race/championship/constructors`
+- `GET /api/v1/race/weather`
+- `GET /api/v1/race/facts`
+- `GET /api/v1/race/driver?driver_number=63`
+- `GET /api/v1/race/standings/race`
+- `GET /api/v1/race/video-url`
+
+Example flow:
+
+```bash
+# 1) fetch from OpenF1 and cache in backend memory
+curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=63"
+
+# 2) send cached payload
+curl -X POST "http://localhost:8080/api/v1/race/sendrace"
+```
 
 <br>
 
