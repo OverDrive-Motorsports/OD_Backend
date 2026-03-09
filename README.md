@@ -100,6 +100,7 @@ go run ./cmd/api
 - `GET /api/v1/race/getrace`
 - `POST /api/v1/race/sendrace`
 - `GET /api/v1/race/cache`
+- `GET /api/v1/race/storage`
 - `GET /api/v1/race/championship/drivers`
 - `GET /api/v1/race/championship/constructors`
 - `GET /api/v1/race/weather`
@@ -111,10 +112,10 @@ go run ./cmd/api
 Example flow:
 
 ```bash
-# 1) fetch from OpenF1 and cache in backend memory
+# 1) fetch from OpenF1 and persist in PostgreSQL
 curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=63"
 
-# 2) send cached payload
+# 2) send latest stored payload
 curl -X POST "http://localhost:8080/api/v1/race/sendrace"
 ```
 

@@ -16,8 +16,9 @@ import (
 
 	"overdrive/internal/api"
 	"overdrive/internal/config"
+	"overdrive/internal/database"
 	"overdrive/internal/providers/openf1"
-	"overdrive/internal/repository/memory"
+	repositoryprisma "overdrive/internal/repository/prisma"
 	"overdrive/internal/service"
 	"overdrive/internal/usecase"
 )
@@ -33,8 +34,8 @@ func NewHTTPServer(cfg config.Config, defaults api.RaceDefaults, logger *slog.Lo
 	)
 
 	builder := usecase.NewRaceBuilder(client)
-	cache := memory.NewRaceCache()
-	raceService := service.NewRaceService(builder, cache)
+	store := repositoryprisma.NewRaceArchiveStore(database.PrismaClient)
+	raceService := service.NewRaceService(builder, store)
 	raceHandler := api.NewRaceHandler(raceService, defaults, cfg.GetRaceTimeout)
 	router := api.NewRouter(raceHandler, logger)
 

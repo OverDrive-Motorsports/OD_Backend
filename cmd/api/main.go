@@ -71,6 +71,7 @@ func main() {
 	fmt.Println("- GET  /api/v1/race/getrace?year=2025&country=Australia&meeting=Australian+Grand+Prix&driver_number=63")
 	fmt.Println("- POST /api/v1/race/sendrace")
 	fmt.Println("- GET  /api/v1/race/cache")
+	fmt.Println("- GET  /api/v1/race/storage")
 	fmt.Println("- GET  /api/v1/race/championship/drivers")
 	fmt.Println("- GET  /api/v1/race/championship/constructors")
 	fmt.Println("- GET  /api/v1/race/weather")

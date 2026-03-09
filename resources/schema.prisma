@@ -40,13 +40,20 @@ enum EventStatus {
 
 enum SessionType {
   race
+  sprint
   quali
   practice
 }
 
 enum SessionStatus {
+  scheduled
   live
   finished
+}
+
+enum ArchiveMode {
+  full
+  driver_focused
 }
 
 //-------------------------
@@ -91,6 +98,7 @@ model Provider {
   createdAt DateTime       @default(now())
 
   connections ProviderConnection[]
+  championships Championship[]
   events      Event[]
   teams       Team[]
   drivers     Driver[]
@@ -155,23 +163,82 @@ model PresetWidget {
 }
 
 //-------------------------
+// Championship
+//-------------------------
+model Championship {
+  id          String   @id @default(uuid())
+  providerId  String
+  code        String   @db.VarChar(20)
+  name        String   @db.VarChar(80)
+  category    String?  @db.VarChar(40)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  races    Race[]
+
+  @@unique([providerId, code])
+  @@index([providerId])
+}
+
+//-------------------------
 // Event
 //-------------------------
 model Event {
   id            String      @id @default(uuid())
   providerId    String
   seasonYear    Int
-  name          String      @db.VarChar(50)
+  name          String      @db.VarChar(120)
+  officialName  String?     @db.VarChar(255)
   location      String      @db.VarChar(255)
+  countryName   String?     @db.VarChar(80)
+  countryCode   String?     @db.VarChar(3)
+  circuitName   String?     @db.VarChar(120)
+  externalKey   String?     @db.VarChar(64)
   startTimeUtc  DateTime
   endTimeUtc    DateTime
   status        EventStatus
   createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  race     Race?
   sessions Session[]
 
+  @@unique([providerId, externalKey])
   @@index([providerId])
+  @@index([seasonYear, startTimeUtc])
+}
+
+//-------------------------
+// Race
+//-------------------------
+model Race {
+  id              String      @id @default(uuid())
+  championshipId  String
+  eventId         String      @unique
+  seasonYear      Int
+  roundNumber     Int?
+  name            String      @db.VarChar(120)
+  officialName    String?     @db.VarChar(255)
+  countryName     String?     @db.VarChar(80)
+  countryCode     String?     @db.VarChar(3)
+  circuitName     String?     @db.VarChar(120)
+  externalKey     String?     @db.VarChar(64)
+  startsAtUtc     DateTime
+  endsAtUtc       DateTime?
+  status          EventStatus
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+
+  @@unique([championshipId, seasonYear, externalKey])
+  @@index([championshipId, seasonYear])
+  @@index([eventId])
 }
 
 //-------------------------
@@ -180,15 +247,39 @@ model Event {
 model Session {
   id           String        @id @default(uuid())
   eventId      String
+  raceId       String?
   type         SessionType
   status       SessionStatus
+  name         String?       @db.VarChar(80)
+  externalKey  String?       @db.VarChar(64)
   startedAtUtc DateTime
   endedAtUtc   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  event      Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  highlights RaceHighlight[]
+  event                  Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  race                   Race?                        @relation(fields: [raceId], references: [id], onDelete: SetNull)
+  highlights             RaceHighlight[]
+  archives               RaceArchive[]
+  laps                   RaceLap[]
+  telemetrySamples       RaceTelemetrySample[]
+  locationSamples        RaceLocationSample[]
+  positionSamples        RacePositionSample[]
+  intervalSamples        RaceIntervalSample[]
+  stintRows              RaceStint[]
+  pitStops               RacePitStop[]
+  raceControlEvents      RaceControlEvent[]
+  teamRadioMessages      TeamRadioMessage[]
+  weatherSamples         RaceWeatherSample[]
+  sessionResultRows      SessionResultRow[]
+  startingGridRows       StartingGridRow[]
+  overtakeEvents         OvertakeEvent[]
+  driverChampionshipRows DriverChampionshipStanding[]
+  teamChampionshipRows   TeamChampionshipStanding[]
 
+  @@unique([eventId, externalKey])
   @@index([eventId])
+  @@index([raceId])
 }
 
 //-------------------------
@@ -211,13 +302,18 @@ model RaceHighlight {
 // Team
 //-------------------------
 model Team {
-  id         String   @id @default(uuid())
-  providerId String
-  name       String   @db.VarChar(50)
+  id          String  @id @default(uuid())
+  providerId  String
+  name        String  @db.VarChar(80)
+  code        String? @db.VarChar(20)
+  colorHex    String? @db.VarChar(7)
+  externalKey String? @db.VarChar(64)
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   drivers  Driver[]
 
+  @@unique([providerId, externalKey])
+  @@unique([providerId, code])
   @@index([providerId])
 }
 
@@ -225,16 +321,327 @@ model Team {
 // Driver
 //-------------------------
 model Driver {
-  id         String @id @default(uuid())
-  providerId String
-  teamId     String
-  displayName String @db.VarChar(50)
-  code       String @unique @db.VarChar(20)
-  number     Int
+  id          String   @id @default(uuid())
+  providerId  String
+  teamId      String
+  displayName String   @db.VarChar(80)
+  firstName   String?  @db.VarChar(60)
+  lastName    String?  @db.VarChar(60)
+  code        String?  @db.VarChar(20)
+  number      Int
+  countryCode String?  @db.VarChar(3)
+  externalKey String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
+  @@unique([providerId, code])
+  @@unique([providerId, externalKey])
   @@index([providerId])
   @@index([teamId])
+}
+
+//-------------------------
+// Raw Race Archive
+//-------------------------
+model RaceArchive {
+  id                 String      @id @default(uuid())
+  sessionId          String
+  mode               ArchiveMode @default(full)
+  generatedAt        DateTime    @default(now())
+  sourceMeetingKey   Int?
+  sourceSessionKey   Int?
+  sourceDriverNumber Int?
+  metadata           Json
+  counts             Json
+  fetchErrors        Json?
+
+  session  Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  datasets RaceDatasetChunk[]
+
+  @@index([sessionId, generatedAt(sort: Desc)])
+  @@index([sourceMeetingKey, sourceSessionKey])
+}
+
+model RaceDatasetChunk {
+  id         BigInt   @id @default(autoincrement())
+  archiveId  String
+  dataset    String   @db.VarChar(50)
+  chunkIndex Int      @default(0)
+  rowCount   Int      @default(0)
+  rows       Json
+  createdAt  DateTime @default(now())
+
+  archive RaceArchive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+
+  @@unique([archiveId, dataset, chunkIndex])
+  @@index([dataset])
+}
+
+//-------------------------
+// Race Time-Series
+//-------------------------
+model RaceLap {
+  id             BigInt    @id @default(autoincrement())
+  sessionId      String
+  driverNumber   Int
+  lapNumber      Int
+  dateStartUtc   DateTime?
+  lapDurationSec Float?
+  sector1Sec     Float?
+  sector2Sec     Float?
+  sector3Sec     Float?
+  speedI1Kph     Int?
+  speedI2Kph     Int?
+  speedTrapKph   Int?
+  isPitOutLap    Boolean?
+  raw            Json
+  createdAt      DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber, lapNumber])
+  @@index([sessionId, driverNumber, lapNumber])
+  @@index([sessionId, dateStartUtc])
+}
+
+model RaceTelemetrySample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  speedKph     Int?
+  rpm          Int?
+  gear         Int?
+  throttlePct  Float?
+  brakePct     Float?
+  drsState     Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RaceLocationSample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  x            Float?
+  y            Float?
+  z            Float?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RacePositionSample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  lapNumber    Int?
+  position     Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+  @@index([sessionId, position])
+}
+
+model RaceIntervalSample {
+  id                    BigInt   @id @default(autoincrement())
+  sessionId             String
+  driverNumber          Int
+  dateUtc               DateTime
+  gapToLeader           String?  @db.VarChar(40)
+  intervalToFrontDriver String?  @db.VarChar(40)
+  raw                   Json
+  createdAt             DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RaceStint {
+  id               BigInt   @id @default(autoincrement())
+  sessionId        String
+  driverNumber     Int
+  stintNumber      Int?
+  lapStart         Int?
+  lapEnd           Int?
+  compound         String?  @db.VarChar(40)
+  tyreAgeLapsStart Int?
+  raw              Json
+  createdAt        DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, driverNumber])
+  @@index([sessionId, lapStart, lapEnd])
+}
+
+model RacePitStop {
+  id             BigInt    @id @default(autoincrement())
+  sessionId      String
+  driverNumber   Int
+  lapNumber      Int?
+  dateUtc        DateTime?
+  pitDurationSec Float?
+  raw            Json
+  createdAt      DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, driverNumber, dateUtc])
+  @@index([sessionId, lapNumber])
+}
+
+model RaceControlEvent {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  dateUtc      DateTime
+  lapNumber    Int?
+  driverNumber Int?
+  category     String?  @db.VarChar(60)
+  flag         String?  @db.VarChar(40)
+  scope        String?  @db.VarChar(80)
+  message      String?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, category])
+  @@index([sessionId, flag])
+}
+
+model TeamRadioMessage {
+  id           BigInt    @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime?
+  recordingUrl String?   @db.VarChar(500)
+  transcript   String?
+  raw          Json
+  createdAt    DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RaceWeatherSample {
+  id               BigInt   @id @default(autoincrement())
+  sessionId        String
+  dateUtc          DateTime
+  airTempC         Float?
+  trackTempC       Float?
+  humidityPct      Float?
+  pressureHpa      Float?
+  windSpeedKph     Float?
+  windDirectionDeg Int?
+  rainfallMm       Float?
+  raw              Json
+  createdAt        DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+}
+
+model SessionResultRow {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  position     Int?
+  points       Float?
+  status       String?  @db.VarChar(40)
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, position])
+}
+
+model StartingGridRow {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  gridPosition Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, gridPosition])
+}
+
+model OvertakeEvent {
+  id                     BigInt    @id @default(autoincrement())
+  sessionId              String
+  dateUtc                DateTime?
+  lapNumber              Int?
+  overtakingDriverNumber Int?
+  overtakenDriverNumber  Int?
+  raw                    Json
+  createdAt              DateTime  @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, lapNumber])
+}
+
+model DriverChampionshipStanding {
+  id              BigInt   @id @default(autoincrement())
+  sessionId       String
+  driverNumber    Int
+  positionCurrent Int?
+  positionStart   Int?
+  pointsCurrent   Float?
+  pointsStart     Float?
+  raw             Json
+  createdAt       DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, positionCurrent])
+}
+
+model TeamChampionshipStanding {
+  id              BigInt   @id @default(autoincrement())
+  sessionId       String
+  teamName        String?  @db.VarChar(80)
+  teamCode        String?  @db.VarChar(20)
+  positionCurrent Int?
+  positionStart   Int?
+  pointsCurrent   Float?
+  pointsStart     Float?
+  raw             Json
+  createdAt       DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, positionCurrent])
+  @@index([sessionId, teamName])
 }
