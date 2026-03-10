@@ -47,7 +47,7 @@ func main() {
 		defaultYear    = flag.Int("year", 2025, "Default year for /getrace")
 		defaultCountry = flag.String("country", "Australia", "Default country for /getrace")
 		defaultMeeting = flag.String("meeting", "Australian Grand Prix", "Default meeting for /getrace")
-		defaultDriver  = flag.Int("driver-number", 63, "Default driver_number for /getrace (0 = all)")
+		defaultDriver  = flag.Int("driver-number", 0, "Default driver_number for /getrace (0 = all)")
 	)
 	flag.Parse()
 
