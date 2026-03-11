@@ -32,7 +32,8 @@ OD_Backend/
 │   │   │  Role:
 │   │   │  - Main HTTP transport layer.
 │   │   │  - Parses query/path params and maps them to service calls.
-│   │   │  - Exposes race ingestion, race read, catalog, driver, dataset, standings, and metadata endpoints.
+│   │   │  - Exposes race ingestion, active-race reads, catalog, session-scoped historical reads,
+│   │   │    driver resources, standings, metadata, and broadcast endpoints.
 │   │   │
 │   │   ├── response.go
 │   │   │  Role:
@@ -42,7 +43,7 @@ OD_Backend/
 │   │   └── router.go
 │   │      Role:
 │   │      - Declares all HTTP routes.
-│   │      - Registers root, health, race data, catalog, and driver-focused endpoints.
+│   │      - Registers root, health, catalog, active-race endpoints, and session-scoped endpoints.
 │   │      - Applies the middleware chain.
 │   │
 │   ├── app/
@@ -69,6 +70,7 @@ OD_Backend/
 │   │   │  Role:
 │   │   │  - Domain types for catalog navigation.
 │   │   │  - Defines championship, race, and session summaries exposed by the API.
+│   │   │  - Includes session-level broadcast URL metadata.
 │   │   │
 │   │   └── race_archive.go
 │   │      Role:
@@ -97,24 +99,27 @@ OD_Backend/
 │   │       ├── race_archive_store.go
 │   │       │  Role:
 │   │       │  - Prisma repository entrypoints.
-│   │       │  - Implements `Store`, `GetLatest`, and `GetLatestMerged`.
+│   │       │  - Implements `Store`, `GetLatest`, `GetLatestMerged`, and `GetSessionMerged`.
 │   │       │  - Orchestrates atomic writes of archive row + raw chunks + normalized tables.
 │   │       │
 │   │       ├── race_archive_catalog.go
 │   │       │  Role:
 │   │       │  - Read-side catalog and archive reconstruction logic.
-│   │       │  - Loads championships, races, sessions, and rebuilds merged archives from stored chunks.
+│   │       │  - Loads championships, events, sessions, rebuilds merged archives from stored chunks,
+│   │       │    and resolves session driver broadcast URLs.
 │   │       │
 │   │       ├── race_archive_entities.go
 │   │       │  Role:
 │   │       │  - Metadata upsert helpers.
-│   │       │  - Ensures provider, championship, event, race, and session rows exist before data writes.
+│   │       │  - Ensures provider, championship, event, and session rows exist before data writes.
 │   │       │
 │   │       ├── race_archive_participants.go
 │   │       │  Role:
 │   │       │  - Raw archive chunk persistence and participant synchronization.
 │   │       │  - Splits big datasets into `RaceDatasetChunk` rows.
 │   │       │  - Upserts `Team` and `Driver` entities from OpenF1 driver data.
+│   │       │  - Maintains the `championship -> team -> driver` participant chain.
+│   │       │  - Upserts `SessionDriverBroadcast` rows with one broadcast URL per driver/session.
 │   │       │
 │   │       ├── race_archive_normalized.go
 │   │       │  Role:
@@ -124,13 +129,14 @@ OD_Backend/
 │   │       └── race_archive_helpers.go
 │   │          Role:
 │   │          - Shared helper functions for the Prisma repository package.
-│   │          - Contains JSON helpers, row readers, inference helpers, deduplication helpers, chunking, and UUID generation.
+│   │          - Contains JSON helpers, row readers, inference helpers, broadcast URL builders,
+│   │          - deduplication helpers, chunking, and UUID generation.
 │   │
 │   ├── service/
 │   │   └── race_service.go
 │   │      Role:
 │   │      - Application service layer.
-│   │      - Coordinates build/store operations and exposes read methods for handlers.
+│   │      - Coordinates build/store operations and exposes active-race and session-scoped read methods.
 │   │      - Serializes concurrent ingestion calls with a mutex.
 │   │
 │   └── usecase/
@@ -167,7 +173,7 @@ OD_Backend/
 │   └── schema.prisma
 │      Role:
 │      - Source of truth for the Prisma schema.
-│      - Declares auth, catalog, archive, and normalized race tables.
+│      - Declares auth, catalog, archive, normalized race tables, and broadcast storage.
 │
 ├── tests/
 │   └── internal/
@@ -273,8 +279,11 @@ HTTP request
 HTTP request
   -> internal/api/race_handler.go
   -> internal/service/race_service.go
+  -> internal/repository/prisma/race_archive_store.go
   -> internal/repository/prisma/race_archive_catalog.go
-  -> rebuild or merge archive from PostgreSQL
+  -> rebuild or merge archive from PostgreSQL for either:
+     - latest stored session
+     - explicit sessionId
   -> HTTP JSON response
 ```
 

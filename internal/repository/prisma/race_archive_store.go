@@ -12,6 +12,7 @@ package prisma
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"overdrive/internal/domain"
@@ -54,27 +55,32 @@ func (s *RaceArchiveStore) Store(ctx context.Context, archive domain.RaceArchive
 		return time.Time{}, err
 	}
 
-	event, err := s.ensureEvent(ctx, provider.ID, archive)
-	if err != nil {
-		return time.Time{}, err
-	}
-
 	championship, err := s.ensureChampionship(ctx, provider.ID)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	race, err := s.ensureRace(ctx, championship.ID, event.ID, archive)
+	event, err := s.ensureEvent(ctx, championship.ID, archive)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	session, err := s.ensureSession(ctx, event.ID, race.ID, archive)
+	session, err := s.ensureSession(ctx, event.ID, archive)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	if err := s.syncParticipants(ctx, provider.ID, archive.Datasets["drivers"]); err != nil {
+	if err := s.syncParticipants(ctx, championship.ID, archive.Datasets["drivers"]); err != nil {
+		return time.Time{}, err
+	}
+
+	if err := s.ensureSessionDriverBroadcasts(
+		ctx,
+		session.ID,
+		championship.ID,
+		archive.Metadata.RaceSessKey,
+		archive.Datasets["drivers"],
+	); err != nil {
 		return time.Time{}, err
 	}
 
@@ -203,4 +209,35 @@ func (s *RaceArchiveStore) GetLatestMerged(ctx context.Context) (domain.RaceArch
 	}
 
 	return merged, latest.GeneratedAt, true, nil
+}
+
+// GetSessionMerged returns a merged archive view for one explicit stored session.
+func (s *RaceArchiveStore) GetSessionMerged(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+	if s.client == nil {
+		return domain.RaceArchive{}, time.Time{}, false, fmt.Errorf("prisma client is nil")
+	}
+
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return domain.RaceArchive{}, time.Time{}, false, nil
+	}
+
+	archives, err := s.client.RaceArchive.FindMany(
+		db.RaceArchive.SessionID.Equals(sessionID),
+	).
+		OrderBy(db.RaceArchive.GeneratedAt.Order(db.SortOrderDesc)).
+		Exec(ctx)
+	if err != nil {
+		return domain.RaceArchive{}, time.Time{}, false, fmt.Errorf("find session race archives: %w", err)
+	}
+	if len(archives) == 0 {
+		return domain.RaceArchive{}, time.Time{}, false, nil
+	}
+
+	merged, err := s.mergeArchiveModels(ctx, archives)
+	if err != nil {
+		return domain.RaceArchive{}, time.Time{}, false, err
+	}
+
+	return merged, archives[0].GeneratedAt, true, nil
 }

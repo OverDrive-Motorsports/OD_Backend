@@ -158,28 +158,27 @@ func SampleChampionship() domain.ChampionshipSummary {
 	}
 }
 
-// SampleRace returns a stable race summary fixture.
-func SampleRace() domain.RaceSummary {
+// SampleEvent returns a stable event summary fixture.
+func SampleEvent() domain.EventSummary {
 	endsAt := time.Date(2025, 3, 16, 6, 30, 0, 0, time.UTC)
 	round := 1
 
-	return domain.RaceSummary{
-		ID:           "race-aus-2025",
-		Championship: "champ-f1",
-		EventID:      "event-aus-2025",
-		SeasonYear:   2025,
-		RoundNumber:  &round,
-		Name:         "Australian Grand Prix",
-		OfficialName: "Formula 1 Louis Vuitton Australian Grand Prix 2025",
-		CountryName:  "Australia",
-		CountryCode:  "AUS",
-		CircuitName:  "Albert Park",
-		ExternalKey:  "1254",
-		Status:       "finished",
-		StartsAtUTC:  time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
-		EndsAtUTC:    &endsAt,
-		CreatedAt:    time.Date(2025, 3, 16, 0, 0, 0, 0, time.UTC),
-		UpdatedAt:    time.Date(2025, 3, 16, 6, 31, 0, 0, time.UTC),
+	return domain.EventSummary{
+		ID:             "event-aus-2025",
+		ChampionshipID: "champ-f1",
+		SeasonYear:     2025,
+		RoundNumber:    &round,
+		Name:           "Australian Grand Prix",
+		OfficialName:   "Formula 1 Louis Vuitton Australian Grand Prix 2025",
+		CountryName:    "Australia",
+		CountryCode:    "AUS",
+		CircuitName:    "Albert Park",
+		ExternalKey:    "1254",
+		Status:         "finished",
+		StartsAtUTC:    time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
+		EndsAtUTC:      &endsAt,
+		CreatedAt:      time.Date(2025, 3, 16, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:      time.Date(2025, 3, 16, 6, 31, 0, 0, time.UTC),
 	}
 }
 
@@ -191,11 +190,11 @@ func SampleSession() domain.SessionSummary {
 	return domain.SessionSummary{
 		ID:           "session-race-9693",
 		EventID:      "event-aus-2025",
-		RaceID:       "race-aus-2025",
 		Type:         "race",
 		Status:       "finished",
 		Name:         "Race",
 		ExternalKey:  "9693",
+		BroadcastURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693",
 		StartedAtUTC: time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
 		EndedAtUTC:   &endedAt,
 		LatestCounts: SampleArchive().Counts,

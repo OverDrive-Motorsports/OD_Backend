@@ -81,6 +81,27 @@ func (s *RaceService) GetLatestMergedStored(ctx context.Context) (domain.RaceArc
 	return archive, storedAt, true, nil
 }
 
+// GetSessionMergedStored returns the merged stored race snapshot for one explicit session.
+func (s *RaceService) GetSessionMergedStored(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+	archive, storedAt, found, err := s.store.GetSessionMerged(ctx, sessionID)
+	if err != nil {
+		return domain.RaceArchive{}, time.Time{}, false, fmt.Errorf("session archive read failed: %w", err)
+	}
+	if !found {
+		return domain.RaceArchive{}, time.Time{}, false, nil
+	}
+	return archive, storedAt, true, nil
+}
+
+// GetSessionDriverBroadcast returns the broadcast URL for one driver in one session.
+func (s *RaceService) GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+	url, found, err := s.store.GetSessionDriverBroadcast(ctx, sessionID, driverNumber)
+	if err != nil {
+		return "", false, fmt.Errorf("session driver broadcast lookup failed: %w", err)
+	}
+	return url, found, nil
+}
+
 // ListChampionships returns all stored championships.
 func (s *RaceService) ListChampionships(ctx context.Context) ([]domain.ChampionshipSummary, error) {
 	items, err := s.store.ListChampionships(ctx)
@@ -90,29 +111,29 @@ func (s *RaceService) ListChampionships(ctx context.Context) ([]domain.Champions
 	return items, nil
 }
 
-// GetChampionshipRaces returns one championship and its stored races.
-func (s *RaceService) GetChampionshipRaces(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
-	championship, races, found, err := s.store.GetChampionshipRaces(ctx, code)
+// GetChampionshipEvents returns one championship and its stored events.
+func (s *RaceService) GetChampionshipEvents(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
+	championship, events, found, err := s.store.GetChampionshipEvents(ctx, code)
 	if err != nil {
-		return domain.ChampionshipSummary{}, nil, false, fmt.Errorf("championship races failed: %w", err)
+		return domain.ChampionshipSummary{}, nil, false, fmt.Errorf("championship events failed: %w", err)
 	}
-	return championship, races, found, nil
+	return championship, events, found, nil
 }
 
-// GetRace returns one stored race by identifier.
-func (s *RaceService) GetRace(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-	race, found, err := s.store.GetRace(ctx, raceID)
+// GetEvent returns one stored event by identifier.
+func (s *RaceService) GetEvent(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+	event, found, err := s.store.GetEvent(ctx, eventID)
 	if err != nil {
-		return domain.RaceSummary{}, false, fmt.Errorf("race lookup failed: %w", err)
+		return domain.EventSummary{}, false, fmt.Errorf("event lookup failed: %w", err)
 	}
-	return race, found, nil
+	return event, found, nil
 }
 
-// ListRaceSessions returns the stored sessions belonging to one race.
-func (s *RaceService) ListRaceSessions(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
-	items, found, err := s.store.ListRaceSessions(ctx, raceID)
+// ListEventSessions returns the stored sessions belonging to one event.
+func (s *RaceService) ListEventSessions(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
+	items, found, err := s.store.ListEventSessions(ctx, eventID)
 	if err != nil {
-		return nil, false, fmt.Errorf("session list failed: %w", err)
+		return nil, false, fmt.Errorf("event session list failed: %w", err)
 	}
 	return items, found, nil
 }

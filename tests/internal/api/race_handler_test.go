@@ -183,6 +183,36 @@ func TestHandleSendDatasetConstructorsAlias(t *testing.T) {
 	}
 }
 
+// TestHandleSendDatasetAddsDriverName verifies generic dataset responses enrich rows with driver_name.
+func TestHandleSendDatasetAddsDriverName(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetLatestMergedFn: func(ctx context.Context) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/race/datasets/session_result", nil)
+	req.SetPathValue("dataset", "session_result")
+	rec := httptest.NewRecorder()
+	handler.HandleSendDataset(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	data := payload["data"].([]any)
+	first := data[0].(map[string]any)
+	if first["driver_name"] == nil || first["driver_name"] == "" {
+		t.Fatalf("expected driver_name to be present: %#v", first)
+	}
+	if first["team_name"] == nil || first["team_name"] == "" {
+		t.Fatalf("expected team_name to be present: %#v", first)
+	}
+}
+
 // TestHandleSendDatasetUnknown verifies invalid dataset aliases return HTTP 400.
 func TestHandleSendDatasetUnknown(t *testing.T) {
 	archive := mocks.SampleArchive()
@@ -361,36 +391,36 @@ func TestHandleSendRaceStandingsInvalidTime(t *testing.T) {
 	assertErrorContains(t, rec, "invalid at query parameter")
 }
 
-// TestHandleListRaceSessionsNotFound verifies missing race identifiers return HTTP 404.
-func TestHandleListRaceSessionsNotFound(t *testing.T) {
+// TestHandleListEventSessionsNotFound verifies missing event identifiers return HTTP 404.
+func TestHandleListEventSessionsNotFound(t *testing.T) {
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		ListRaceSessionsFn: func(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
+		ListEventSessionsFn: func(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
 			return nil, false, nil
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/races/missing/sessions", nil)
-	req.SetPathValue("raceId", "missing")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/missing/sessions", nil)
+	req.SetPathValue("eventId", "missing")
 	rec := httptest.NewRecorder()
-	handler.HandleListRaceSessions(rec, req)
+	handler.HandleListEventSessions(rec, req)
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unexpected status: %d", rec.Code)
 	}
 }
 
-// TestHandleListChampionshipRaces verifies one championship code returns its stored races.
-func TestHandleListChampionshipRaces(t *testing.T) {
+// TestHandleListChampionshipEvents verifies one championship code returns its stored events.
+func TestHandleListChampionshipEvents(t *testing.T) {
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		GetChampionshipRacesFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
-			return mocks.SampleChampionship(), []domain.RaceSummary{mocks.SampleRace()}, true, nil
+		GetChampionshipEventsFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
+			return mocks.SampleChampionship(), []domain.EventSummary{mocks.SampleEvent()}, true, nil
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/championships/f1/races", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/championships/f1/events", nil)
 	req.SetPathValue("code", "f1")
 	rec := httptest.NewRecorder()
-	handler.HandleListChampionshipRaces(rec, req)
+	handler.HandleListChampionshipEvents(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
@@ -399,22 +429,22 @@ func TestHandleListChampionshipRaces(t *testing.T) {
 	var payload map[string]any
 	decodeJSON(t, rec, &payload)
 	if int(payload["count"].(float64)) != 1 {
-		t.Fatalf("unexpected races count: %#v", payload["count"])
+		t.Fatalf("unexpected events count: %#v", payload["count"])
 	}
 }
 
-// TestHandleGetRaceCatalog verifies one race summary can be fetched by route identifier.
-func TestHandleGetRaceCatalog(t *testing.T) {
+// TestHandleGetEventCatalog verifies one event summary can be fetched by route identifier.
+func TestHandleGetEventCatalog(t *testing.T) {
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		GetRaceFn: func(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-			return mocks.SampleRace(), true, nil
+		GetEventFn: func(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+			return mocks.SampleEvent(), true, nil
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/races/race-aus-2025", nil)
-	req.SetPathValue("raceId", "race-aus-2025")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/event-aus-2025", nil)
+	req.SetPathValue("eventId", "event-aus-2025")
 	rec := httptest.NewRecorder()
-	handler.HandleGetRaceCatalog(rec, req)
+	handler.HandleGetEventCatalog(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
@@ -436,6 +466,107 @@ func TestHandleGetSessionCatalog(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleSendSessionArchive verifies one stored session archive can be fetched explicitly by session identifier.
+func TestHandleSendSessionArchive(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/archive", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionArchive(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload domain.RaceArchive
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode archive: %v", err)
+	}
+	if payload.Metadata.RaceSessKey != 9693 {
+		t.Fatalf("unexpected archive payload: %#v", payload.Metadata)
+	}
+}
+
+// TestHandleListSessionDrivers verifies session-scoped driver listing uses the requested session archive.
+func TestHandleListSessionDrivers(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleListSessionDrivers(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected session drivers payload: %#v", payload)
+	}
+}
+
+// TestHandleSendSessionBroadcast verifies session-scoped broadcast lookups return the stored session URL.
+func TestHandleSendSessionBroadcast(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionFn: func(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error) {
+			return mocks.SampleSession(), true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/broadcast", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionBroadcast(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if !strings.Contains(payload["broadcast_url"].(string), "session=9693") {
+		t.Fatalf("unexpected session broadcast payload: %#v", payload)
+	}
+}
+
+// TestHandleSendSessionDriverBroadcast verifies driver-specific session broadcast lookups return the stored URL.
+func TestHandleSendSessionDriverBroadcast(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDriverBroadcastFn: func(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+			return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693&driver=63", true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers/63/broadcast", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	req.SetPathValue("driverNumber", "63")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionDriverBroadcast(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if !strings.Contains(payload["broadcast_url"].(string), "driver=63") {
+		t.Fatalf("unexpected driver broadcast payload: %#v", payload)
 	}
 }
 

@@ -18,14 +18,16 @@ import (
 
 // RaceArchiveStoreMock implements the race archive repository contract with function fields.
 type RaceArchiveStoreMock struct {
-	StoreFn                func(context.Context, domain.RaceArchive) (time.Time, error)
-	GetLatestFn            func(context.Context) (domain.RaceArchive, time.Time, bool, error)
-	GetLatestMergedFn      func(context.Context) (domain.RaceArchive, time.Time, bool, error)
-	ListChampionshipsFn    func(context.Context) ([]domain.ChampionshipSummary, error)
-	GetChampionshipRacesFn func(context.Context, string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error)
-	GetRaceFn              func(context.Context, string) (domain.RaceSummary, bool, error)
-	ListRaceSessionsFn     func(context.Context, string) ([]domain.SessionSummary, bool, error)
-	GetSessionFn           func(context.Context, string) (domain.SessionSummary, bool, error)
+	StoreFn                     func(context.Context, domain.RaceArchive) (time.Time, error)
+	GetLatestFn                 func(context.Context) (domain.RaceArchive, time.Time, bool, error)
+	GetLatestMergedFn           func(context.Context) (domain.RaceArchive, time.Time, bool, error)
+	GetSessionMergedFn          func(context.Context, string) (domain.RaceArchive, time.Time, bool, error)
+	GetSessionDriverBroadcastFn func(context.Context, string, int) (string, bool, error)
+	ListChampionshipsFn         func(context.Context) ([]domain.ChampionshipSummary, error)
+	GetChampionshipEventsFn     func(context.Context, string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error)
+	GetEventFn                  func(context.Context, string) (domain.EventSummary, bool, error)
+	ListEventSessionsFn         func(context.Context, string) ([]domain.SessionSummary, bool, error)
+	GetSessionFn                func(context.Context, string) (domain.SessionSummary, bool, error)
 }
 
 // Store records a race archive persistence request.
@@ -52,6 +54,22 @@ func (m *RaceArchiveStoreMock) GetLatestMerged(ctx context.Context) (domain.Race
 	return domain.RaceArchive{}, time.Time{}, false, nil
 }
 
+// GetSessionMerged returns the merged archive mock response for one explicit session.
+func (m *RaceArchiveStoreMock) GetSessionMerged(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+	if m.GetSessionMergedFn != nil {
+		return m.GetSessionMergedFn(ctx, sessionID)
+	}
+	return domain.RaceArchive{}, time.Time{}, false, nil
+}
+
+// GetSessionDriverBroadcast returns the mock broadcast URL for one driver in one session.
+func (m *RaceArchiveStoreMock) GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+	if m.GetSessionDriverBroadcastFn != nil {
+		return m.GetSessionDriverBroadcastFn(ctx, sessionID, driverNumber)
+	}
+	return "", false, nil
+}
+
 // ListChampionships returns the championship catalog mock response.
 func (m *RaceArchiveStoreMock) ListChampionships(ctx context.Context) ([]domain.ChampionshipSummary, error) {
 	if m.ListChampionshipsFn != nil {
@@ -60,26 +78,26 @@ func (m *RaceArchiveStoreMock) ListChampionships(ctx context.Context) ([]domain.
 	return nil, nil
 }
 
-// GetChampionshipRaces returns the race catalog mock response for one championship.
-func (m *RaceArchiveStoreMock) GetChampionshipRaces(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
-	if m.GetChampionshipRacesFn != nil {
-		return m.GetChampionshipRacesFn(ctx, code)
+// GetChampionshipEvents returns the event catalog mock response for one championship.
+func (m *RaceArchiveStoreMock) GetChampionshipEvents(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
+	if m.GetChampionshipEventsFn != nil {
+		return m.GetChampionshipEventsFn(ctx, code)
 	}
 	return domain.ChampionshipSummary{}, nil, false, nil
 }
 
-// GetRace returns the race mock response for one race identifier.
-func (m *RaceArchiveStoreMock) GetRace(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-	if m.GetRaceFn != nil {
-		return m.GetRaceFn(ctx, raceID)
+// GetEvent returns the event mock response for one event identifier.
+func (m *RaceArchiveStoreMock) GetEvent(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+	if m.GetEventFn != nil {
+		return m.GetEventFn(ctx, eventID)
 	}
-	return domain.RaceSummary{}, false, nil
+	return domain.EventSummary{}, false, nil
 }
 
-// ListRaceSessions returns the session catalog mock response for one race.
-func (m *RaceArchiveStoreMock) ListRaceSessions(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
-	if m.ListRaceSessionsFn != nil {
-		return m.ListRaceSessionsFn(ctx, raceID)
+// ListEventSessions returns the session catalog mock response for one event.
+func (m *RaceArchiveStoreMock) ListEventSessions(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
+	if m.ListEventSessionsFn != nil {
+		return m.ListEventSessionsFn(ctx, eventID)
 	}
 	return nil, false, nil
 }

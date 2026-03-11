@@ -104,6 +104,23 @@ func resolveSessionStatus(start, end time.Time) db.SessionStatus {
 	return db.SessionStatusScheduled
 }
 
+// sessionBroadcastURL builds the placeholder broadcast URL stored on the session row.
+func sessionBroadcastURL(sessionKey int) string {
+	if sessionKey > 0 {
+		return fmt.Sprintf("https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=%d", sessionKey)
+	}
+	return "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+}
+
+// sessionDriverBroadcastURL builds the placeholder broadcast URL stored per driver for one session.
+func sessionDriverBroadcastURL(sessionKey, driverNumber int) string {
+	base := sessionBroadcastURL(sessionKey)
+	if driverNumber > 0 {
+		return fmt.Sprintf("%s&driver=%d", base, driverNumber)
+	}
+	return base
+}
+
 // marshalPrismaJSON converts any Go value to prisma JSON payload format.
 func marshalPrismaJSON(value any) (db.JSON, error) {
 	raw, err := json.Marshal(value)
