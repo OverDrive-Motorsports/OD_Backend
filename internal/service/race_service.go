@@ -81,6 +81,27 @@ func (s *RaceService) GetLatestMergedStored(ctx context.Context) (domain.RaceArc
 	return archive, storedAt, true, nil
 }
 
+// GetSessionMergedStored returns the merged stored race snapshot for one explicit session.
+func (s *RaceService) GetSessionMergedStored(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+	archive, storedAt, found, err := s.store.GetSessionMerged(ctx, sessionID)
+	if err != nil {
+		return domain.RaceArchive{}, time.Time{}, false, fmt.Errorf("session archive read failed: %w", err)
+	}
+	if !found {
+		return domain.RaceArchive{}, time.Time{}, false, nil
+	}
+	return archive, storedAt, true, nil
+}
+
+// GetSessionDriverBroadcast returns the broadcast URL for one driver in one session.
+func (s *RaceService) GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+	url, found, err := s.store.GetSessionDriverBroadcast(ctx, sessionID, driverNumber)
+	if err != nil {
+		return "", false, fmt.Errorf("session driver broadcast lookup failed: %w", err)
+	}
+	return url, found, nil
+}
+
 // ListChampionships returns all stored championships.
 func (s *RaceService) ListChampionships(ctx context.Context) ([]domain.ChampionshipSummary, error) {
 	items, err := s.store.ListChampionships(ctx)

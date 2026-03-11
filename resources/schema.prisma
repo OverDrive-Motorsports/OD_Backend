@@ -252,6 +252,7 @@ model Session {
   status       SessionStatus
   name         String?       @db.VarChar(80)
   externalKey  String?       @db.VarChar(64)
+  broadcastUrl String?       @db.VarChar(255)
   startedAtUtc DateTime
   endedAtUtc   DateTime?
   createdAt    DateTime      @default(now())
@@ -276,6 +277,7 @@ model Session {
   overtakeEvents         OvertakeEvent[]
   driverChampionshipRows DriverChampionshipStanding[]
   teamChampionshipRows   TeamChampionshipStanding[]
+  driverBroadcasts       SessionDriverBroadcast[]
 
   @@unique([eventId, externalKey])
   @@index([eventId])
@@ -336,11 +338,31 @@ model Driver {
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sessionBroadcasts SessionDriverBroadcast[]
 
   @@unique([providerId, code])
   @@unique([providerId, externalKey])
   @@index([providerId])
   @@index([teamId])
+}
+
+//-------------------------
+// Session Driver Broadcast
+//-------------------------
+model SessionDriverBroadcast {
+  id           String   @id @default(uuid())
+  sessionId    String
+  driverId     String
+  broadcastUrl String   @db.VarChar(255)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverId])
+  @@index([sessionId])
+  @@index([driverId])
 }
 
 //-------------------------

@@ -30,13 +30,19 @@ Scope:
 
 ### 3. Read flow: send data to AR/mobile/web clients
 
-1. Client calls read endpoint like:
+1. Client calls either:
    - `/api/v1/race/sendrace`
    - `/api/v1/race/drivers`
    - `/api/v1/race/standings/race`
+   - `/api/v1/sessions/{sessionId}/archive`
+   - `/api/v1/sessions/{sessionId}/drivers`
+   - `/api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
 2. `RaceHandler` reads stored data through `RaceService`
 3. `RaceService` calls repository read methods
-4. Prisma repository rebuilds a merged archive view or serves catalog data
+4. Prisma repository either:
+   - rebuilds the merged latest session archive
+   - rebuilds the merged archive for one explicit `sessionId`
+   - serves catalog and broadcast lookup data
 5. Handler serializes JSON response
 
 ## Runtime Entry
@@ -122,6 +128,8 @@ This layer is thin on purpose. It orchestrates use case + repository calls.
 | `(*RaceService).FetchAndStore` | Builds an archive and persists it. | Main write workflow used by `GET /getrace`. |
 | `(*RaceService).GetLatestStored` | Returns the latest raw stored archive. | Used for storage status and raw archive views. |
 | `(*RaceService).GetLatestMergedStored` | Returns a merged archive for the latest session. | Important when several driver-focused imports exist for the same race. |
+| `(*RaceService).GetSessionMergedStored` | Returns a merged archive for one explicit session. | Powers historical navigation without relying on the latest import. |
+| `(*RaceService).GetSessionDriverBroadcast` | Returns the broadcast URL for one driver in one session. | Powers explicit session-scoped driver broadcast endpoints. |
 | `(*RaceService).ListChampionships` | Lists stored championships. | Powers championship catalog endpoints. |
 | `(*RaceService).GetChampionshipRaces` | Returns races of one championship. | Powers `championship -> races` navigation. |
 | `(*RaceService).GetRace` | Returns one race summary. | Powers race catalog lookup. |
@@ -181,6 +189,25 @@ This file is the API surface used by clients.
 | `HandleListRaceSessions` | Lists sessions of one race. | Needed because one race has practice/quali/race sessions. |
 | `HandleGetSessionCatalog` | Returns one session summary. | Detail view for one session. |
 
+#### Session-scoped read endpoints
+
+| Function | Purpose | Why it exists |
+|---|---|---|
+| `HandleSendSessionArchive` | Returns the merged archive for one explicit session. | Removes ambiguity when several races are stored in DB. |
+| `HandleSendSessionMetadata` | Returns metadata for one explicit session. | Lets clients reconstruct context for historical sessions. |
+| `HandleListSessionDatasets` | Lists datasets for one explicit session. | Helps clients discover what is available before fetching. |
+| `HandleSendSessionDataset` | Returns one dataset for one explicit session. | Generic session-scoped dataset endpoint. |
+| `HandleListSessionDrivers` | Returns drivers for one explicit session. | Lets clients navigate historical race rosters. |
+| `HandleListSessionTeams` | Returns teams for one explicit session. | Supports team-centric session views. |
+| `HandleSendSessionDriverRace` | Returns the full per-driver payload for one explicit session. | Historical equivalent of the active-race driver payload. |
+| `HandleSendSessionDriverProfile` | Returns one driver profile for one explicit session. | Lightweight historical driver lookup. |
+| `HandleSendSessionDriverDataset` | Returns one driver-scoped dataset for one explicit session. | Fine-grained session navigation for replay or AR views. |
+| `HandleSendSessionWeather` | Returns weather for one explicit session. | Session-scoped weather access. |
+| `HandleSendSessionFacts` | Returns race control events for one explicit session. | Session-scoped incidents and flags access. |
+| `HandleSendSessionRaceStandings` | Returns standings snapshots for one explicit session. | Replay and history-safe standings lookup. |
+| `HandleSendSessionBroadcast` | Returns the session broadcast URL. | Exposes the stored session-wide broadcast link. |
+| `HandleSendSessionDriverBroadcast` | Returns the driver broadcast URL for one explicit session. | Exposes the stored driver-specific broadcast link. |
+
 #### Race data endpoints
 
 | Function | Purpose | Why it exists |
@@ -191,7 +218,7 @@ This file is the API surface used by clients.
 | `HandleSendRaceFacts` | Returns race control events. | Used for yellow flag, SC, incidents, etc. |
 | `HandleSendDriverRace` | Returns all race datasets for one driver chosen by query param. | Compact per-driver payload for AR focus modes. |
 | `HandleSendRaceStandings` | Computes in-race standings snapshots from position data. | Used for live/replay standings at any time. |
-| `HandleSendVideoURL` | Returns a placeholder broadcast URL. | Temporary endpoint for video integration. |
+| `HandleSendVideoURL` | Returns a placeholder broadcast URL for the active race. | Legacy convenience endpoint for the latest stored session. |
 | `HandleSendMetadata` | Returns meeting/session metadata for the active race. | Lets clients sync labels and time context. |
 | `HandleListDatasets` | Lists available public datasets and their counts. | Useful for discovery and debugging. |
 | `HandleSendDataset` | Returns one whole dataset by name. | Generic endpoint for consumers that know what they need. |
@@ -208,6 +235,7 @@ This file is the API surface used by clients.
 | `parseInput` | Builds `RaceBuildInput` from query params plus defaults. | Keeps `HandleGetRace` small and validates input early. |
 | `getStoredArchive` | Reads the latest raw archive or writes an HTTP error. | Internal helper for endpoints that need raw storage access. |
 | `getMergedArchive` | Reads the latest merged archive or writes an HTTP error. | Internal helper used by almost all read endpoints. |
+| `getSessionArchive` | Reads the merged archive for one explicit session or writes an HTTP error. | Internal helper used by session-scoped endpoints. |
 | `parseDriverNumberForRace` | Resolves `driver_number` from query string or stored metadata. | Supports both explicit and default driver workflows. |
 | `writeDriverRacePayload` | Builds and writes the full per-driver response. | Centralizes the per-driver payload shape. |
 | `parsePathDriverNumber` | Parses driver number from route path. | Used by `/drivers/{driverNumber}/...` endpoints. |
@@ -220,6 +248,7 @@ This file is the API surface used by clients.
 | `buildTeams` | Builds unique team rows from driver rows. | There is no direct `teams` dataset from OpenF1 in this archive shape. |
 | `filterRowsByDriver` | Keeps rows matching one `driver_number`. | Reused across per-driver endpoints. |
 | `resolveDatasetName` | Maps public aliases like `telemetry` or `facts` to stored dataset keys. | Gives cleaner API naming without changing storage keys. |
+| `datasetPathValue` | Resolves dataset names from routed path values or the final path segment. | Keeps concrete driver dataset routes and generic dataset routes aligned. |
 | `readStringValue` | Reads string-like values from a row. | Handles weakly typed `map[string]any` rows. |
 | `readIntField` | Reads int-like values from a row. | Same reason as above for numeric fields. |
 
@@ -243,8 +272,8 @@ When `RaceService.FetchAndStore` persists an archive, the repository flow is:
 
 When a read endpoint asks for stored race data, the repository flow is:
 
-1. `GetLatest` or `GetLatestMerged`
-2. `archiveFromModel` or `mergeArchiveModels`
+1. `GetLatest`, `GetLatestMerged`, `GetSessionMerged`, `GetSession`, or `GetSessionDriverBroadcast`
+2. `archiveFromModel`, `mergeArchiveModels`, or direct catalog/broadcast lookup
 3. handlers serialize the rebuilt domain archive
 
 ### [`race_archive_store.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_store.go)
@@ -257,6 +286,7 @@ This file contains the repository entrypoints and the high-level store flow.
 | `(*RaceArchiveStore).Store` | Persists one archive, its raw chunked datasets, and normalized rows. | Main DB write entrypoint used by `GET /getrace`. |
 | `(*RaceArchiveStore).GetLatest` | Returns the latest raw stored archive. | Used for status and legacy raw reads. |
 | `(*RaceArchiveStore).GetLatestMerged` | Rebuilds a merged archive for the latest session. | Prevents losing prior driver-focused imports on read. |
+| `(*RaceArchiveStore).GetSessionMerged` | Rebuilds a merged archive for one explicit session. | Powers historical reads without relying on the latest session pointer. |
 
 ### [`race_archive_catalog.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_catalog.go)
 
@@ -269,6 +299,7 @@ This file owns all read-side catalog queries and archive reconstruction logic.
 | `(*RaceArchiveStore).GetRace` | Returns one race summary. | Powers race catalog detail endpoints. |
 | `(*RaceArchiveStore).ListRaceSessions` | Returns sessions of one race. | Needed because a race owns multiple sessions. |
 | `(*RaceArchiveStore).GetSession` | Returns one session summary. | Powers session catalog detail endpoints. |
+| `(*RaceArchiveStore).GetSessionDriverBroadcast` | Returns one stored driver broadcast URL. | Powers explicit driver/session broadcast lookup. |
 | `(*RaceArchiveStore).archiveFromModel` | Rebuilds `domain.RaceArchive` from one archive row and its chunks. | Converts DB storage back into domain payload. |
 | `(*RaceArchiveStore).mergeArchiveModels` | Merges several archive rows from the same session into one logical archive. | Critical when imports are done driver by driver. |
 | `championshipSummaryFromModel` | Maps Prisma championship model to domain summary. | Keeps the API model decoupled from Prisma internals. |
@@ -296,6 +327,7 @@ This file owns raw chunk persistence and team/driver synchronization.
 | `(*RaceArchiveStore).storeDatasets` | Persists raw datasets into `RaceDatasetChunk`. | Direct helper when raw archive chunks need to be written outside the full transactional path. |
 | `(*RaceArchiveStore).buildDatasetChunkQueries` | Converts raw datasets into chunked Prisma transaction queries. | Prevents huge single-row JSON blobs in `RaceDatasetChunk`. |
 | `(*RaceArchiveStore).syncParticipants` | Synchronizes teams and drivers from the `drivers` dataset. | Ensures participant entities exist before normalized writes. |
+| `(*RaceArchiveStore).ensureSessionDriverBroadcasts` | Upserts one broadcast URL per driver for the current session. | Populates session-scoped driver broadcast storage automatically during import. |
 | `(*RaceArchiveStore).ensureTeam` | Upserts one team inferred from driver data. | Keeps team rows consistent across imports. |
 | `(*RaceArchiveStore).ensureDriver` | Upserts one driver inferred from driver data. | Keeps driver rows consistent across imports. |
 
@@ -356,6 +388,8 @@ This file centralizes the small reusable helpers used across all repository file
 | `resolveEventStatus` | Resolves event lifecycle status. | Normalizes provider data into DB enum values. |
 | `resolveSessionType` | Resolves session type from session name. | Maps provider naming to DB enum values. |
 | `resolveSessionStatus` | Resolves session lifecycle status. | Normalizes provider data into DB enum values. |
+| `sessionBroadcastURL` | Builds the placeholder broadcast URL stored on a session. | Centralizes the session-level broadcast format. |
+| `sessionDriverBroadcastURL` | Builds the placeholder broadcast URL stored per driver/session. | Centralizes the driver-level broadcast format. |
 
 #### JSON helpers
 

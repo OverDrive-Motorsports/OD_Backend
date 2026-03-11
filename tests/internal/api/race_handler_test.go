@@ -439,6 +439,107 @@ func TestHandleGetSessionCatalog(t *testing.T) {
 	}
 }
 
+// TestHandleSendSessionArchive verifies one stored session archive can be fetched explicitly by session identifier.
+func TestHandleSendSessionArchive(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/archive", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionArchive(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload domain.RaceArchive
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode archive: %v", err)
+	}
+	if payload.Metadata.RaceSessKey != 9693 {
+		t.Fatalf("unexpected archive payload: %#v", payload.Metadata)
+	}
+}
+
+// TestHandleListSessionDrivers verifies session-scoped driver listing uses the requested session archive.
+func TestHandleListSessionDrivers(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleListSessionDrivers(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected session drivers payload: %#v", payload)
+	}
+}
+
+// TestHandleSendSessionBroadcast verifies session-scoped broadcast lookups return the stored session URL.
+func TestHandleSendSessionBroadcast(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionFn: func(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error) {
+			return mocks.SampleSession(), true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/broadcast", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionBroadcast(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if !strings.Contains(payload["broadcast_url"].(string), "session=9693") {
+		t.Fatalf("unexpected session broadcast payload: %#v", payload)
+	}
+}
+
+// TestHandleSendSessionDriverBroadcast verifies driver-specific session broadcast lookups return the stored URL.
+func TestHandleSendSessionDriverBroadcast(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDriverBroadcastFn: func(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+			return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693&driver=63", true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers/63/broadcast", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	req.SetPathValue("driverNumber", "63")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionDriverBroadcast(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if !strings.Contains(payload["broadcast_url"].(string), "driver=63") {
+		t.Fatalf("unexpected driver broadcast payload: %#v", payload)
+	}
+}
+
 // TestHandleSendDriverDatasetAlias verifies dataset aliases such as telemetry resolve correctly.
 func TestHandleSendDriverDatasetAlias(t *testing.T) {
 	archive := mocks.SampleArchive()

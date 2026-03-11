@@ -84,6 +84,62 @@ func (s *RaceArchiveStore) syncParticipants(ctx context.Context, providerID stri
 	return nil
 }
 
+// ensureSessionDriverBroadcasts upserts one placeholder broadcast URL per driver for the current session.
+func (s *RaceArchiveStore) ensureSessionDriverBroadcasts(
+	ctx context.Context,
+	sessionID string,
+	providerID string,
+	sessionKey int,
+	rows []map[string]any,
+) error {
+	for _, row := range rows {
+		driverNumber := readIntField(row, "driver_number")
+		if driverNumber <= 0 {
+			continue
+		}
+
+		driver, err := s.client.Driver.FindFirst(
+			db.Driver.ProviderID.Equals(providerID),
+			db.Driver.ExternalKey.Equals(strconv.Itoa(driverNumber)),
+		).Exec(ctx)
+		if err != nil {
+			if db.IsErrNotFound(err) {
+				continue
+			}
+			return fmt.Errorf("find driver for session broadcast driver_number=%d: %w", driverNumber, err)
+		}
+
+		broadcastURL := sessionDriverBroadcastURL(sessionKey, driverNumber)
+		existing, findErr := s.client.SessionDriverBroadcast.FindFirst(
+			db.SessionDriverBroadcast.SessionID.Equals(sessionID),
+			db.SessionDriverBroadcast.DriverID.Equals(driver.ID),
+		).Exec(ctx)
+		if findErr == nil {
+			if _, updateErr := s.client.SessionDriverBroadcast.FindUnique(
+				db.SessionDriverBroadcast.ID.Equals(existing.ID),
+			).Update(
+				db.SessionDriverBroadcast.BroadcastURL.Set(broadcastURL),
+			).Exec(ctx); updateErr != nil {
+				return fmt.Errorf("update session driver broadcast driver_number=%d: %w", driverNumber, updateErr)
+			}
+			continue
+		}
+		if !db.IsErrNotFound(findErr) {
+			return fmt.Errorf("find session driver broadcast driver_number=%d: %w", driverNumber, findErr)
+		}
+
+		if _, createErr := s.client.SessionDriverBroadcast.CreateOne(
+			db.SessionDriverBroadcast.BroadcastURL.Set(broadcastURL),
+			db.SessionDriverBroadcast.Session.Link(db.Session.ID.Equals(sessionID)),
+			db.SessionDriverBroadcast.Driver.Link(db.Driver.ID.Equals(driver.ID)),
+		).Exec(ctx); createErr != nil {
+			return fmt.Errorf("create session driver broadcast driver_number=%d: %w", driverNumber, createErr)
+		}
+	}
+
+	return nil
+}
+
 // ensureTeam upserts a provider team using the OpenF1 driver payload.
 func (s *RaceArchiveStore) ensureTeam(ctx context.Context, providerID string, row map[string]any) (*db.TeamModel, error) {
 	teamName := fallbackString(readStringField(row, "team_name"), "Unknown")

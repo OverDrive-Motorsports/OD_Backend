@@ -114,6 +114,7 @@ erDiagram
     string status
     string name
     string externalKey
+    string broadcastUrl
     datetime startedAtUtc
     datetime endedAtUtc
     datetime createdAt
@@ -149,6 +150,15 @@ erDiagram
     int number
     string countryCode
     string externalKey
+    datetime createdAt
+    datetime updatedAt
+  }
+
+  SessionDriverBroadcast {
+    string id PK
+    string sessionId FK
+    string driverId FK
+    string broadcastUrl
     datetime createdAt
     datetime updatedAt
   }
@@ -381,6 +391,7 @@ erDiagram
   Race ||--o{ Session : runs
 
   Session ||--o{ RaceHighlight : generates
+  Session ||--o{ SessionDriverBroadcast : broadcasts
   Session ||--o{ RaceArchive : stores
   RaceArchive ||--o{ RaceDatasetChunk : chunks
 
@@ -401,3 +412,4 @@ erDiagram
   Session ||--o{ TeamChampionshipStanding : team_championship
 
   Team ||--o{ Driver : has
+  Driver ||--o{ SessionDriverBroadcast : streams

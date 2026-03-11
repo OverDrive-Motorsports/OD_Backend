@@ -126,6 +126,40 @@ func (s *RaceArchiveStore) GetSession(ctx context.Context, sessionID string) (do
 	return s.sessionSummaryFromModel(ctx, session), true, nil
 }
 
+// GetSessionDriverBroadcast returns the stored broadcast URL for one driver in one session.
+func (s *RaceArchiveStore) GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || driverNumber <= 0 {
+		return "", false, nil
+	}
+
+	items, err := s.client.SessionDriverBroadcast.FindMany(
+		db.SessionDriverBroadcast.SessionID.Equals(sessionID),
+	).Exec(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("find session driver broadcasts: %w", err)
+	}
+
+	for _, item := range items {
+		driver, driverErr := s.client.Driver.FindUnique(
+			db.Driver.ID.Equals(item.DriverID),
+		).Exec(ctx)
+		if driverErr != nil {
+			if db.IsErrNotFound(driverErr) {
+				continue
+			}
+			return "", false, fmt.Errorf("find driver for session broadcast: %w", driverErr)
+		}
+		if driver.Number != driverNumber {
+			continue
+		}
+
+		return optionalStringValue(item.BroadcastURL), true, nil
+	}
+
+	return "", false, nil
+}
+
 // archiveFromModel decodes one persisted archive row into the domain payload.
 func (s *RaceArchiveStore) archiveFromModel(ctx context.Context, stored *db.RaceArchiveModel) (domain.RaceArchive, error) {
 	if stored == nil {
@@ -323,6 +357,7 @@ func (s *RaceArchiveStore) sessionSummaryFromModel(ctx context.Context, model *d
 	raceID, _ := model.RaceID()
 	name, _ := model.Name()
 	externalKey, _ := model.ExternalKey()
+	broadcastURL, _ := model.BroadcastURL()
 	var endedAt *time.Time
 	if value, ok := model.EndedAtUtc(); ok {
 		parsed := time.Time(value).UTC()
@@ -337,6 +372,7 @@ func (s *RaceArchiveStore) sessionSummaryFromModel(ctx context.Context, model *d
 		Status:       string(model.Status),
 		Name:         optionalStringValue(name),
 		ExternalKey:  optionalStringValue(externalKey),
+		BroadcastURL: optionalStringValue(broadcastURL),
 		StartedAtUTC: time.Time(model.StartedAtUtc).UTC(),
 		EndedAtUTC:   endedAt,
 		CreatedAt:    time.Time(model.CreatedAt).UTC(),

@@ -216,3 +216,33 @@ func TestGetRaceAndSessionDelegation(t *testing.T) {
 		t.Fatalf("unexpected session payload: %#v %v", session, found)
 	}
 }
+
+// TestSessionArchiveAndBroadcastDelegation verifies session-scoped archive and broadcast reads are delegated.
+func TestSessionArchiveAndBroadcastDelegation(t *testing.T) {
+	archive := mocks.SampleArchive()
+	storedAt := archive.Metadata.GeneratedAt
+	svc := service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, storedAt, true, nil
+		},
+		GetSessionDriverBroadcastFn: func(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+			return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693&driver=63", true, nil
+		},
+	})
+
+	gotArchive, gotStoredAt, found, err := svc.GetSessionMergedStored(context.Background(), "session-race-9693")
+	if err != nil {
+		t.Fatalf("unexpected session archive error: %v", err)
+	}
+	if !found || gotArchive.Metadata.RaceSessKey != 9693 || !gotStoredAt.Equal(storedAt) {
+		t.Fatalf("unexpected session archive payload: %#v %v %v", gotArchive, gotStoredAt, found)
+	}
+
+	url, found, err := svc.GetSessionDriverBroadcast(context.Background(), "session-race-9693", 63)
+	if err != nil {
+		t.Fatalf("unexpected session broadcast error: %v", err)
+	}
+	if !found || !strings.Contains(url, "driver=63") {
+		t.Fatalf("unexpected broadcast payload: %q found=%v", url, found)
+	}
+}

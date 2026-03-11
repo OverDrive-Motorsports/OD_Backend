@@ -154,18 +154,7 @@ func (s *RaceArchiveStore) ensureRace(
 // ensureSession returns the event session row matching the fetched race session.
 func (s *RaceArchiveStore) ensureSession(ctx context.Context, eventID, raceID string, archive domain.RaceArchive) (*db.SessionModel, error) {
 	sessionExternalKey := optionalString(strconv.Itoa(archive.Metadata.RaceSessKey))
-	if sessionExternalKey != nil {
-		session, err := s.client.Session.FindFirst(
-			db.Session.EventID.Equals(eventID),
-			db.Session.ExternalKey.Equals(*sessionExternalKey),
-		).Exec(ctx)
-		if err == nil {
-			return session, nil
-		}
-		if !db.IsErrNotFound(err) {
-			return nil, fmt.Errorf("find session by external key: %w", err)
-		}
-	}
+	broadcastURL := sessionBroadcastURL(archive.Metadata.RaceSessKey)
 
 	startAt := firstTimeFromRows(archive.RaceSession, "date_start")
 	if startAt.IsZero() {
@@ -177,9 +166,36 @@ func (s *RaceArchiveStore) ensureSession(ctx context.Context, eventID, raceID st
 
 	endAt := firstTimeFromRows(archive.RaceSession, "date_end")
 
+	if sessionExternalKey != nil {
+		session, err := s.client.Session.FindFirst(
+			db.Session.EventID.Equals(eventID),
+			db.Session.ExternalKey.Equals(*sessionExternalKey),
+		).Exec(ctx)
+		if err == nil {
+			updated, updateErr := s.client.Session.FindUnique(
+				db.Session.ID.Equals(session.ID),
+			).Update(
+				db.Session.Name.SetIfPresent(optionalString(archive.Metadata.RaceSession)),
+				db.Session.Status.Set(resolveSessionStatus(startAt, endAt)),
+				db.Session.StartedAtUtc.Set(startAt),
+				db.Session.EndedAtUtc.SetIfPresent(optionalTime(endAt)),
+				db.Session.BroadcastURL.SetIfPresent(optionalString(broadcastURL)),
+				db.Session.Race.Link(db.Race.ID.Equals(raceID)),
+			).Exec(ctx)
+			if updateErr != nil {
+				return nil, fmt.Errorf("update session: %w", updateErr)
+			}
+			return updated, nil
+		}
+		if !db.IsErrNotFound(err) {
+			return nil, fmt.Errorf("find session by external key: %w", err)
+		}
+	}
+
 	params := []db.SessionSetParam{
 		db.Session.Name.SetIfPresent(optionalString(archive.Metadata.RaceSession)),
 		db.Session.ExternalKey.SetIfPresent(sessionExternalKey),
+		db.Session.BroadcastURL.SetIfPresent(optionalString(broadcastURL)),
 		db.Session.EndedAtUtc.SetIfPresent(optionalTime(endAt)),
 		db.Session.Race.Link(db.Race.ID.Equals(raceID)),
 	}

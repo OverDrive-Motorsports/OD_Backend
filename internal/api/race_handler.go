@@ -107,6 +107,28 @@ func (h *RaceHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 			"GET /api/v1/races/{raceId}",
 			"GET /api/v1/races/{raceId}/sessions",
 			"GET /api/v1/sessions/{sessionId}",
+			"GET /api/v1/sessions/{sessionId}/archive",
+			"GET /api/v1/sessions/{sessionId}/metadata",
+			"GET /api/v1/sessions/{sessionId}/datasets",
+			"GET /api/v1/sessions/{sessionId}/datasets/{dataset}",
+			"GET /api/v1/sessions/{sessionId}/drivers",
+			"GET /api/v1/sessions/{sessionId}/teams",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/telemetry",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/location",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/position",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/intervals",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/stints",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/pit",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/radio",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/result",
+			"GET /api/v1/sessions/{sessionId}/weather",
+			"GET /api/v1/sessions/{sessionId}/facts",
+			"GET /api/v1/sessions/{sessionId}/standings/race",
+			"GET /api/v1/sessions/{sessionId}/broadcast",
 			"GET /api/v1/race/cache",
 			"GET /api/v1/race/storage",
 			"GET /api/v1/race/metadata",
@@ -265,6 +287,410 @@ func (h *RaceHandler) HandleGetSessionCatalog(w http.ResponseWriter, r *http.Req
 	}
 
 	writeJSON(w, http.StatusOK, session)
+}
+
+// HandleSendSessionArchive returns the merged stored archive for one explicit session.
+func (h *RaceHandler) HandleSendSessionArchive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, storedAt, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	w.Header().Set("X-Stored-At", storedAt.Format(time.RFC3339))
+	writeJSON(w, http.StatusOK, archive)
+}
+
+// HandleSendSessionMetadata returns meeting and session metadata for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionMetadata(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, storedAt, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"metadata":     archive.Metadata,
+		"meeting":      archive.Meeting,
+		"race_session": archive.RaceSession,
+		"all_sessions": archive.AllSessions,
+		"stored_at":    storedAt,
+	})
+}
+
+// HandleListSessionDatasets returns the dataset catalog for one explicit stored session.
+func (h *RaceHandler) HandleListSessionDatasets(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	items := make([]map[string]any, 0, len(publicDatasetOrder))
+	for _, dataset := range publicDatasetOrder {
+		rows, found := archive.Datasets[dataset]
+		if !found {
+			continue
+		}
+		items = append(items, map[string]any{
+			"dataset": dataset,
+			"count":   len(rows),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"metadata":   archive.Metadata,
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"count":      len(items),
+		"data":       items,
+	})
+}
+
+// HandleSendSessionDataset returns one dataset for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionDataset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	dataset, found := resolveDatasetName(r.PathValue("dataset"))
+	if !found {
+		writeError(w, http.StatusBadRequest, "unknown dataset")
+		return
+	}
+
+	data := archive.Datasets[dataset]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":    dataset,
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":   archive.Metadata,
+		"count":      len(data),
+		"data":       data,
+	})
+}
+
+// HandleListSessionDrivers returns all drivers for one explicit stored session.
+func (h *RaceHandler) HandleListSessionDrivers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	drivers := sortDriverRows(archive.Datasets["drivers"])
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":    "drivers",
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":   archive.Metadata,
+		"count":      len(drivers),
+		"data":       drivers,
+	})
+}
+
+// HandleListSessionTeams returns teams inferred from one explicit stored session.
+func (h *RaceHandler) HandleListSessionTeams(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	teams := buildTeams(archive.Datasets["drivers"])
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":    "teams",
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":   archive.Metadata,
+		"count":      len(teams),
+		"data":       teams,
+	})
+}
+
+// HandleSendSessionDriverRace returns the full stored race payload for one driver in one explicit session.
+func (h *RaceHandler) HandleSendSessionDriverRace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.writeDriverRacePayload(w, archive, driverNumber)
+}
+
+// HandleSendSessionDriverProfile returns one driver profile for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionDriverProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	driverInfo := filterRowsByDriver(archive.Datasets["drivers"], driverNumber)
+	if len(driverInfo) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("driver_number=%d not found in stored session", driverNumber))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session_id":    strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":      archive.Metadata,
+		"driver_number": driverNumber,
+		"driver":        driverInfo[0],
+	})
+}
+
+// HandleSendSessionDriverDataset returns one driver-scoped dataset for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	dataset, found := resolveDatasetName(r.PathValue("dataset"))
+	if !found {
+		writeError(w, http.StatusBadRequest, "unknown driver dataset")
+		return
+	}
+
+	rows := filterRowsByDriver(archive.Datasets[dataset], driverNumber)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":       dataset,
+		"session_id":    strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":      archive.Metadata,
+		"driver_number": driverNumber,
+		"count":         len(rows),
+		"data":          rows,
+	})
+}
+
+// HandleSendSessionWeather returns race weather for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionWeather(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	data := archive.Datasets["weather"]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":    "weather",
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":   archive.Metadata,
+		"count":      len(data),
+		"data":       data,
+	})
+}
+
+// HandleSendSessionFacts returns race control events for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionFacts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	data := archive.Datasets["race_control"]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataset":    "race_control",
+		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":   archive.Metadata,
+		"count":      len(data),
+		"data":       data,
+	})
+}
+
+// HandleSendSessionRaceStandings returns standings snapshots for one explicit stored session.
+func (h *RaceHandler) HandleSendSessionRaceStandings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	at, hasAt, err := parseSnapshotTime(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	rows := archive.Datasets["position"]
+	if len(rows) == 0 {
+		writeError(w, http.StatusNotFound, "position dataset is empty in stored payload")
+		return
+	}
+
+	snapshotAt, standings := buildRaceStandings(rows, at, hasAt)
+	if len(standings) == 0 {
+		if hasAt {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no position rows found at or before %s", at.Format(time.RFC3339)))
+			return
+		}
+		writeError(w, http.StatusNotFound, "no valid position rows found in stored payload")
+		return
+	}
+
+	driversByNumber := indexDriversByNumber(archive.Datasets["drivers"])
+	payload := make([]map[string]any, 0, len(standings))
+	for _, item := range standings {
+		row := cloneRow(item.Row)
+		if driver, found := driversByNumber[item.DriverNumber]; found {
+			row["driver"] = driver
+		}
+		payload = append(payload, row)
+	}
+
+	out := map[string]any{
+		"dataset":     "position",
+		"session_id":  strings.TrimSpace(r.PathValue("sessionId")),
+		"metadata":    archive.Metadata,
+		"snapshot_at": snapshotAt,
+		"count":       len(payload),
+		"data":        payload,
+	}
+	if hasAt {
+		out["requested_at"] = at
+	}
+
+	writeJSON(w, http.StatusOK, out)
+}
+
+// HandleSendSessionBroadcast returns the stored session broadcast URL.
+func (h *RaceHandler) HandleSendSessionBroadcast(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	session, found, err := h.raceService.GetSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session: %v", err))
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("session id=%q not found", sessionID))
+		return
+	}
+	if strings.TrimSpace(session.BroadcastURL) == "" {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no broadcast URL stored for session id=%q", sessionID))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session_id":     sessionID,
+		"broadcast_url":  session.BroadcastURL,
+		"session_name":   session.Name,
+		"session_type":   session.Type,
+		"session_status": session.Status,
+	})
+}
+
+// HandleSendSessionDriverBroadcast returns the stored driver-specific broadcast URL for one explicit session.
+func (h *RaceHandler) HandleSendSessionDriverBroadcast(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	url, found, err := h.raceService.GetSessionDriverBroadcast(r.Context(), sessionID, driverNumber)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session driver broadcast: %v", err))
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no broadcast URL stored for session id=%q and driver_number=%d", sessionID, driverNumber))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session_id":    sessionID,
+		"driver_number": driverNumber,
+		"broadcast_url": url,
+	})
 }
 
 // HandleHealth reports service liveness information.
@@ -605,7 +1031,7 @@ func (h *RaceHandler) HandleSendDataset(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	dataset, ok := resolveDatasetName(r.PathValue("dataset"))
+	dataset, ok := resolveDatasetName(datasetPathValue(r))
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown dataset")
 		return
@@ -732,7 +1158,7 @@ func (h *RaceHandler) HandleSendDriverDataset(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	dataset, ok := resolveDatasetName(r.PathValue("dataset"))
+	dataset, ok := resolveDatasetName(datasetPathValue(r))
 	if !ok {
 		writeError(w, http.StatusBadRequest, "unknown driver dataset")
 		return
@@ -809,6 +1235,27 @@ func (h *RaceHandler) getMergedArchive(w http.ResponseWriter, r *http.Request) (
 		writeError(w, http.StatusNotFound, "no race data stored yet, call GET /getrace first")
 		return domain.RaceArchive{}, time.Time{}, false
 	}
+	return archive, storedAt, true
+}
+
+// getSessionArchive loads the merged archive for one explicit session and writes an HTTP error when unavailable.
+func (h *RaceHandler) getSessionArchive(w http.ResponseWriter, r *http.Request) (domain.RaceArchive, time.Time, bool) {
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return domain.RaceArchive{}, time.Time{}, false
+	}
+
+	archive, storedAt, found, err := h.raceService.GetSessionMergedStored(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session archive: %v", err))
+		return domain.RaceArchive{}, time.Time{}, false
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no stored race data found for session id=%q", sessionID))
+		return domain.RaceArchive{}, time.Time{}, false
+	}
+
 	return archive, storedAt, true
 }
 
@@ -1076,6 +1523,21 @@ func resolveDatasetName(raw string) (string, bool) {
 
 	dataset, ok := aliases[name]
 	return dataset, ok
+}
+
+// datasetPathValue resolves a dataset name from either a path value or the last URL segment.
+func datasetPathValue(r *http.Request) string {
+	if value := strings.TrimSpace(r.PathValue("dataset")); value != "" {
+		return value
+	}
+
+	path := strings.Trim(strings.TrimSpace(r.URL.Path), "/")
+	if path == "" {
+		return ""
+	}
+
+	parts := strings.Split(path, "/")
+	return strings.TrimSpace(parts[len(parts)-1])
 }
 
 // readStringValue extracts a loosely typed string field from a dataset row.

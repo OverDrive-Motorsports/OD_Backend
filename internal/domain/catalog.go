@@ -51,6 +51,7 @@ type SessionSummary struct {
 	Status       string         `json:"status"`
 	Name         string         `json:"name,omitempty"`
 	ExternalKey  string         `json:"external_key,omitempty"`
+	BroadcastURL string         `json:"broadcast_url,omitempty"`
 	StartedAtUTC time.Time      `json:"started_at_utc"`
 	EndedAtUTC   *time.Time     `json:"ended_at_utc,omitempty"`
 	LatestCounts map[string]int `json:"latest_counts,omitempty"`

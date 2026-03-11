@@ -6,6 +6,8 @@ Base URL: `http://localhost:8080`
 
 - `GET /getrace` or `GET /api/v1/race/getrace` must be called first to fetch and store data.
 - Read endpoints use the merged latest session view, so several driver imports are aggregated together.
+- Historical navigation is now supported through explicit session-scoped endpoints.
+- Recommended navigation flow: `championship -> race -> session -> session-scoped data endpoints`.
 - Legacy routes are still available for `/getrace` and `/sendrace`.
 
 ## Health
@@ -31,6 +33,83 @@ Base URL: `http://localhost:8080`
 
 - `GET /api/v1/sessions/{sessionId}`
   - Returns one stored session entry, including latest stored dataset counts when available.
+
+## Session-Scoped Race Data
+
+- `GET /api/v1/sessions/{sessionId}/archive`
+  - Returns the merged stored archive for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/metadata`
+  - Returns meeting metadata, race session metadata, all sessions, and stored timestamp for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/datasets`
+  - Returns the dataset catalog for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/datasets/{dataset}`
+  - Returns one merged dataset for one explicit session.
+  - Supported dataset values:
+    - `drivers`
+    - `laps`
+    - `car_data`
+    - `telemetry`
+    - `location`
+    - `position`
+    - `intervals`
+    - `stints`
+    - `pit`
+    - `team_radio`
+    - `radio`
+    - `race_control`
+    - `facts`
+    - `weather`
+    - `session_result`
+    - `result`
+    - `starting_grid`
+    - `grid`
+    - `overtakes`
+    - `championship_drivers`
+    - `championship_teams`
+    - `constructors`
+
+- `GET /api/v1/sessions/{sessionId}/drivers`
+  - Returns the drivers available in one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/teams`
+  - Returns teams inferred from the session driver roster.
+
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}`
+  - Returns the full race payload for one driver in one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile`
+  - Returns the driver profile only for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
+  - Returns the driver-specific broadcast URL stored for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/telemetry`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/location`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/position`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/intervals`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/stints`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/pit`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/radio`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/result`
+  - Return one driver-scoped dataset for one driver in one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/weather`
+  - Returns weather samples for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/facts`
+  - Returns race control events for one explicit session.
+
+- `GET /api/v1/sessions/{sessionId}/standings/race`
+  - Returns the in-race standings snapshot for one explicit session.
+  - Optional query param:
+    - `at` in RFC3339 format
+
+- `GET /api/v1/sessions/{sessionId}/broadcast`
+  - Returns the stored session broadcast URL.
 
 ## Fetch And Storage
 
@@ -152,6 +231,10 @@ Base URL: `http://localhost:8080`
 curl "http://localhost:8080/api/v1/championships"
 curl "http://localhost:8080/api/v1/championships/f1/races"
 curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=0"
+curl "http://localhost:8080/api/v1/races/race-aus-2025/sessions"
+curl "http://localhost:8080/api/v1/sessions/session-race-9693/archive"
+curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers"
+curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers/63/broadcast"
 curl "http://localhost:8080/api/v1/race/drivers"
 curl "http://localhost:8080/api/v1/race/drivers/63/profile"
 curl "http://localhost:8080/api/v1/race/drivers/63/telemetry"

@@ -43,6 +43,13 @@ func TestRouterCatalogRoutes(t *testing.T) {
 		GetSessionFn: func(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error) {
 			return mocks.SampleSession(), true, nil
 		},
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			archive := mocks.SampleArchive()
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+		GetSessionDriverBroadcastFn: func(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
+			return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693&driver=63", true, nil
+		},
 	}
 
 	router := api.NewRouter(
@@ -109,6 +116,40 @@ func TestRouterCatalogRoutes(t *testing.T) {
 			assert: func(t *testing.T, payload map[string]any) {
 				if payload["id"] != "session-race-9693" {
 					t.Fatalf("unexpected session id: %#v", payload["id"])
+				}
+			},
+		},
+		{
+			name:           "session archive",
+			method:         http.MethodGet,
+			target:         "/api/v1/sessions/session-race-9693/archive",
+			expectedStatus: http.StatusOK,
+			assert: func(t *testing.T, payload map[string]any) {
+				metadata := payload["metadata"].(map[string]any)
+				if int(metadata["race_session_key"].(float64)) != 9693 {
+					t.Fatalf("unexpected session archive payload: %#v", payload)
+				}
+			},
+		},
+		{
+			name:           "session broadcast",
+			method:         http.MethodGet,
+			target:         "/api/v1/sessions/session-race-9693/broadcast",
+			expectedStatus: http.StatusOK,
+			assert: func(t *testing.T, payload map[string]any) {
+				if payload["session_id"] != "session-race-9693" {
+					t.Fatalf("unexpected session broadcast payload: %#v", payload)
+				}
+			},
+		},
+		{
+			name:           "session driver broadcast",
+			method:         http.MethodGet,
+			target:         "/api/v1/sessions/session-race-9693/drivers/63/broadcast",
+			expectedStatus: http.StatusOK,
+			assert: func(t *testing.T, payload map[string]any) {
+				if int(payload["driver_number"].(float64)) != 63 {
+					t.Fatalf("unexpected driver broadcast payload: %#v", payload)
 				}
 			},
 		},

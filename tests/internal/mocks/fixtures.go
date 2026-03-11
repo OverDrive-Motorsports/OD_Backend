@@ -196,6 +196,7 @@ func SampleSession() domain.SessionSummary {
 		Status:       "finished",
 		Name:         "Race",
 		ExternalKey:  "9693",
+		BroadcastURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693",
 		StartedAtUTC: time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
 		EndedAtUTC:   &endedAt,
 		LatestCounts: SampleArchive().Counts,
