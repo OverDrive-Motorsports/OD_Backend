@@ -156,10 +156,10 @@ func TestCatalogDelegation(t *testing.T) {
 		ListChampionshipsFn: func(ctx context.Context) ([]domain.ChampionshipSummary, error) {
 			return []domain.ChampionshipSummary{mocks.SampleChampionship()}, nil
 		},
-		GetChampionshipRacesFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
-			return mocks.SampleChampionship(), []domain.RaceSummary{mocks.SampleRace()}, true, nil
+		GetChampionshipEventsFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
+			return mocks.SampleChampionship(), []domain.EventSummary{mocks.SampleEvent()}, true, nil
 		},
-		ListRaceSessionsFn: func(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
+		ListEventSessionsFn: func(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
 			return []domain.SessionSummary{mocks.SampleSession()}, true, nil
 		},
 	})
@@ -172,15 +172,15 @@ func TestCatalogDelegation(t *testing.T) {
 		t.Fatalf("unexpected championships payload: %#v", championships)
 	}
 
-	championship, races, found, err := svc.GetChampionshipRaces(context.Background(), "f1")
+	championship, events, found, err := svc.GetChampionshipEvents(context.Background(), "f1")
 	if err != nil {
-		t.Fatalf("unexpected championship races error: %v", err)
+		t.Fatalf("unexpected championship events error: %v", err)
 	}
-	if !found || championship.Code != "f1" || len(races) != 1 {
-		t.Fatalf("unexpected championship races payload: %#v %#v %v", championship, races, found)
+	if !found || championship.Code != "f1" || len(events) != 1 {
+		t.Fatalf("unexpected championship events payload: %#v %#v %v", championship, events, found)
 	}
 
-	sessions, found, err := svc.ListRaceSessions(context.Background(), "race-aus-2025")
+	sessions, found, err := svc.ListEventSessions(context.Background(), "event-aus-2025")
 	if err != nil {
 		t.Fatalf("unexpected session list error: %v", err)
 	}
@@ -189,23 +189,23 @@ func TestCatalogDelegation(t *testing.T) {
 	}
 }
 
-// TestGetRaceAndSessionDelegation verifies single-record catalog lookups are delegated to the repository.
-func TestGetRaceAndSessionDelegation(t *testing.T) {
+// TestGetEventAndSessionDelegation verifies single-record catalog lookups are delegated to the repository.
+func TestGetEventAndSessionDelegation(t *testing.T) {
 	svc := service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{
-		GetRaceFn: func(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-			return mocks.SampleRace(), true, nil
+		GetEventFn: func(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+			return mocks.SampleEvent(), true, nil
 		},
 		GetSessionFn: func(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error) {
 			return mocks.SampleSession(), true, nil
 		},
 	})
 
-	race, found, err := svc.GetRace(context.Background(), "race-aus-2025")
+	event, found, err := svc.GetEvent(context.Background(), "event-aus-2025")
 	if err != nil {
-		t.Fatalf("unexpected race lookup error: %v", err)
+		t.Fatalf("unexpected event lookup error: %v", err)
 	}
-	if !found || race.ID != "race-aus-2025" {
-		t.Fatalf("unexpected race payload: %#v %v", race, found)
+	if !found || event.ID != "event-aus-2025" {
+		t.Fatalf("unexpected event payload: %#v %v", event, found)
 	}
 
 	session, found, err := svc.GetSession(context.Background(), "session-race-9693")

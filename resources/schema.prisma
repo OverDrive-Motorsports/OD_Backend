@@ -99,9 +99,6 @@ model Provider {
 
   connections ProviderConnection[]
   championships Championship[]
-  events      Event[]
-  teams       Team[]
-  drivers     Driver[]
 }
 
 //-------------------------
@@ -176,7 +173,9 @@ model Championship {
   updatedAt   DateTime @updatedAt
 
   provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  races    Race[]
+  events   Event[]
+  teams    Team[]
+  drivers  Driver[]
 
   @@unique([providerId, code])
   @@index([providerId])
@@ -186,59 +185,29 @@ model Championship {
 // Event
 //-------------------------
 model Event {
-  id            String      @id @default(uuid())
-  providerId    String
-  seasonYear    Int
-  name          String      @db.VarChar(120)
-  officialName  String?     @db.VarChar(255)
-  location      String      @db.VarChar(255)
-  countryName   String?     @db.VarChar(80)
-  countryCode   String?     @db.VarChar(3)
-  circuitName   String?     @db.VarChar(120)
-  externalKey   String?     @db.VarChar(64)
-  startTimeUtc  DateTime
-  endTimeUtc    DateTime
-  status        EventStatus
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  race     Race?
-  sessions Session[]
-
-  @@unique([providerId, externalKey])
-  @@index([providerId])
-  @@index([seasonYear, startTimeUtc])
-}
-
-//-------------------------
-// Race
-//-------------------------
-model Race {
-  id              String      @id @default(uuid())
-  championshipId  String
-  eventId         String      @unique
-  seasonYear      Int
-  roundNumber     Int?
-  name            String      @db.VarChar(120)
-  officialName    String?     @db.VarChar(255)
-  countryName     String?     @db.VarChar(80)
-  countryCode     String?     @db.VarChar(3)
-  circuitName     String?     @db.VarChar(120)
-  externalKey     String?     @db.VarChar(64)
-  startsAtUtc     DateTime
-  endsAtUtc       DateTime?
-  status          EventStatus
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String      @id @default(uuid())
+  championshipId String
+  seasonYear     Int
+  roundNumber    Int?
+  name           String      @db.VarChar(120)
+  officialName   String?     @db.VarChar(255)
+  location       String      @db.VarChar(255)
+  countryName    String?     @db.VarChar(80)
+  countryCode    String?     @db.VarChar(3)
+  circuitName    String?     @db.VarChar(120)
+  externalKey    String?     @db.VarChar(64)
+  startTimeUtc   DateTime
+  endTimeUtc     DateTime
+  status         EventStatus
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
-  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sessions     Session[]
 
-  @@unique([championshipId, seasonYear, externalKey])
-  @@index([championshipId, seasonYear])
-  @@index([eventId])
+  @@unique([championshipId, externalKey])
+  @@index([championshipId])
+  @@index([seasonYear, startTimeUtc])
 }
 
 //-------------------------
@@ -247,7 +216,6 @@ model Race {
 model Session {
   id           String        @id @default(uuid())
   eventId      String
-  raceId       String?
   type         SessionType
   status       SessionStatus
   name         String?       @db.VarChar(80)
@@ -259,7 +227,6 @@ model Session {
   updatedAt    DateTime      @updatedAt
 
   event                  Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  race                   Race?                        @relation(fields: [raceId], references: [id], onDelete: SetNull)
   highlights             RaceHighlight[]
   archives               RaceArchive[]
   laps                   RaceLap[]
@@ -281,7 +248,6 @@ model Session {
 
   @@unique([eventId, externalKey])
   @@index([eventId])
-  @@index([raceId])
 }
 
 //-------------------------
@@ -305,18 +271,18 @@ model RaceHighlight {
 //-------------------------
 model Team {
   id          String  @id @default(uuid())
-  providerId  String
+  championshipId String
   name        String  @db.VarChar(80)
   code        String? @db.VarChar(20)
   colorHex    String? @db.VarChar(7)
   externalKey String? @db.VarChar(64)
 
-  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  drivers  Driver[]
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  drivers      Driver[]
 
-  @@unique([providerId, externalKey])
-  @@unique([providerId, code])
-  @@index([providerId])
+  @@unique([championshipId, externalKey])
+  @@unique([championshipId, code])
+  @@index([championshipId])
 }
 
 //-------------------------
@@ -324,7 +290,7 @@ model Team {
 //-------------------------
 model Driver {
   id          String   @id @default(uuid())
-  providerId  String
+  championshipId String
   teamId      String
   displayName String   @db.VarChar(80)
   firstName   String?  @db.VarChar(60)
@@ -336,13 +302,13 @@ model Driver {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
   team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   sessionBroadcasts SessionDriverBroadcast[]
 
-  @@unique([providerId, code])
-  @@unique([providerId, externalKey])
-  @@index([providerId])
+  @@unique([championshipId, code])
+  @@unique([championshipId, externalKey])
+  @@index([championshipId])
   @@index([teamId])
 }
 

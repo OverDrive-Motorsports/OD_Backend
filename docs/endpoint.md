@@ -7,7 +7,7 @@ Base URL: `http://localhost:8080`
 - `GET /getrace` or `GET /api/v1/race/getrace` must be called first to fetch and store data.
 - Read endpoints use the merged latest session view, so several driver imports are aggregated together.
 - Historical navigation is now supported through explicit session-scoped endpoints.
-- Recommended navigation flow: `championship -> race -> session -> session-scoped data endpoints`.
+- Recommended navigation flow: `provider -> championship -> event -> session -> session-scoped data endpoints`.
 - Legacy routes are still available for `/getrace` and `/sendrace`.
 
 ## Health
@@ -22,14 +22,15 @@ Base URL: `http://localhost:8080`
 - `GET /api/v1/championships`
   - Returns all stored championships.
 
-- `GET /api/v1/championships/{code}/races`
-  - Returns the races stored for one championship code such as `f1`.
+- `GET /api/v1/championships/{code}/events`
+  - Returns the events stored for one championship code such as `f1`.
+  - The hierarchy is strict: events belong to championships, sessions belong to events.
 
-- `GET /api/v1/races/{raceId}`
-  - Returns one stored race entry.
+- `GET /api/v1/events/{eventId}`
+  - Returns one stored event entry.
 
-- `GET /api/v1/races/{raceId}/sessions`
-  - Returns stored sessions attached to one race.
+- `GET /api/v1/events/{eventId}/sessions`
+  - Returns stored sessions attached to one event.
 
 - `GET /api/v1/sessions/{sessionId}`
   - Returns one stored session entry, including latest stored dataset counts when available.
@@ -78,7 +79,7 @@ Base URL: `http://localhost:8080`
   - Returns teams inferred from the session driver roster.
 
 - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}`
-  - Returns the full race payload for one driver in one explicit session.
+  - Returns the full session payload for one driver in one explicit session.
 
 - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile`
   - Returns the driver profile only for one explicit session.
@@ -104,7 +105,7 @@ Base URL: `http://localhost:8080`
   - Returns race control events for one explicit session.
 
 - `GET /api/v1/sessions/{sessionId}/standings/race`
-  - Returns the in-race standings snapshot for one explicit session.
+  - Returns the in-session standings snapshot for one explicit session.
   - Optional query param:
     - `at` in RFC3339 format
 
@@ -132,10 +133,10 @@ Base URL: `http://localhost:8080`
 - `POST /sendrace`
 - `GET /api/v1/race/sendrace`
 - `POST /api/v1/race/sendrace`
-  - Returns the merged latest race payload.
+  - Returns the merged latest session payload.
 
 - `GET /api/v1/race/metadata`
-  - Returns race metadata, meeting info, race session info, and all session references.
+  - Returns latest-session metadata, meeting info, race session info, and all session references.
 
 ## Dataset Catalog
 
@@ -171,10 +172,10 @@ Base URL: `http://localhost:8080`
 ## Drivers
 
 - `GET /api/v1/race/drivers`
-  - Returns the merged list of drivers available in the active race.
+  - Returns the merged list of drivers available in the latest stored session.
 
 - `GET /api/v1/race/drivers/{driverNumber}`
-  - Returns the full race payload for one driver.
+  - Returns the full latest-session payload for one driver.
   - Includes profile, counts, and all driver-scoped datasets.
 
 - `GET /api/v1/race/drivers/{driverNumber}/profile`
@@ -192,7 +193,7 @@ Base URL: `http://localhost:8080`
   - Return one driver-scoped dataset for one driver.
 
 - `GET /api/v1/race/driver?driver_number={driverNumber}`
-  - Legacy endpoint returning the full race payload for one driver.
+  - Legacy endpoint returning the full latest-session payload for one driver.
 
 ## Teams
 
@@ -210,15 +211,15 @@ Base URL: `http://localhost:8080`
 ## Race Control And Weather
 
 - `GET /api/v1/race/weather`
-  - Returns race weather samples.
+  - Returns latest-session weather samples.
 
 - `GET /api/v1/race/facts`
-  - Returns race control events such as flags and incidents.
+  - Returns latest-session race control events such as flags and incidents.
 
 ## Standings And Broadcast
 
 - `GET /api/v1/race/standings/race`
-  - Returns the latest in-race standings snapshot from the merged `position` dataset.
+  - Returns the latest in-session standings snapshot from the merged `position` dataset.
   - Optional query param:
     - `at` in RFC3339 format, for example `2025-03-16T04:45:00Z`
 
@@ -229,9 +230,9 @@ Base URL: `http://localhost:8080`
 
 ```bash
 curl "http://localhost:8080/api/v1/championships"
-curl "http://localhost:8080/api/v1/championships/f1/races"
+curl "http://localhost:8080/api/v1/championships/f1/events"
 curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=0"
-curl "http://localhost:8080/api/v1/races/race-aus-2025/sessions"
+curl "http://localhost:8080/api/v1/events/event-aus-2025/sessions"
 curl "http://localhost:8080/api/v1/sessions/session-race-9693/archive"
 curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers"
 curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers/63/broadcast"

@@ -3,7 +3,7 @@
 ## OverDrive 2026
 ## All Technical rights reserved
 ##
-## catalog_router_test.go - Router tests for championship, race, and session catalog routes.
+## catalog_router_test.go - Router tests for championship, event, and session catalog routes.
 ##
 */
 
@@ -31,13 +31,13 @@ func TestRouterCatalogRoutes(t *testing.T) {
 		ListChampionshipsFn: func(ctx context.Context) ([]domain.ChampionshipSummary, error) {
 			return []domain.ChampionshipSummary{mocks.SampleChampionship()}, nil
 		},
-		GetChampionshipRacesFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
-			return mocks.SampleChampionship(), []domain.RaceSummary{mocks.SampleRace()}, true, nil
+		GetChampionshipEventsFn: func(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
+			return mocks.SampleChampionship(), []domain.EventSummary{mocks.SampleEvent()}, true, nil
 		},
-		GetRaceFn: func(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-			return mocks.SampleRace(), true, nil
+		GetEventFn: func(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+			return mocks.SampleEvent(), true, nil
 		},
-		ListRaceSessionsFn: func(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
+		ListEventSessionsFn: func(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
 			return []domain.SessionSummary{mocks.SampleSession()}, true, nil
 		},
 		GetSessionFn: func(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error) {
@@ -76,9 +76,9 @@ func TestRouterCatalogRoutes(t *testing.T) {
 			},
 		},
 		{
-			name:           "championship races",
+			name:           "championship events",
 			method:         http.MethodGet,
-			target:         "/api/v1/championships/f1/races",
+			target:         "/api/v1/championships/f1/events",
 			expectedStatus: http.StatusOK,
 			assert: func(t *testing.T, payload map[string]any) {
 				if int(payload["count"].(float64)) != 1 {
@@ -87,20 +87,20 @@ func TestRouterCatalogRoutes(t *testing.T) {
 			},
 		},
 		{
-			name:           "race by id",
+			name:           "event by id",
 			method:         http.MethodGet,
-			target:         "/api/v1/races/race-aus-2025",
+			target:         "/api/v1/events/event-aus-2025",
 			expectedStatus: http.StatusOK,
 			assert: func(t *testing.T, payload map[string]any) {
-				if payload["id"] != "race-aus-2025" {
-					t.Fatalf("unexpected race id: %#v", payload["id"])
+				if payload["id"] != "event-aus-2025" {
+					t.Fatalf("unexpected event id: %#v", payload["id"])
 				}
 			},
 		},
 		{
-			name:           "race sessions",
+			name:           "event sessions",
 			method:         http.MethodGet,
-			target:         "/api/v1/races/race-aus-2025/sessions",
+			target:         "/api/v1/events/event-aus-2025/sessions",
 			expectedStatus: http.StatusOK,
 			assert: func(t *testing.T, payload map[string]any) {
 				if int(payload["count"].(float64)) != 1 {

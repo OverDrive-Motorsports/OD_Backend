@@ -32,9 +32,9 @@ func NewRouter(handler *RaceHandler, logger *slog.Logger) http.Handler {
 
 	// Versioned V1 routes.
 	mux.HandleFunc("/api/v1/championships", handler.HandleListChampionships)
-	mux.HandleFunc("GET /api/v1/championships/{code}/races", handler.HandleListChampionshipRaces)
-	mux.HandleFunc("GET /api/v1/races/{raceId}", handler.HandleGetRaceCatalog)
-	mux.HandleFunc("GET /api/v1/races/{raceId}/sessions", handler.HandleListRaceSessions)
+	mux.HandleFunc("GET /api/v1/championships/{code}/events", handler.HandleListChampionshipEvents)
+	mux.HandleFunc("GET /api/v1/events/{eventId}", handler.HandleGetEventCatalog)
+	mux.HandleFunc("GET /api/v1/events/{eventId}/sessions", handler.HandleListEventSessions)
 	mux.HandleFunc("GET /api/v1/sessions/{sessionId}", handler.HandleGetSessionCatalog)
 	mux.HandleFunc("GET /api/v1/sessions/{sessionId}/archive", handler.HandleSendSessionArchive)
 	mux.HandleFunc("GET /api/v1/sessions/{sessionId}/metadata", handler.HandleSendSessionMetadata)

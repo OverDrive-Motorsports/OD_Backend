@@ -103,9 +103,9 @@ func (h *RaceHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 			"GET /api/v1/race/getrace",
 			"POST /api/v1/race/sendrace",
 			"GET /api/v1/championships",
-			"GET /api/v1/championships/{code}/races",
-			"GET /api/v1/races/{raceId}",
-			"GET /api/v1/races/{raceId}/sessions",
+			"GET /api/v1/championships/{code}/events",
+			"GET /api/v1/events/{eventId}",
+			"GET /api/v1/events/{eventId}/sessions",
 			"GET /api/v1/sessions/{sessionId}",
 			"GET /api/v1/sessions/{sessionId}/archive",
 			"GET /api/v1/sessions/{sessionId}/metadata",
@@ -177,8 +177,8 @@ func (h *RaceHandler) HandleListChampionships(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// HandleListChampionshipRaces returns stored races for one championship code.
-func (h *RaceHandler) HandleListChampionshipRaces(w http.ResponseWriter, r *http.Request) {
+// HandleListChampionshipEvents returns stored events for one championship code.
+func (h *RaceHandler) HandleListChampionshipEvents(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -190,9 +190,9 @@ func (h *RaceHandler) HandleListChampionshipRaces(w http.ResponseWriter, r *http
 		return
 	}
 
-	championship, races, found, err := h.raceService.GetChampionshipRaces(r.Context(), code)
+	championship, events, found, err := h.raceService.GetChampionshipEvents(r.Context(), code)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list championship races: %v", err))
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list championship events: %v", err))
 		return
 	}
 	if !found {
@@ -202,64 +202,64 @@ func (h *RaceHandler) HandleListChampionshipRaces(w http.ResponseWriter, r *http
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"championship": championship,
-		"count":        len(races),
-		"data":         races,
+		"count":        len(events),
+		"data":         events,
 	})
 }
 
-// HandleGetRaceCatalog returns one stored race entry by identifier.
-func (h *RaceHandler) HandleGetRaceCatalog(w http.ResponseWriter, r *http.Request) {
+// HandleGetEventCatalog returns one stored event entry by identifier.
+func (h *RaceHandler) HandleGetEventCatalog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	raceID := strings.TrimSpace(r.PathValue("raceId"))
-	if raceID == "" {
-		writeError(w, http.StatusBadRequest, "missing raceId path parameter")
+	eventID := strings.TrimSpace(r.PathValue("eventId"))
+	if eventID == "" {
+		writeError(w, http.StatusBadRequest, "missing eventId path parameter")
 		return
 	}
 
-	race, found, err := h.raceService.GetRace(r.Context(), raceID)
+	event, found, err := h.raceService.GetEvent(r.Context(), eventID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read race: %v", err))
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read event: %v", err))
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("race id=%q not found", raceID))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("event id=%q not found", eventID))
 		return
 	}
 
-	writeJSON(w, http.StatusOK, race)
+	writeJSON(w, http.StatusOK, event)
 }
 
-// HandleListRaceSessions returns stored sessions for one race.
-func (h *RaceHandler) HandleListRaceSessions(w http.ResponseWriter, r *http.Request) {
+// HandleListEventSessions returns stored sessions for one event.
+func (h *RaceHandler) HandleListEventSessions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	raceID := strings.TrimSpace(r.PathValue("raceId"))
-	if raceID == "" {
-		writeError(w, http.StatusBadRequest, "missing raceId path parameter")
+	eventID := strings.TrimSpace(r.PathValue("eventId"))
+	if eventID == "" {
+		writeError(w, http.StatusBadRequest, "missing eventId path parameter")
 		return
 	}
 
-	sessions, found, err := h.raceService.ListRaceSessions(r.Context(), raceID)
+	sessions, found, err := h.raceService.ListEventSessions(r.Context(), eventID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list race sessions: %v", err))
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to list event sessions: %v", err))
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("race id=%q not found", raceID))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("event id=%q not found", eventID))
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"race_id": raceID,
-		"count":   len(sessions),
-		"data":    sessions,
+		"event_id": eventID,
+		"count":    len(sessions),
+		"data":     sessions,
 	})
 }
 
@@ -377,6 +377,7 @@ func (h *RaceHandler) HandleSendSessionDataset(w http.ResponseWriter, r *http.Re
 	}
 
 	data := archive.Datasets[dataset]
+	data = enrichRowsWithDriverNames(data, archive.Datasets["drivers"])
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataset":    dataset,
 		"session_id": strings.TrimSpace(r.PathValue("sessionId")),
@@ -508,6 +509,7 @@ func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *h
 	}
 
 	rows := filterRowsByDriver(archive.Datasets[dataset], driverNumber)
+	rows = enrichRowsWithDriverNames(rows, archive.Datasets["drivers"])
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataset":       dataset,
 		"session_id":    strings.TrimSpace(r.PathValue("sessionId")),
@@ -796,6 +798,7 @@ func (h *RaceHandler) HandleSendDriverChampionship(w http.ResponseWriter, r *htt
 	}
 
 	data := archive.Datasets["championship_drivers"]
+	data = enrichRowsWithDriverNames(data, archive.Datasets["drivers"])
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataset":  "championship_drivers",
 		"metadata": archive.Metadata,
@@ -1038,6 +1041,7 @@ func (h *RaceHandler) HandleSendDataset(w http.ResponseWriter, r *http.Request) 
 	}
 
 	data := archive.Datasets[dataset]
+	data = enrichRowsWithDriverNames(data, archive.Datasets["drivers"])
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataset":  dataset,
 		"metadata": archive.Metadata,
@@ -1165,6 +1169,7 @@ func (h *RaceHandler) HandleSendDriverDataset(w http.ResponseWriter, r *http.Req
 	}
 
 	rows := filterRowsByDriver(archive.Datasets[dataset], driverNumber)
+	rows = enrichRowsWithDriverNames(rows, archive.Datasets["drivers"])
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataset":       dataset,
 		"metadata":      archive.Metadata,
@@ -1289,6 +1294,7 @@ func (h *RaceHandler) writeDriverRacePayload(w http.ResponseWriter, archive doma
 
 	for _, key := range driverRaceDatasetKeys {
 		rows := filterRowsByDriver(archive.Datasets[key], driverNumber)
+		rows = enrichRowsWithDriverNames(rows, archive.Datasets["drivers"])
 		data[key] = rows
 		counts[key] = len(rows)
 	}
@@ -1398,6 +1404,52 @@ func indexDriversByNumber(rows []map[string]any) map[int]map[string]any {
 		out[num] = row
 	}
 	return out
+}
+
+// enrichRowsWithDriverNames appends driver_name when a row exposes driver_number.
+func enrichRowsWithDriverNames(rows []map[string]any, driverRows []map[string]any) []map[string]any {
+	if len(rows) == 0 || len(driverRows) == 0 {
+		return rows
+	}
+
+	driversByNumber := indexDriversByNumber(driverRows)
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		enriched := cloneRow(row)
+		driverNumber, ok := readIntField(enriched, "driver_number")
+		if ok && driverNumber > 0 {
+			if driver, found := driversByNumber[driverNumber]; found {
+				if name := driverDisplayName(driver); name != "" {
+					enriched["driver_name"] = name
+				}
+				if teamName := readStringValue(driver, "team_name"); teamName != "" {
+					enriched["team_name"] = teamName
+				}
+			}
+		}
+		out = append(out, enriched)
+	}
+
+	return out
+}
+
+// driverDisplayName returns the best available public name for one driver row.
+func driverDisplayName(row map[string]any) string {
+	if name := readStringValue(row, "full_name"); name != "" {
+		return name
+	}
+	if name := readStringValue(row, "broadcast_name"); name != "" {
+		return name
+	}
+
+	first := readStringValue(row, "first_name")
+	last := readStringValue(row, "last_name")
+	name := strings.TrimSpace(strings.TrimSpace(first + " " + last))
+	if name != "" {
+		return name
+	}
+
+	return readStringValue(row, "name_acronym")
 }
 
 // readTimeField extracts RFC3339 timestamps from a row using one of the given keys.

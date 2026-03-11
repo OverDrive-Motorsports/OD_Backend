@@ -63,20 +63,20 @@ func (s *RaceArchiveStore) buildDatasetChunkQueries(archiveID string, datasets m
 	return queries, nil
 }
 
-// syncParticipants upserts teams and drivers from the provider drivers dataset.
-func (s *RaceArchiveStore) syncParticipants(ctx context.Context, providerID string, rows []map[string]any) error {
+// syncParticipants upserts teams and drivers from the championship drivers dataset.
+func (s *RaceArchiveStore) syncParticipants(ctx context.Context, championshipID string, rows []map[string]any) error {
 	for _, row := range rows {
 		driverNumber := readIntField(row, "driver_number")
 		if driverNumber <= 0 {
 			continue
 		}
 
-		team, err := s.ensureTeam(ctx, providerID, row)
+		team, err := s.ensureTeam(ctx, championshipID, row)
 		if err != nil {
 			return fmt.Errorf("ensure team for driver_number=%d: %w", driverNumber, err)
 		}
 
-		if err := s.ensureDriver(ctx, providerID, team.ID, row); err != nil {
+		if err := s.ensureDriver(ctx, championshipID, team.ID, row); err != nil {
 			return fmt.Errorf("ensure driver_number=%d: %w", driverNumber, err)
 		}
 	}
@@ -88,7 +88,7 @@ func (s *RaceArchiveStore) syncParticipants(ctx context.Context, providerID stri
 func (s *RaceArchiveStore) ensureSessionDriverBroadcasts(
 	ctx context.Context,
 	sessionID string,
-	providerID string,
+	championshipID string,
 	sessionKey int,
 	rows []map[string]any,
 ) error {
@@ -99,7 +99,7 @@ func (s *RaceArchiveStore) ensureSessionDriverBroadcasts(
 		}
 
 		driver, err := s.client.Driver.FindFirst(
-			db.Driver.ProviderID.Equals(providerID),
+			db.Driver.ChampionshipID.Equals(championshipID),
 			db.Driver.ExternalKey.Equals(strconv.Itoa(driverNumber)),
 		).Exec(ctx)
 		if err != nil {
@@ -140,13 +140,13 @@ func (s *RaceArchiveStore) ensureSessionDriverBroadcasts(
 	return nil
 }
 
-// ensureTeam upserts a provider team using the OpenF1 driver payload.
-func (s *RaceArchiveStore) ensureTeam(ctx context.Context, providerID string, row map[string]any) (*db.TeamModel, error) {
+// ensureTeam upserts a championship team using the OpenF1 driver payload.
+func (s *RaceArchiveStore) ensureTeam(ctx context.Context, championshipID string, row map[string]any) (*db.TeamModel, error) {
 	teamName := fallbackString(readStringField(row, "team_name"), "Unknown")
 	externalKey := teamExternalKey(teamName)
 
 	team, err := s.client.Team.FindFirst(
-		db.Team.ProviderID.Equals(providerID),
+		db.Team.ChampionshipID.Equals(championshipID),
 		db.Team.ExternalKey.Equals(externalKey),
 	).Exec(ctx)
 	if err != nil && !db.IsErrNotFound(err) {
@@ -158,6 +158,7 @@ func (s *RaceArchiveStore) ensureTeam(ctx context.Context, providerID string, ro
 		db.Team.ExternalKey.Set(externalKey),
 		db.Team.Code.SetIfPresent(optionalString(readStringField(row, "team_code"))),
 		db.Team.ColorHex.SetIfPresent(optionalString(normalizeColor(readStringField(row, "team_colour")))),
+		db.Team.Championship.Link(db.Championship.ID.Equals(championshipID)),
 	}
 
 	if err == nil {
@@ -172,8 +173,10 @@ func (s *RaceArchiveStore) ensureTeam(ctx context.Context, providerID string, ro
 
 	created, createErr := s.client.Team.CreateOne(
 		db.Team.Name.Set(teamName),
-		db.Team.Provider.Link(db.Provider.ID.Equals(providerID)),
-		params[1:]...,
+		db.Team.Championship.Link(db.Championship.ID.Equals(championshipID)),
+		db.Team.ExternalKey.Set(externalKey),
+		db.Team.Code.SetIfPresent(optionalString(readStringField(row, "team_code"))),
+		db.Team.ColorHex.SetIfPresent(optionalString(normalizeColor(readStringField(row, "team_colour")))),
 	).Exec(ctx)
 	if createErr != nil {
 		return nil, fmt.Errorf("create team: %w", createErr)
@@ -181,8 +184,8 @@ func (s *RaceArchiveStore) ensureTeam(ctx context.Context, providerID string, ro
 	return created, nil
 }
 
-// ensureDriver upserts a provider driver using the OpenF1 driver payload.
-func (s *RaceArchiveStore) ensureDriver(ctx context.Context, providerID, teamID string, row map[string]any) error {
+// ensureDriver upserts a championship driver using the OpenF1 driver payload.
+func (s *RaceArchiveStore) ensureDriver(ctx context.Context, championshipID, teamID string, row map[string]any) error {
 	driverNumber := readIntField(row, "driver_number")
 	if driverNumber <= 0 {
 		return nil
@@ -199,7 +202,7 @@ func (s *RaceArchiveStore) ensureDriver(ctx context.Context, providerID, teamID 
 	countryCode := optionalString(readStringField(row, "country_code"))
 
 	driver, err := s.client.Driver.FindFirst(
-		db.Driver.ProviderID.Equals(providerID),
+		db.Driver.ChampionshipID.Equals(championshipID),
 		db.Driver.ExternalKey.Equals(externalKey),
 	).Exec(ctx)
 	if err != nil && !db.IsErrNotFound(err) {
@@ -214,6 +217,7 @@ func (s *RaceArchiveStore) ensureDriver(ctx context.Context, providerID, teamID 
 		db.Driver.LastName.SetIfPresent(lastName),
 		db.Driver.Code.SetIfPresent(code),
 		db.Driver.CountryCode.SetIfPresent(countryCode),
+		db.Driver.Championship.Link(db.Championship.ID.Equals(championshipID)),
 		db.Driver.Team.Link(db.Team.ID.Equals(teamID)),
 	}
 
@@ -230,7 +234,7 @@ func (s *RaceArchiveStore) ensureDriver(ctx context.Context, providerID, teamID 
 	_, createErr := s.client.Driver.CreateOne(
 		db.Driver.DisplayName.Set(displayName),
 		db.Driver.Number.Set(driverNumber),
-		db.Driver.Provider.Link(db.Provider.ID.Equals(providerID)),
+		db.Driver.Championship.Link(db.Championship.ID.Equals(championshipID)),
 		db.Driver.Team.Link(db.Team.ID.Equals(teamID)),
 		db.Driver.ExternalKey.Set(externalKey),
 		db.Driver.FirstName.SetIfPresent(firstName),

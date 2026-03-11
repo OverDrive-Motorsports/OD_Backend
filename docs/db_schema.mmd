@@ -71,8 +71,9 @@ erDiagram
 
   Event {
     string id PK
-    string providerId FK
+    string championshipId FK
     int seasonYear
+    int roundNumber
     string name
     string officialName
     string location
@@ -87,29 +88,9 @@ erDiagram
     datetime updatedAt
   }
 
-  Race {
-    string id PK
-    string championshipId FK
-    string eventId FK
-    int seasonYear
-    int roundNumber
-    string name
-    string officialName
-    string countryName
-    string countryCode
-    string circuitName
-    string externalKey
-    datetime startsAtUtc
-    datetime endsAtUtc
-    string status
-    datetime createdAt
-    datetime updatedAt
-  }
-
   Session {
     string id PK
     string eventId FK
-    string raceId FK
     string type
     string status
     string name
@@ -132,7 +113,7 @@ erDiagram
 
   Team {
     string id PK
-    string providerId FK
+    string championshipId FK
     string name
     string code
     string colorHex
@@ -141,7 +122,7 @@ erDiagram
 
   Driver {
     string id PK
-    string providerId FK
+    string championshipId FK
     string teamId FK
     string displayName
     string firstName
@@ -379,16 +360,12 @@ erDiagram
 
   Provider ||--o{ ProviderConnection : provides
   Provider ||--o{ Championship : owns
-  Provider ||--o{ Event : schedules
-  Provider ||--o{ Team : lists
-  Provider ||--o{ Driver : lists
-
   UserPreset ||--o{ PresetWidget : contains
 
-  Championship ||--o{ Race : contains
-  Event ||--|| Race : wraps
+  Championship ||--o{ Event : schedules
+  Championship ||--o{ Team : contains
+  Championship ||--o{ Driver : registers
   Event ||--o{ Session : has
-  Race ||--o{ Session : runs
 
   Session ||--o{ RaceHighlight : generates
   Session ||--o{ SessionDriverBroadcast : broadcasts

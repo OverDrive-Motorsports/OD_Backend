@@ -34,8 +34,8 @@ func (s *RaceArchiveStore) ListChampionships(ctx context.Context) ([]domain.Cham
 	return out, nil
 }
 
-// GetChampionshipRaces returns one championship and its races ordered by schedule.
-func (s *RaceArchiveStore) GetChampionshipRaces(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error) {
+// GetChampionshipEvents returns one championship and its events ordered by schedule.
+func (s *RaceArchiveStore) GetChampionshipEvents(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error) {
 	championship, err := s.client.Championship.FindFirst(
 		db.Championship.Code.Equals(strings.ToLower(strings.TrimSpace(code))),
 	).Exec(ctx)
@@ -46,54 +46,54 @@ func (s *RaceArchiveStore) GetChampionshipRaces(ctx context.Context, code string
 		return domain.ChampionshipSummary{}, nil, false, fmt.Errorf("find championship: %w", err)
 	}
 
-	races, err := s.client.Race.FindMany(
-		db.Race.ChampionshipID.Equals(championship.ID),
+	events, err := s.client.Event.FindMany(
+		db.Event.ChampionshipID.Equals(championship.ID),
 	).
 		OrderBy(
-			db.Race.SeasonYear.Order(db.SortOrderDesc),
-			db.Race.StartsAtUtc.Order(db.SortOrderAsc),
+			db.Event.SeasonYear.Order(db.SortOrderDesc),
+			db.Event.StartTimeUtc.Order(db.SortOrderAsc),
 		).
 		Exec(ctx)
 	if err != nil {
-		return domain.ChampionshipSummary{}, nil, false, fmt.Errorf("find races: %w", err)
+		return domain.ChampionshipSummary{}, nil, false, fmt.Errorf("find events: %w", err)
 	}
 
-	out := make([]domain.RaceSummary, 0, len(races))
-	for i := range races {
-		out = append(out, raceSummaryFromModel(&races[i]))
+	out := make([]domain.EventSummary, 0, len(events))
+	for i := range events {
+		out = append(out, eventSummaryFromModel(&events[i]))
 	}
 
 	return championshipSummaryFromModel(championship), out, true, nil
 }
 
-// GetRace returns one stored race by identifier.
-func (s *RaceArchiveStore) GetRace(ctx context.Context, raceID string) (domain.RaceSummary, bool, error) {
-	race, err := s.client.Race.FindUnique(
-		db.Race.ID.Equals(strings.TrimSpace(raceID)),
+// GetEvent returns one stored event by identifier.
+func (s *RaceArchiveStore) GetEvent(ctx context.Context, eventID string) (domain.EventSummary, bool, error) {
+	event, err := s.client.Event.FindUnique(
+		db.Event.ID.Equals(strings.TrimSpace(eventID)),
 	).Exec(ctx)
 	if err != nil {
 		if db.IsErrNotFound(err) {
-			return domain.RaceSummary{}, false, nil
+			return domain.EventSummary{}, false, nil
 		}
-		return domain.RaceSummary{}, false, fmt.Errorf("find race: %w", err)
+		return domain.EventSummary{}, false, fmt.Errorf("find event: %w", err)
 	}
 
-	return raceSummaryFromModel(race), true, nil
+	return eventSummaryFromModel(event), true, nil
 }
 
-// ListRaceSessions returns the stored sessions for one race ordered by start time.
-func (s *RaceArchiveStore) ListRaceSessions(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error) {
-	if _, err := s.client.Race.FindUnique(
-		db.Race.ID.Equals(strings.TrimSpace(raceID)),
+// ListEventSessions returns the stored sessions for one event ordered by start time.
+func (s *RaceArchiveStore) ListEventSessions(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error) {
+	if _, err := s.client.Event.FindUnique(
+		db.Event.ID.Equals(strings.TrimSpace(eventID)),
 	).Exec(ctx); err != nil {
 		if db.IsErrNotFound(err) {
 			return nil, false, nil
 		}
-		return nil, false, fmt.Errorf("find race: %w", err)
+		return nil, false, fmt.Errorf("find event: %w", err)
 	}
 
 	sessions, err := s.client.Session.FindMany(
-		db.Session.RaceID.Equals(raceID),
+		db.Session.EventID.Equals(eventID),
 	).
 		OrderBy(
 			db.Session.StartedAtUtc.Order(db.SortOrderAsc),
@@ -310,41 +310,38 @@ func championshipSummaryFromModel(model *db.ChampionshipModel) domain.Championsh
 	}
 }
 
-// raceSummaryFromModel maps a Prisma race model to its API summary.
-func raceSummaryFromModel(model *db.RaceModel) domain.RaceSummary {
+// eventSummaryFromModel maps a Prisma event model to its API summary.
+func eventSummaryFromModel(model *db.EventModel) domain.EventSummary {
 	if model == nil {
-		return domain.RaceSummary{}
+		return domain.EventSummary{}
 	}
 
-	roundNumber, _ := model.RoundNumber()
 	officialName, _ := model.OfficialName()
 	countryName, _ := model.CountryName()
 	countryCode, _ := model.CountryCode()
 	circuitName, _ := model.CircuitName()
 	externalKey, _ := model.ExternalKey()
+	roundNumber, _ := model.RoundNumber()
 	var endsAt *time.Time
-	if value, ok := model.EndsAtUtc(); ok {
-		parsed := time.Time(value).UTC()
-		endsAt = &parsed
-	}
+	parsedEnd := time.Time(model.EndTimeUtc).UTC()
+	endsAt = &parsedEnd
 
-	return domain.RaceSummary{
-		ID:           model.ID,
-		Championship: model.ChampionshipID,
-		EventID:      model.EventID,
-		SeasonYear:   model.SeasonYear,
-		RoundNumber:  optionalIntPointer(roundNumber),
-		Name:         model.Name,
-		OfficialName: optionalStringValue(officialName),
-		CountryName:  optionalStringValue(countryName),
-		CountryCode:  optionalStringValue(countryCode),
-		CircuitName:  optionalStringValue(circuitName),
-		ExternalKey:  optionalStringValue(externalKey),
-		Status:       string(model.Status),
-		StartsAtUTC:  time.Time(model.StartsAtUtc).UTC(),
-		EndsAtUTC:    endsAt,
-		CreatedAt:    time.Time(model.CreatedAt).UTC(),
-		UpdatedAt:    time.Time(model.UpdatedAt).UTC(),
+	return domain.EventSummary{
+		ID:             model.ID,
+		ChampionshipID: model.ChampionshipID,
+		SeasonYear:     model.SeasonYear,
+		RoundNumber:    optionalIntPointer(roundNumber),
+		Name:           model.Name,
+		OfficialName:   optionalStringValue(officialName),
+		CountryName:    optionalStringValue(countryName),
+		CountryCode:    optionalStringValue(countryCode),
+		CircuitName:    optionalStringValue(circuitName),
+		ExternalKey:    optionalStringValue(externalKey),
+		Status:         string(model.Status),
+		StartsAtUTC:    time.Time(model.StartTimeUtc).UTC(),
+		EndsAtUTC:      endsAt,
+		CreatedAt:      time.Time(model.CreatedAt).UTC(),
+		UpdatedAt:      time.Time(model.UpdatedAt).UTC(),
 	}
 }
 
@@ -354,7 +351,6 @@ func (s *RaceArchiveStore) sessionSummaryFromModel(ctx context.Context, model *d
 		return domain.SessionSummary{}
 	}
 
-	raceID, _ := model.RaceID()
 	name, _ := model.Name()
 	externalKey, _ := model.ExternalKey()
 	broadcastURL, _ := model.BroadcastURL()
@@ -367,7 +363,6 @@ func (s *RaceArchiveStore) sessionSummaryFromModel(ctx context.Context, model *d
 	summary := domain.SessionSummary{
 		ID:           model.ID,
 		EventID:      model.EventID,
-		RaceID:       optionalStringValue(raceID),
 		Type:         string(model.Type),
 		Status:       string(model.Status),
 		Name:         optionalStringValue(name),

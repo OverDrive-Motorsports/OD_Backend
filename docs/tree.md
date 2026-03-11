@@ -105,19 +105,20 @@ OD_Backend/
 │   │       ├── race_archive_catalog.go
 │   │       │  Role:
 │   │       │  - Read-side catalog and archive reconstruction logic.
-│   │       │  - Loads championships, races, sessions, rebuilds merged archives from stored chunks,
+│   │       │  - Loads championships, events, sessions, rebuilds merged archives from stored chunks,
 │   │       │    and resolves session driver broadcast URLs.
 │   │       │
 │   │       ├── race_archive_entities.go
 │   │       │  Role:
 │   │       │  - Metadata upsert helpers.
-│   │       │  - Ensures provider, championship, event, race, and session rows exist before data writes.
+│   │       │  - Ensures provider, championship, event, and session rows exist before data writes.
 │   │       │
 │   │       ├── race_archive_participants.go
 │   │       │  Role:
 │   │       │  - Raw archive chunk persistence and participant synchronization.
 │   │       │  - Splits big datasets into `RaceDatasetChunk` rows.
 │   │       │  - Upserts `Team` and `Driver` entities from OpenF1 driver data.
+│   │       │  - Maintains the `championship -> team -> driver` participant chain.
 │   │       │  - Upserts `SessionDriverBroadcast` rows with one broadcast URL per driver/session.
 │   │       │
 │   │       ├── race_archive_normalized.go

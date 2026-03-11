@@ -55,34 +55,29 @@ func (s *RaceArchiveStore) Store(ctx context.Context, archive domain.RaceArchive
 		return time.Time{}, err
 	}
 
-	event, err := s.ensureEvent(ctx, provider.ID, archive)
-	if err != nil {
-		return time.Time{}, err
-	}
-
 	championship, err := s.ensureChampionship(ctx, provider.ID)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	race, err := s.ensureRace(ctx, championship.ID, event.ID, archive)
+	event, err := s.ensureEvent(ctx, championship.ID, archive)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	session, err := s.ensureSession(ctx, event.ID, race.ID, archive)
+	session, err := s.ensureSession(ctx, event.ID, archive)
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	if err := s.syncParticipants(ctx, provider.ID, archive.Datasets["drivers"]); err != nil {
+	if err := s.syncParticipants(ctx, championship.ID, archive.Datasets["drivers"]); err != nil {
 		return time.Time{}, err
 	}
 
 	if err := s.ensureSessionDriverBroadcasts(
 		ctx,
 		session.ID,
-		provider.ID,
+		championship.ID,
 		archive.Metadata.RaceSessKey,
 		archive.Datasets["drivers"],
 	); err != nil {

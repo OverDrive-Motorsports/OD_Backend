@@ -24,8 +24,8 @@ type RaceArchiveStoreRepository interface {
 	GetSessionMerged(ctx context.Context, sessionID string) (archive domain.RaceArchive, storedAt time.Time, found bool, err error)
 	GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (url string, found bool, err error)
 	ListChampionships(ctx context.Context) ([]domain.ChampionshipSummary, error)
-	GetChampionshipRaces(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.RaceSummary, bool, error)
-	GetRace(ctx context.Context, raceID string) (domain.RaceSummary, bool, error)
-	ListRaceSessions(ctx context.Context, raceID string) ([]domain.SessionSummary, bool, error)
+	GetChampionshipEvents(ctx context.Context, code string) (domain.ChampionshipSummary, []domain.EventSummary, bool, error)
+	GetEvent(ctx context.Context, eventID string) (domain.EventSummary, bool, error)
+	ListEventSessions(ctx context.Context, eventID string) ([]domain.SessionSummary, bool, error)
 	GetSession(ctx context.Context, sessionID string) (domain.SessionSummary, bool, error)
 }

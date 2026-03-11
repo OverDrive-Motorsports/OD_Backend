@@ -127,13 +127,13 @@ This layer is thin on purpose. It orchestrates use case + repository calls.
 | `NewRaceService` | Creates the application service. | Dependency boundary between handlers and lower layers. |
 | `(*RaceService).FetchAndStore` | Builds an archive and persists it. | Main write workflow used by `GET /getrace`. |
 | `(*RaceService).GetLatestStored` | Returns the latest raw stored archive. | Used for storage status and raw archive views. |
-| `(*RaceService).GetLatestMergedStored` | Returns a merged archive for the latest session. | Important when several driver-focused imports exist for the same race. |
+| `(*RaceService).GetLatestMergedStored` | Returns a merged archive for the latest session. | Important when several driver-focused imports exist for the same event session. |
 | `(*RaceService).GetSessionMergedStored` | Returns a merged archive for one explicit session. | Powers historical navigation without relying on the latest import. |
 | `(*RaceService).GetSessionDriverBroadcast` | Returns the broadcast URL for one driver in one session. | Powers explicit session-scoped driver broadcast endpoints. |
 | `(*RaceService).ListChampionships` | Lists stored championships. | Powers championship catalog endpoints. |
-| `(*RaceService).GetChampionshipRaces` | Returns races of one championship. | Powers `championship -> races` navigation. |
-| `(*RaceService).GetRace` | Returns one race summary. | Powers race catalog lookup. |
-| `(*RaceService).ListRaceSessions` | Returns sessions of one race. | Powers `race -> sessions` navigation. |
+| `(*RaceService).GetChampionshipEvents` | Returns events of one championship. | Powers `championship -> event` navigation. |
+| `(*RaceService).GetEvent` | Returns one event summary. | Powers event catalog lookup. |
+| `(*RaceService).ListEventSessions` | Returns sessions of one event. | Powers `event -> session` navigation. |
 | `(*RaceService).GetSession` | Returns one session summary. | Powers session catalog lookup. |
 
 ## HTTP Router and Middleware
@@ -175,8 +175,8 @@ This file is the API surface used by clients.
 | `NewRaceHandler` | Creates the HTTP handler bundle. | Injects service, defaults, and fetch timeout. |
 | `HandleRoot` | Returns service metadata and route list. | Lightweight self-documentation endpoint. |
 | `HandleHealth` | Returns liveness info. | Used for health checks and quick manual validation. |
-| `HandleGetRace` | Fetches race data from OpenF1 and stores it. | Main ingestion endpoint. |
-| `HandleSendRace` | Returns the latest merged full archive. | Main full-payload read endpoint. |
+| `HandleGetRace` | Fetches session data from OpenF1 and stores it. | Main ingestion endpoint. |
+| `HandleSendRace` | Returns the latest merged full archive. | Main merged latest-session payload endpoint. |
 | `HandleStorageStatus` | Tells whether something is stored. | Useful for frontend/backend bootstrap checks. |
 
 #### Catalog endpoints
@@ -184,22 +184,22 @@ This file is the API surface used by clients.
 | Function | Purpose | Why it exists |
 |---|---|---|
 | `HandleListChampionships` | Lists championships. | Entry point for catalog navigation. |
-| `HandleListChampionshipRaces` | Lists races of one championship. | Lets clients browse events by championship. |
-| `HandleGetRaceCatalog` | Returns one race summary. | Detail view for one race. |
-| `HandleListRaceSessions` | Lists sessions of one race. | Needed because one race has practice/quali/race sessions. |
+| `HandleListChampionshipEvents` | Lists events of one championship. | Lets clients browse events by championship. |
+| `HandleGetEventCatalog` | Returns one event summary. | Detail view for one event. |
+| `HandleListEventSessions` | Lists sessions of one event. | Needed because one event owns practice, qualifying, sprint, and race sessions. |
 | `HandleGetSessionCatalog` | Returns one session summary. | Detail view for one session. |
 
 #### Session-scoped read endpoints
 
 | Function | Purpose | Why it exists |
 |---|---|---|
-| `HandleSendSessionArchive` | Returns the merged archive for one explicit session. | Removes ambiguity when several races are stored in DB. |
+| `HandleSendSessionArchive` | Returns the merged archive for one explicit session. | Removes ambiguity when several events are stored in DB. |
 | `HandleSendSessionMetadata` | Returns metadata for one explicit session. | Lets clients reconstruct context for historical sessions. |
 | `HandleListSessionDatasets` | Lists datasets for one explicit session. | Helps clients discover what is available before fetching. |
 | `HandleSendSessionDataset` | Returns one dataset for one explicit session. | Generic session-scoped dataset endpoint. |
-| `HandleListSessionDrivers` | Returns drivers for one explicit session. | Lets clients navigate historical race rosters. |
+| `HandleListSessionDrivers` | Returns drivers for one explicit session. | Lets clients navigate historical event rosters. |
 | `HandleListSessionTeams` | Returns teams for one explicit session. | Supports team-centric session views. |
-| `HandleSendSessionDriverRace` | Returns the full per-driver payload for one explicit session. | Historical equivalent of the active-race driver payload. |
+| `HandleSendSessionDriverRace` | Returns the full per-driver payload for one explicit session. | Historical equivalent of the active-session driver payload. |
 | `HandleSendSessionDriverProfile` | Returns one driver profile for one explicit session. | Lightweight historical driver lookup. |
 | `HandleSendSessionDriverDataset` | Returns one driver-scoped dataset for one explicit session. | Fine-grained session navigation for replay or AR views. |
 | `HandleSendSessionWeather` | Returns weather for one explicit session. | Session-scoped weather access. |
@@ -214,12 +214,12 @@ This file is the API surface used by clients.
 |---|---|---|
 | `HandleSendDriverChampionship` | Returns driver championship standings dataset. | Used for championship overlays. |
 | `HandleSendConstructorChampionship` | Returns constructor standings dataset. | Used for team championship overlays. |
-| `HandleSendWeather` | Returns race weather dataset. | Used for atmosphere and strategy UI. |
-| `HandleSendRaceFacts` | Returns race control events. | Used for yellow flag, SC, incidents, etc. |
-| `HandleSendDriverRace` | Returns all race datasets for one driver chosen by query param. | Compact per-driver payload for AR focus modes. |
-| `HandleSendRaceStandings` | Computes in-race standings snapshots from position data. | Used for live/replay standings at any time. |
-| `HandleSendVideoURL` | Returns a placeholder broadcast URL for the active race. | Legacy convenience endpoint for the latest stored session. |
-| `HandleSendMetadata` | Returns meeting/session metadata for the active race. | Lets clients sync labels and time context. |
+| `HandleSendWeather` | Returns the latest-session weather dataset. | Used for atmosphere and strategy UI. |
+| `HandleSendRaceFacts` | Returns the latest-session race control events. | Used for yellow flag, SC, incidents, etc. |
+| `HandleSendDriverRace` | Returns all latest-session datasets for one driver chosen by query param. | Compact per-driver payload for AR focus modes. |
+| `HandleSendRaceStandings` | Computes in-session standings snapshots from position data. | Used for live/replay standings at any time. |
+| `HandleSendVideoURL` | Returns a placeholder broadcast URL for the latest stored session. | Legacy convenience endpoint for the active session view. |
+| `HandleSendMetadata` | Returns meeting/session metadata for the latest stored session. | Lets clients sync labels and time context. |
 | `HandleListDatasets` | Lists available public datasets and their counts. | Useful for discovery and debugging. |
 | `HandleSendDataset` | Returns one whole dataset by name. | Generic endpoint for consumers that know what they need. |
 | `HandleListDrivers` | Returns the driver roster. | Basic entrypoint to choose a driver. |
@@ -264,7 +264,7 @@ When `RaceService.FetchAndStore` persists an archive, the repository flow is:
 
 1. `NewRaceArchiveStore` builds the repository object.
 2. `Store` orchestrates the write.
-3. `ensureProvider` -> `ensureChampionship` -> `ensureEvent` -> `ensureRace` -> `ensureSession`
+3. `ensureProvider` -> `ensureChampionship` -> `ensureEvent` -> `ensureSession`
 4. `syncParticipants`
 5. `buildDatasetChunkQueries`
 6. `storeNormalizedSessionDataTx`
@@ -294,16 +294,16 @@ This file owns all read-side catalog queries and archive reconstruction logic.
 
 | Function | Purpose | Why it exists |
 |---|---|---|
-| `(*RaceArchiveStore).ListChampionships` | Lists stored championships. | Entry point for `championship -> races` browsing. |
-| `(*RaceArchiveStore).GetChampionshipRaces` | Returns one championship with its races. | Powers championship catalog endpoints. |
-| `(*RaceArchiveStore).GetRace` | Returns one race summary. | Powers race catalog detail endpoints. |
-| `(*RaceArchiveStore).ListRaceSessions` | Returns sessions of one race. | Needed because a race owns multiple sessions. |
+| `(*RaceArchiveStore).ListChampionships` | Lists stored championships. | Entry point for `championship -> event` browsing. |
+| `(*RaceArchiveStore).GetChampionshipEvents` | Returns one championship with its events. | Powers championship catalog endpoints. |
+| `(*RaceArchiveStore).GetEvent` | Returns one event summary. | Powers event catalog detail endpoints. |
+| `(*RaceArchiveStore).ListEventSessions` | Returns sessions of one event. | Needed because an event owns multiple sessions. |
 | `(*RaceArchiveStore).GetSession` | Returns one session summary. | Powers session catalog detail endpoints. |
 | `(*RaceArchiveStore).GetSessionDriverBroadcast` | Returns one stored driver broadcast URL. | Powers explicit driver/session broadcast lookup. |
 | `(*RaceArchiveStore).archiveFromModel` | Rebuilds `domain.RaceArchive` from one archive row and its chunks. | Converts DB storage back into domain payload. |
 | `(*RaceArchiveStore).mergeArchiveModels` | Merges several archive rows from the same session into one logical archive. | Critical when imports are done driver by driver. |
 | `championshipSummaryFromModel` | Maps Prisma championship model to domain summary. | Keeps the API model decoupled from Prisma internals. |
-| `raceSummaryFromModel` | Maps Prisma race model to domain summary. | Same reason. |
+| `eventSummaryFromModel` | Maps Prisma event model to domain summary. | Same reason. |
 | `(*RaceArchiveStore).sessionSummaryFromModel` | Maps Prisma session model to domain summary. | Same reason. |
 
 ### [`race_archive_entities.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_entities.go)
@@ -314,9 +314,8 @@ This file owns top-level metadata upserts before any race payload is written.
 |---|---|---|
 | `(*RaceArchiveStore).ensureProvider` | Ensures the OpenF1 provider row exists. | Keeps provider metadata stable and reusable. |
 | `(*RaceArchiveStore).ensureChampionship` | Ensures the `f1` championship exists. | Creates the `championship` root node for the catalog. |
-| `(*RaceArchiveStore).ensureEvent` | Ensures the event row exists for the imported archive. | Preserves original meeting-level metadata. |
-| `(*RaceArchiveStore).ensureRace` | Ensures the race row exists. | Materializes the `championship -> race` relation. |
-| `(*RaceArchiveStore).ensureSession` | Ensures the session row exists. | Materializes the `race -> session` relation. |
+| `(*RaceArchiveStore).ensureEvent` | Ensures the event row exists for the imported archive. | Materializes the `championship -> event` relation from provider meeting data. |
+| `(*RaceArchiveStore).ensureSession` | Ensures the session row exists. | Materializes the `event -> session` relation. |
 
 ### [`race_archive_participants.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_participants.go)
 
