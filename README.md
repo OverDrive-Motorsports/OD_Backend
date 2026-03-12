@@ -132,7 +132,7 @@ go run ./cmd/api
 
 Full route reference:
 
-- [docs/endpoint.md](/home/bastou/delivery/eip/OD_Backend/docs/endpoint.md)
+- [docs/endpoint.md](/docs/endpoint.md)
 
 Example flow:
 
