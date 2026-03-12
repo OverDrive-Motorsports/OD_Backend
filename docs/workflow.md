@@ -24,7 +24,7 @@ Scope:
 3. [`RaceService.FetchAndStore`](/home/bastou/delivery/eip/OD_Backend/internal/service/race_service.go:38) serializes concurrent fetches
 4. [`RaceBuilder.Build`](/home/bastou/delivery/eip/OD_Backend/internal/usecase/build_race.go:44) calls OpenF1 and builds a `domain.RaceArchive`
 5. [`RaceArchiveStore.Store`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_store.go:50) persists:
-   - provider/championship/event/race/session metadata
+   - provider/championship/event/session metadata
    - chunked raw archive datasets in `RaceDatasetChunk`
    - normalized race tables in the same atomic write flow
 
@@ -32,7 +32,6 @@ Scope:
 
 1. Client calls either:
    - `/api/v1/race/sendrace`
-   - `/api/v1/race/drivers`
    - `/api/v1/race/standings/race`
    - `/api/v1/sessions/{sessionId}/archive`
    - `/api/v1/sessions/{sessionId}/drivers`
@@ -382,7 +381,7 @@ This file centralizes the small reusable helpers used across all repository file
 
 | Function | Purpose | Why it exists |
 |---|---|---|
-| `inferEventBounds` | Infers temporal bounds from archive rows. | Gives event/race/session rows consistent start and end values. |
+| `inferEventBounds` | Infers temporal bounds from archive rows. | Gives event and session rows consistent start and end values. |
 | `resolveArchiveMode` | Resolves full vs driver-focused import mode. | Persists the archive import strategy. |
 | `resolveEventStatus` | Resolves event lifecycle status. | Normalizes provider data into DB enum values. |
 | `resolveSessionType` | Resolves session type from session name. | Maps provider naming to DB enum values. |

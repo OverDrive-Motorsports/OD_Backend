@@ -69,7 +69,7 @@ OD_Backend/
 │   │   ├── catalog.go
 │   │   │  Role:
 │   │   │  - Domain types for catalog navigation.
-│   │   │  - Defines championship, race, and session summaries exposed by the API.
+│   │   │  - Defines championship, event, and session summaries exposed by the API.
 │   │   │  - Includes session-level broadcast URL metadata.
 │   │   │
 │   │   └── race_archive.go
