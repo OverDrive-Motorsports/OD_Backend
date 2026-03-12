@@ -5,10 +5,13 @@ Base URL: `http://localhost:8080`
 ## Notes
 
 - `GET /getrace` or `GET /api/v1/race/getrace` must be called first to fetch and store data.
-- Read endpoints use the merged latest session view, so several driver imports are aggregated together.
-- Historical navigation is now supported through explicit session-scoped endpoints.
+- Session-scoped endpoints are the preferred read API because they target one explicit stored session.
+- `/api/v1/race/*` endpoints are legacy convenience routes that resolve against the merged latest stored session.
+- Latest-session reads use the merged latest session view, so several driver imports are aggregated together.
 - Recommended navigation flow: `provider -> championship -> event -> session -> session-scoped data endpoints`.
 - Legacy routes are still available for `/getrace` and `/sendrace`.
+- Dataset rows that expose `driver_number` are enriched with `driver_name` and `team_name` when the corresponding driver exists in the stored session.
+- There is currently no dedicated `GET /api/v1/championships/{code}/drivers` or `GET /api/v1/championships/{code}/teams` endpoint.
 
 ## Health
 
@@ -48,6 +51,9 @@ Base URL: `http://localhost:8080`
 
 - `GET /api/v1/sessions/{sessionId}/datasets/{dataset}`
   - Returns one merged dataset for one explicit session.
+  - Rows containing `driver_number` are enriched with:
+    - `driver_name`
+    - `team_name`
   - Supported dataset values:
     - `drivers`
     - `laps`
@@ -87,16 +93,18 @@ Base URL: `http://localhost:8080`
 - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
   - Returns the driver-specific broadcast URL stored for one explicit session.
 
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/telemetry`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/location`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/position`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/intervals`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/stints`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/pit`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/radio`
-- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/result`
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/{resource}`
   - Return one driver-scoped dataset for one driver in one explicit session.
+  - Supported resource values:
+    - `laps`
+    - `telemetry`
+    - `location`
+    - `position`
+    - `intervals`
+    - `stints`
+    - `pit`
+    - `radio`
+    - `result`
 
 - `GET /api/v1/sessions/{sessionId}/weather`
   - Returns weather samples for one explicit session.
@@ -127,7 +135,7 @@ Base URL: `http://localhost:8080`
 - `GET /api/v1/race/storage`
   - Returns storage status for the latest session import.
 
-## Full Race Payload
+## Latest-Session Convenience Endpoints
 
 - `GET /sendrace`
 - `POST /sendrace`
@@ -145,6 +153,9 @@ Base URL: `http://localhost:8080`
 
 - `GET /api/v1/race/datasets/{dataset}`
   - Returns one merged dataset by name.
+  - Rows containing `driver_number` are enriched with:
+    - `driver_name`
+    - `team_name`
   - Supported dataset values:
     - `drivers`
     - `laps`
@@ -169,36 +180,46 @@ Base URL: `http://localhost:8080`
     - `championship_teams`
     - `constructors`
 
-## Drivers
+## Latest-Session Driver And Team Endpoints
 
 - `GET /api/v1/race/drivers`
   - Returns the merged list of drivers available in the latest stored session.
 
-- `GET /api/v1/race/drivers/{driverNumber}`
-  - Returns the full latest-session payload for one driver.
-  - Includes profile, counts, and all driver-scoped datasets.
-
-- `GET /api/v1/race/drivers/{driverNumber}/profile`
-  - Returns the driver profile only.
-
-- `GET /api/v1/race/drivers/{driverNumber}/laps`
-- `GET /api/v1/race/drivers/{driverNumber}/telemetry`
-- `GET /api/v1/race/drivers/{driverNumber}/location`
-- `GET /api/v1/race/drivers/{driverNumber}/position`
-- `GET /api/v1/race/drivers/{driverNumber}/intervals`
-- `GET /api/v1/race/drivers/{driverNumber}/stints`
-- `GET /api/v1/race/drivers/{driverNumber}/pit`
-- `GET /api/v1/race/drivers/{driverNumber}/radio`
-- `GET /api/v1/race/drivers/{driverNumber}/result`
-  - Return one driver-scoped dataset for one driver.
-
-- `GET /api/v1/race/driver?driver_number={driverNumber}`
-  - Legacy endpoint returning the full latest-session payload for one driver.
-
-## Teams
-
 - `GET /api/v1/race/teams`
   - Returns teams inferred from the merged drivers dataset.
+
+- `GET /api/v1/race/drivers/{driverNumber}`
+  - Returns the full latest-session payload for one driver.
+
+- `GET /api/v1/race/drivers/{driverNumber}/profile`
+  - Returns the driver profile only for the merged latest stored session.
+
+- `GET /api/v1/race/drivers/{driverNumber}/{resource}`
+  - Latest-session mirror of the session-scoped driver dataset endpoint.
+  - It resolves data against the merged latest stored session instead of an explicit `sessionId`.
+  - Supported resource values:
+    - `laps`
+    - `telemetry`
+    - `location`
+    - `position`
+    - `intervals`
+    - `stints`
+    - `pit`
+    - `radio`
+    - `result`
+
+- `GET /api/v1/race/driver?driver_number={driverNumber}`
+  - Legacy query-param variant returning the full latest-session payload for one driver.
+
+## Championship Participants
+
+- There is no dedicated `GET /api/v1/championships/{code}/drivers` endpoint yet.
+- There is no dedicated `GET /api/v1/championships/{code}/teams` endpoint yet.
+- Current workaround:
+  - `GET /api/v1/championships/{code}/events`
+  - `GET /api/v1/events/{eventId}/sessions`
+  - `GET /api/v1/sessions/{sessionId}/drivers`
+  - `GET /api/v1/sessions/{sessionId}/teams`
 
 ## Championship
 
@@ -232,13 +253,13 @@ Base URL: `http://localhost:8080`
 curl "http://localhost:8080/api/v1/championships"
 curl "http://localhost:8080/api/v1/championships/f1/events"
 curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=0"
-curl "http://localhost:8080/api/v1/events/event-aus-2025/sessions"
-curl "http://localhost:8080/api/v1/sessions/session-race-9693/archive"
-curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers"
-curl "http://localhost:8080/api/v1/sessions/session-race-9693/drivers/63/broadcast"
-curl "http://localhost:8080/api/v1/race/drivers"
-curl "http://localhost:8080/api/v1/race/drivers/63/profile"
-curl "http://localhost:8080/api/v1/race/drivers/63/telemetry"
+curl "http://localhost:8080/api/v1/events/<EVENT_ID>/sessions"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/archive"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/drivers"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/championship_drivers"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/session_result"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/drivers/63/broadcast"
+curl "http://localhost:8080/api/v1/race/sendrace"
 curl "http://localhost:8080/api/v1/race/datasets/weather"
 curl "http://localhost:8080/api/v1/race/standings/race?at=2025-03-16T04:45:00Z"
 ```

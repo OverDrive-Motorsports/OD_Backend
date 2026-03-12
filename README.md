@@ -92,31 +92,60 @@ Current backend entrypoint:
 go run ./cmd/api
 ```
 
-### Available endpoints
+### Navigation model
 
-- `GET /health`
-- `GET /getrace` (legacy alias)
-- `POST /sendrace` (legacy alias)
-- `GET /api/v1/race/getrace`
-- `POST /api/v1/race/sendrace`
-- `GET /api/v1/race/cache`
-- `GET /api/v1/race/storage`
-- `GET /api/v1/race/championship/drivers`
-- `GET /api/v1/race/championship/constructors`
-- `GET /api/v1/race/weather`
-- `GET /api/v1/race/facts`
-- `GET /api/v1/race/driver?driver_number=63`
-- `GET /api/v1/race/standings/race`
-- `GET /api/v1/race/video-url`
+- `Provider -> Championship -> Event -> Session`
+- Session-scoped endpoints are the preferred read API.
+- `/api/v1/race/*` endpoints are convenience routes resolved against the merged latest stored session.
+
+### Main endpoint groups
+
+- Health:
+  - `GET /`
+  - `GET /health`
+- Ingestion:
+  - `GET /getrace`
+  - `GET /api/v1/race/getrace`
+- Catalog:
+  - `GET /api/v1/championships`
+  - `GET /api/v1/championships/{code}/events`
+  - `GET /api/v1/events/{eventId}`
+  - `GET /api/v1/events/{eventId}/sessions`
+  - `GET /api/v1/sessions/{sessionId}`
+- Session-scoped reads:
+  - `GET /api/v1/sessions/{sessionId}/archive`
+  - `GET /api/v1/sessions/{sessionId}/datasets/{dataset}`
+  - `GET /api/v1/sessions/{sessionId}/drivers`
+  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile`
+  - `GET /api/v1/sessions/{sessionId}/broadcast`
+  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
+- Latest-session convenience reads:
+  - `GET|POST /sendrace`
+  - `GET|POST /api/v1/race/sendrace`
+  - `GET /api/v1/race/datasets/{dataset}`
+  - `GET /api/v1/race/championship/drivers`
+  - `GET /api/v1/race/championship/constructors`
+  - `GET /api/v1/race/weather`
+  - `GET /api/v1/race/facts`
+  - `GET /api/v1/race/standings/race`
+  - `GET /api/v1/race/video-url`
+
+Full route reference:
+
+- [docs/endpoint.md](/docs/endpoint.md)
 
 Example flow:
 
 ```bash
 # 1) fetch from OpenF1 and persist in PostgreSQL
-curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=63"
+curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=0"
 
-# 2) send latest stored payload
-curl -X POST "http://localhost:8080/api/v1/race/sendrace"
+# 2) browse catalog
+curl "http://localhost:8080/api/v1/championships/f1/events"
+
+# 3) read one stored session explicitly
+curl "http://localhost:8080/api/v1/events/<EVENT_ID>/sessions"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/session_result"
 ```
 
 <br>

@@ -14,17 +14,17 @@ Scope:
 
 1. Developer starts the backend through a local script or directly with `go run ./cmd/api`
 2. PostgreSQL must already be available and `DATABASE_URL` must be set
-3. [`main.go`](/home/bastou/delivery/eip/OD_Backend/cmd/api/main.go) loads config, connects DB, builds server, starts HTTP
+3. [`main.go`](/cmd/api/main.go) loads config, connects DB, builds server, starts HTTP
 4. The default `driver-number` CLI flag is `0`, so ingestion is full-race by default unless one driver is explicitly requested
 
 ### 2. Write flow: fetch and store a race
 
 1. Client calls `GET /api/v1/race/getrace`
-2. [`RaceHandler.HandleGetRace`](/home/bastou/delivery/eip/OD_Backend/internal/api/race_handler.go:284) parses query params
-3. [`RaceService.FetchAndStore`](/home/bastou/delivery/eip/OD_Backend/internal/service/race_service.go:38) serializes concurrent fetches
-4. [`RaceBuilder.Build`](/home/bastou/delivery/eip/OD_Backend/internal/usecase/build_race.go:44) calls OpenF1 and builds a `domain.RaceArchive`
-5. [`RaceArchiveStore.Store`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_store.go:50) persists:
-   - provider/championship/event/race/session metadata
+2. [`RaceHandler.HandleGetRace`](/internal/api/race_handler.go:284) parses query params
+3. [`RaceService.FetchAndStore`](/internal/service/race_service.go:38) serializes concurrent fetches
+4. [`RaceBuilder.Build`](/internal/usecase/build_race.go:44) calls OpenF1 and builds a `domain.RaceArchive`
+5. [`RaceArchiveStore.Store`](/internal/repository/prisma/race_archive_store.go:50) persists:
+   - provider/championship/event/session metadata
    - chunked raw archive datasets in `RaceDatasetChunk`
    - normalized race tables in the same atomic write flow
 
@@ -32,7 +32,6 @@ Scope:
 
 1. Client calls either:
    - `/api/v1/race/sendrace`
-   - `/api/v1/race/drivers`
    - `/api/v1/race/standings/race`
    - `/api/v1/sessions/{sessionId}/archive`
    - `/api/v1/sessions/{sessionId}/drivers`
@@ -276,7 +275,7 @@ When a read endpoint asks for stored race data, the repository flow is:
 2. `archiveFromModel`, `mergeArchiveModels`, or direct catalog/broadcast lookup
 3. handlers serialize the rebuilt domain archive
 
-### [`race_archive_store.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_store.go)
+### [`race_archive_store.go`](/internal/repository/prisma/race_archive_store.go)
 
 This file contains the repository entrypoints and the high-level store flow.
 
@@ -288,7 +287,7 @@ This file contains the repository entrypoints and the high-level store flow.
 | `(*RaceArchiveStore).GetLatestMerged` | Rebuilds a merged archive for the latest session. | Prevents losing prior driver-focused imports on read. |
 | `(*RaceArchiveStore).GetSessionMerged` | Rebuilds a merged archive for one explicit session. | Powers historical reads without relying on the latest session pointer. |
 
-### [`race_archive_catalog.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_catalog.go)
+### [`race_archive_catalog.go`](/internal/repository/prisma/race_archive_catalog.go)
 
 This file owns all read-side catalog queries and archive reconstruction logic.
 
@@ -306,7 +305,7 @@ This file owns all read-side catalog queries and archive reconstruction logic.
 | `eventSummaryFromModel` | Maps Prisma event model to domain summary. | Same reason. |
 | `(*RaceArchiveStore).sessionSummaryFromModel` | Maps Prisma session model to domain summary. | Same reason. |
 
-### [`race_archive_entities.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_entities.go)
+### [`race_archive_entities.go`](/internal/repository/prisma/race_archive_entities.go)
 
 This file owns top-level metadata upserts before any race payload is written.
 
@@ -317,7 +316,7 @@ This file owns top-level metadata upserts before any race payload is written.
 | `(*RaceArchiveStore).ensureEvent` | Ensures the event row exists for the imported archive. | Materializes the `championship -> event` relation from provider meeting data. |
 | `(*RaceArchiveStore).ensureSession` | Ensures the session row exists. | Materializes the `event -> session` relation. |
 
-### [`race_archive_participants.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_participants.go)
+### [`race_archive_participants.go`](/internal/repository/prisma/race_archive_participants.go)
 
 This file owns raw chunk persistence and team/driver synchronization.
 
@@ -330,7 +329,7 @@ This file owns raw chunk persistence and team/driver synchronization.
 | `(*RaceArchiveStore).ensureTeam` | Upserts one team inferred from driver data. | Keeps team rows consistent across imports. |
 | `(*RaceArchiveStore).ensureDriver` | Upserts one driver inferred from driver data. | Keeps driver rows consistent across imports. |
 
-### [`race_archive_normalized.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_normalized.go)
+### [`race_archive_normalized.go`](/internal/repository/prisma/race_archive_normalized.go)
 
 This file owns cleanup and normalized inserts into race-specific tables.
 
@@ -374,7 +373,7 @@ This file owns cleanup and normalized inserts into race-specific tables.
 | `executeDatasetInsert` | Runs one raw SQL JSON insert immediately. | Shared low-level insert helper for direct writes. |
 | `executeDatasetInsertTx` | Builds one raw SQL JSON insert transaction. | Shared low-level insert helper for atomic writes. |
 
-### [`race_archive_helpers.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_helpers.go)
+### [`race_archive_helpers.go`](/internal/repository/prisma/race_archive_helpers.go)
 
 This file centralizes the small reusable helpers used across all repository files.
 
@@ -382,7 +381,7 @@ This file centralizes the small reusable helpers used across all repository file
 
 | Function | Purpose | Why it exists |
 |---|---|---|
-| `inferEventBounds` | Infers temporal bounds from archive rows. | Gives event/race/session rows consistent start and end values. |
+| `inferEventBounds` | Infers temporal bounds from archive rows. | Gives event and session rows consistent start and end values. |
 | `resolveArchiveMode` | Resolves full vs driver-focused import mode. | Persists the archive import strategy. |
 | `resolveEventStatus` | Resolves event lifecycle status. | Normalizes provider data into DB enum values. |
 | `resolveSessionType` | Resolves session type from session name. | Maps provider naming to DB enum values. |
@@ -453,16 +452,16 @@ If you want to understand the backend quickly, keep this map in mind:
 
 ## Suggested Reading Order
 
-1. [`cmd/api/main.go`](/home/bastou/delivery/eip/OD_Backend/cmd/api/main.go)
-2. [`internal/app/server.go`](/home/bastou/delivery/eip/OD_Backend/internal/app/server.go)
-3. [`internal/api/router.go`](/home/bastou/delivery/eip/OD_Backend/internal/api/router.go)
-4. [`internal/api/race_handler.go`](/home/bastou/delivery/eip/OD_Backend/internal/api/race_handler.go)
-5. [`internal/service/race_service.go`](/home/bastou/delivery/eip/OD_Backend/internal/service/race_service.go)
-6. [`internal/usecase/build_race.go`](/home/bastou/delivery/eip/OD_Backend/internal/usecase/build_race.go)
-7. [`internal/repository/prisma/race_archive_store.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_store.go)
-8. [`internal/repository/prisma/race_archive_catalog.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_catalog.go)
-9. [`internal/repository/prisma/race_archive_entities.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_entities.go)
-10. [`internal/repository/prisma/race_archive_participants.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_participants.go)
-11. [`internal/repository/prisma/race_archive_normalized.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_normalized.go)
-12. [`internal/repository/prisma/race_archive_helpers.go`](/home/bastou/delivery/eip/OD_Backend/internal/repository/prisma/race_archive_helpers.go)
-13. [`internal/providers/openf1/client.go`](/home/bastou/delivery/eip/OD_Backend/internal/providers/openf1/client.go)
+1. [`cmd/api/main.go`](/cmd/api/main.go)
+2. [`internal/app/server.go`](/internal/app/server.go)
+3. [`internal/api/router.go`](/internal/api/router.go)
+4. [`internal/api/race_handler.go`](/internal/api/race_handler.go)
+5. [`internal/service/race_service.go`](/internal/service/race_service.go)
+6. [`internal/usecase/build_race.go`](/internal/usecase/build_race.go)
+7. [`internal/repository/prisma/race_archive_store.go`](/internal/repository/prisma/race_archive_store.go)
+8. [`internal/repository/prisma/race_archive_catalog.go`](/internal/repository/prisma/race_archive_catalog.go)
+9. [`internal/repository/prisma/race_archive_entities.go`](/internal/repository/prisma/race_archive_entities.go)
+10. [`internal/repository/prisma/race_archive_participants.go`](/internal/repository/prisma/race_archive_participants.go)
+11. [`internal/repository/prisma/race_archive_normalized.go`](/internal/repository/prisma/race_archive_normalized.go)
+12. [`internal/repository/prisma/race_archive_helpers.go`](/internal/repository/prisma/race_archive_helpers.go)
+13. [`internal/providers/openf1/client.go`](/internal/providers/openf1/client.go)
