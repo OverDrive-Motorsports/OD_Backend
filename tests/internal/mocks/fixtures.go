@@ -67,15 +67,18 @@ func SampleArchive() domain.RaceArchive {
 				},
 			},
 			"laps": {
-				{"driver_number": 63, "lap_number": 1},
-				{"driver_number": 1, "lap_number": 1},
+				{"driver_number": 63, "lap_number": 1, "date_start": "2025-03-16T04:00:00Z", "lap_duration": 90.0},
+				{"driver_number": 63, "lap_number": 2, "date_start": "2025-03-16T04:01:30Z", "lap_duration": 91.0},
+				{"driver_number": 1, "lap_number": 1, "date_start": "2025-03-16T04:00:00Z", "lap_duration": 89.5},
 			},
 			"car_data": {
 				{"driver_number": 63, "date": "2025-03-16T04:00:00Z", "speed": 298},
 				{"driver_number": 1, "date": "2025-03-16T04:00:00Z", "speed": 301},
 			},
 			"location": {
-				{"driver_number": 63, "date": "2025-03-16T04:00:00Z", "x": 1, "y": 2, "z": 3},
+				{"driver_number": 63, "date": "2025-03-16T04:00:10Z", "x": 1, "y": 2, "z": 3},
+				{"driver_number": 63, "date": "2025-03-16T04:01:00Z", "x": 7, "y": 8, "z": 9},
+				{"driver_number": 63, "date": "2025-03-16T04:01:40Z", "x": 10, "y": 11, "z": 12},
 				{"driver_number": 1, "date": "2025-03-16T04:00:00Z", "x": 4, "y": 5, "z": 6},
 			},
 			"position": {
@@ -126,9 +129,9 @@ func SampleArchive() domain.RaceArchive {
 		},
 		Counts: map[string]int{
 			"drivers":              2,
-			"laps":                 2,
+			"laps":                 3,
 			"car_data":             2,
-			"location":             2,
+			"location":             4,
 			"position":             4,
 			"intervals":            2,
 			"stints":               2,

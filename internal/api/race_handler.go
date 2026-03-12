@@ -11,6 +11,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -117,6 +118,7 @@ func (h *RaceHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile",
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast",
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps",
+			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location",
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/telemetry",
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/location",
 			"GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/position",
@@ -138,6 +140,7 @@ func (h *RaceHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 			"GET /api/v1/race/drivers/{driverNumber}",
 			"GET /api/v1/race/drivers/{driverNumber}/profile",
 			"GET /api/v1/race/drivers/{driverNumber}/laps",
+			"GET /api/v1/race/drivers/{driverNumber}/laps/{lapNumber}/location",
 			"GET /api/v1/race/drivers/{driverNumber}/telemetry",
 			"GET /api/v1/race/drivers/{driverNumber}/location",
 			"GET /api/v1/race/drivers/{driverNumber}/position",
@@ -502,7 +505,7 @@ func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *h
 		return
 	}
 
-	dataset, found := resolveDatasetName(r.PathValue("dataset"))
+	dataset, found := resolveDatasetName(datasetPathValue(r))
 	if !found {
 		writeError(w, http.StatusBadRequest, "unknown driver dataset")
 		return
@@ -518,6 +521,21 @@ func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *h
 		"count":         len(rows),
 		"data":          rows,
 	})
+}
+
+// HandleSendSessionDriverLapLocation returns all XYZ samples for one driver during one lap in one explicit stored session.
+func (h *RaceHandler) HandleSendSessionDriverLapLocation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
+		return
+	}
+
+	h.writeDriverLapLocationPayload(w, r, archive, true)
 }
 
 // HandleSendSessionWeather returns race weather for one explicit stored session.
@@ -1179,6 +1197,21 @@ func (h *RaceHandler) HandleSendDriverDataset(w http.ResponseWriter, r *http.Req
 	})
 }
 
+// HandleSendDriverLapLocation returns all XYZ samples for one driver during one lap in the merged latest stored session.
+func (h *RaceHandler) HandleSendDriverLapLocation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	archive, _, ok := h.getMergedArchive(w, r)
+	if !ok {
+		return
+	}
+
+	h.writeDriverLapLocationPayload(w, r, archive, false)
+}
+
 // parseInput merges query parameters with handler defaults into a RaceBuildInput.
 func (h *RaceHandler) parseInput(r *http.Request) (usecase.RaceBuildInput, error) {
 	q := r.URL.Query()
@@ -1321,6 +1354,21 @@ func parsePathDriverNumber(r *http.Request) (int, error) {
 	}
 
 	return driverNumber, nil
+}
+
+// parseLapNumberPath parses a positive lap number from the current route path.
+func parseLapNumberPath(r *http.Request) (int, error) {
+	raw := strings.TrimSpace(r.PathValue("lapNumber"))
+	if raw == "" {
+		return 0, fmt.Errorf("missing lapNumber path parameter")
+	}
+
+	lapNumber, err := strconv.Atoi(raw)
+	if err != nil || lapNumber <= 0 {
+		return 0, fmt.Errorf("invalid lapNumber: %q", raw)
+	}
+
+	return lapNumber, nil
 }
 
 // parseSnapshotTime parses an optional RFC3339 timestamp query parameter named `at`.
@@ -1545,6 +1593,117 @@ func filterRowsByDriver(rows []map[string]any, driverNumber int) []map[string]an
 	return filtered
 }
 
+// writeDriverLapLocationPayload resolves the lap time window and returns all location rows inside it.
+func (h *RaceHandler) writeDriverLapLocationPayload(w http.ResponseWriter, r *http.Request, archive domain.RaceArchive, includeSessionID bool) {
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	lapNumber, err := parseLapNumberPath(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	lapRows := filterRowsByDriver(archive.Datasets["laps"], driverNumber)
+	locationRows := filterRowsByDriver(archive.Datasets["location"], driverNumber)
+	if len(lapRows) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no laps found for driver_number=%d", driverNumber))
+		return
+	}
+	if len(locationRows) == 0 {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no location rows found for driver_number=%d", driverNumber))
+		return
+	}
+
+	start, end, found, err := lapWindow(lapRows, lapNumber)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("lap_number=%d not found for driver_number=%d", lapNumber, driverNumber))
+		return
+	}
+
+	filtered := filterRowsByTimeWindow(locationRows, start, end)
+	filtered = enrichRowsWithDriverNames(filtered, archive.Datasets["drivers"])
+
+	out := map[string]any{
+		"dataset":       "location",
+		"metadata":      archive.Metadata,
+		"driver_number": driverNumber,
+		"lap_number":    lapNumber,
+		"window_start":  start,
+		"window_end":    end,
+		"count":         len(filtered),
+		"data":          filtered,
+	}
+	if includeSessionID {
+		out["session_id"] = strings.TrimSpace(r.PathValue("sessionId"))
+	}
+
+	writeJSON(w, http.StatusOK, out)
+}
+
+// lapWindow resolves the start/end timestamps for one lap using the next lap start or lap_duration fallback.
+func lapWindow(rows []map[string]any, lapNumber int) (time.Time, time.Time, bool, error) {
+	var current map[string]any
+	var next map[string]any
+	for _, row := range rows {
+		num, ok := readIntField(row, "lap_number")
+		if !ok {
+			continue
+		}
+		switch num {
+		case lapNumber:
+			current = row
+		case lapNumber + 1:
+			next = row
+		}
+	}
+
+	if current == nil {
+		return time.Time{}, time.Time{}, false, nil
+	}
+
+	start, ok := readTimeField(current, "date_start", "date")
+	if !ok {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("lap_number=%d has no date_start", lapNumber)
+	}
+
+	if next != nil {
+		if end, ok := readTimeField(next, "date_start", "date"); ok {
+			return start, end, true, nil
+		}
+	}
+
+	lapDuration, ok := readFloatField(current, "lap_duration")
+	if !ok || lapDuration <= 0 {
+		return time.Time{}, time.Time{}, false, fmt.Errorf("lap_number=%d has no lap_duration and next lap start is unavailable", lapNumber)
+	}
+
+	end := start.Add(time.Duration(lapDuration * float64(time.Second)))
+	return start, end, true, nil
+}
+
+// filterRowsByTimeWindow keeps rows whose `date` falls inside [start, end).
+func filterRowsByTimeWindow(rows []map[string]any, start time.Time, end time.Time) []map[string]any {
+	filtered := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		date, ok := readTimeField(row, "date", "date_start")
+		if !ok {
+			continue
+		}
+		if (date.Equal(start) || date.After(start)) && date.Before(end) {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
+}
+
 // resolveDatasetName maps public aliases to stored dataset names.
 func resolveDatasetName(raw string) (string, bool) {
 	name := strings.ToLower(strings.TrimSpace(raw))
@@ -1631,5 +1790,42 @@ func readIntField(row map[string]any, key string) (int, bool) {
 		return n, true
 	default:
 		return 0, false
+	}
+}
+
+// readFloatField extracts a loosely typed float field from a dataset row.
+func readFloatField(row map[string]any, key string) (float64, bool) {
+	v, ok := row[key]
+	if !ok || v == nil {
+		return 0, false
+	}
+
+	switch val := v.(type) {
+	case float64:
+		return val, true
+	case float32:
+		return float64(val), true
+	case int:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case json.Number:
+		f, err := val.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return f, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err != nil {
+			return 0, false
+		}
+		return f, true
+	default:
+		f, err := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(val)), 64)
+		if err != nil {
+			return 0, false
+		}
+		return f, true
 	}
 }

@@ -336,7 +336,7 @@ func TestHandleSendDriverRaceUsesQueryString(t *testing.T) {
 	}
 
 	counts := payload["counts"].(map[string]any)
-	if int(counts["laps"].(float64)) != 1 {
+	if int(counts["laps"].(float64)) != 2 {
 		t.Fatalf("unexpected laps count: %#v", counts["laps"])
 	}
 }
@@ -596,6 +596,71 @@ func TestHandleSendDriverDatasetAlias(t *testing.T) {
 	}
 	if int(payload["count"].(float64)) != 1 {
 		t.Fatalf("unexpected filtered row count: %#v", payload["count"])
+	}
+}
+
+// TestHandleSendSessionDriverDatasetAlias verifies session-scoped driver dataset aliases resolve from the path.
+func TestHandleSendSessionDriverDatasetAlias(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers/63/laps", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	req.SetPathValue("driverNumber", "63")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionDriverDataset(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if payload["dataset"] != "laps" {
+		t.Fatalf("unexpected dataset alias resolution: %#v", payload["dataset"])
+	}
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected filtered row count: %#v", payload["count"])
+	}
+}
+
+// TestHandleSendSessionDriverLapLocation verifies lap-scoped location extraction returns only samples inside the lap window.
+func TestHandleSendSessionDriverLapLocation(t *testing.T) {
+	archive := mocks.SampleArchive()
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
+			return archive, archive.Metadata.GeneratedAt, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers/63/laps/1/location", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	req.SetPathValue("driverNumber", "63")
+	req.SetPathValue("lapNumber", "1")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionDriverLapLocation(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if payload["dataset"] != "location" {
+		t.Fatalf("unexpected dataset: %#v", payload["dataset"])
+	}
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected lap location count: %#v", payload["count"])
+	}
+
+	data := payload["data"].([]any)
+	first := data[0].(map[string]any)
+	if first["driver_name"] == nil || first["team_name"] == nil {
+		t.Fatalf("expected enriched location payload: %#v", first)
 	}
 }
 
