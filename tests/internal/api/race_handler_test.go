@@ -134,6 +134,30 @@ func TestHandleSendMetadata(t *testing.T) {
 	}
 }
 
+// TestHandleSendSessionMetadataDirect verifies session metadata can be served without rebuilding dataset chunks.
+func TestHandleSendSessionMetadataDirect(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionMetadataFn: func(ctx context.Context, sessionID string) (domain.SessionMetadataWindow, bool, error) {
+			return domain.SessionMetadataWindow{
+				Metadata:    map[string]any{"meeting_name": "Australian Grand Prix"},
+				Meeting:     map[string]any{"meeting_key": 1254},
+				AllSessions: []map[string]any{{"session_key": 9693}},
+				RaceSession: map[string]any{"session_key": 9693},
+				StoredAt:    time.Date(2025, 3, 16, 6, 5, 0, 0, time.UTC),
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/metadata", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionMetadata(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestHandleListDatasets verifies only public datasets are exposed with counts.
 func TestHandleListDatasets(t *testing.T) {
 	archive := mocks.SampleArchive()
@@ -498,10 +522,17 @@ func TestHandleSendSessionArchive(t *testing.T) {
 
 // TestHandleListSessionDrivers verifies session-scoped driver listing uses the requested session archive.
 func TestHandleListSessionDrivers(t *testing.T) {
-	archive := mocks.SampleArchive()
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
-			return archive, archive.Metadata.GeneratedAt, true, nil
+		GetSessionDatasetFn: func(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+			return domain.SessionDatasetWindow{
+				Dataset:   dataset,
+				SessionID: sessionID,
+				Count:     2,
+				Data: []map[string]any{
+					{"driver_number": 1, "full_name": "Max Verstappen", "team_name": "Red Bull Racing"},
+					{"driver_number": 63, "full_name": "George Russell", "team_name": "Mercedes"},
+				},
+			}, true, nil
 		},
 	})
 
@@ -518,6 +549,64 @@ func TestHandleListSessionDrivers(t *testing.T) {
 	decodeJSON(t, rec, &payload)
 	if int(payload["count"].(float64)) != 2 {
 		t.Fatalf("unexpected session drivers payload: %#v", payload)
+	}
+}
+
+// TestHandleListSessionDatasetsDirect verifies the session dataset catalog can be served directly from stored counts.
+func TestHandleListSessionDatasetsDirect(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDatasetCatalogFn: func(ctx context.Context, sessionID string) (domain.SessionDatasetCatalogWindow, bool, error) {
+			return domain.SessionDatasetCatalogWindow{
+				SessionID: sessionID,
+				Metadata:  map[string]any{"meeting_name": "Australian Grand Prix"},
+				Count:     2,
+				Data: []map[string]any{
+					{"dataset": "drivers", "count": 2},
+					{"dataset": "weather", "count": 12},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/datasets", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleListSessionDatasets(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleListSessionTeams verifies session-scoped teams can be served directly from normalized storage.
+func TestHandleListSessionTeams(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDatasetFn: func(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+			return domain.SessionDatasetWindow{
+				Dataset:   dataset,
+				SessionID: sessionID,
+				Count:     2,
+				Data: []map[string]any{
+					{"name": "Mercedes", "code": "MER", "colour": "27F4D2"},
+					{"name": "Red Bull Racing", "code": "RBR", "colour": "3671C6"},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/teams", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleListSessionTeams(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected session teams payload: %#v", payload)
 	}
 }
 
@@ -601,10 +690,20 @@ func TestHandleSendDriverDatasetAlias(t *testing.T) {
 
 // TestHandleSendSessionDriverDatasetAlias verifies session-scoped driver dataset aliases resolve from the path.
 func TestHandleSendSessionDriverDatasetAlias(t *testing.T) {
-	archive := mocks.SampleArchive()
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
-			return archive, archive.Metadata.GeneratedAt, true, nil
+		GetSessionDriverDatasetFn: func(ctx context.Context, sessionID string, driverNumber int, dataset string) (domain.DriverDatasetWindow, bool, error) {
+			return domain.DriverDatasetWindow{
+				Dataset:      dataset,
+				SessionID:    sessionID,
+				DriverNumber: driverNumber,
+				DriverName:   "George Russell",
+				TeamName:     "Mercedes",
+				Count:        2,
+				Data: []map[string]any{
+					{"driver_number": 63, "lap_number": 1, "driver_name": "George Russell", "team_name": "Mercedes"},
+					{"driver_number": 63, "lap_number": 2, "driver_name": "George Russell", "team_name": "Mercedes"},
+				},
+			}, true, nil
 		},
 	})
 
@@ -626,14 +725,65 @@ func TestHandleSendSessionDriverDatasetAlias(t *testing.T) {
 	if int(payload["count"].(float64)) != 2 {
 		t.Fatalf("unexpected filtered row count: %#v", payload["count"])
 	}
+	if payload["driver_name"] != "George Russell" {
+		t.Fatalf("expected direct driver dataset payload: %#v", payload)
+	}
+}
+
+// TestHandleSendSessionDriverDatasetDirectIntervals verifies direct normalized reads are used for interval datasets.
+func TestHandleSendSessionDriverDatasetDirectIntervals(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDriverDatasetFn: func(ctx context.Context, sessionID string, driverNumber int, dataset string) (domain.DriverDatasetWindow, bool, error) {
+			return domain.DriverDatasetWindow{
+				Dataset:      dataset,
+				SessionID:    sessionID,
+				DriverNumber: driverNumber,
+				DriverName:   "George Russell",
+				TeamName:     "Mercedes",
+				Count:        1,
+				Data: []map[string]any{
+					{"driver_number": 63, "gap_to_leader": "11.097", "interval_to_front": "1.200", "driver_name": "George Russell", "team_name": "Mercedes"},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/drivers/63/intervals", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	req.SetPathValue("driverNumber", "63")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionDriverDataset(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if payload["dataset"] != "intervals" {
+		t.Fatalf("unexpected dataset alias resolution: %#v", payload["dataset"])
+	}
 }
 
 // TestHandleSendSessionDriverLapLocation verifies lap-scoped location extraction returns only samples inside the lap window.
 func TestHandleSendSessionDriverLapLocation(t *testing.T) {
-	archive := mocks.SampleArchive()
 	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
-		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
-			return archive, archive.Metadata.GeneratedAt, true, nil
+		GetSessionDriverLapLocationFn: func(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (domain.DriverLapLocationWindow, bool, error) {
+			return domain.DriverLapLocationWindow{
+				Dataset:      "location",
+				SessionID:    sessionID,
+				DriverNumber: driverNumber,
+				DriverName:   "George Russell",
+				TeamName:     "Mercedes",
+				LapNumber:    lapNumber,
+				WindowStart:  time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
+				WindowEnd:    time.Date(2025, 3, 16, 4, 1, 30, 0, time.UTC),
+				Count:        2,
+				Data: []map[string]any{
+					{"date": "2025-03-16T04:00:10Z", "x": 1, "y": 2, "z": 3, "driver_name": "George Russell", "team_name": "Mercedes"},
+					{"date": "2025-03-16T04:01:00Z", "x": 7, "y": 8, "z": 9, "driver_name": "George Russell", "team_name": "Mercedes"},
+				},
+			}, true, nil
 		},
 	})
 
@@ -661,6 +811,92 @@ func TestHandleSendSessionDriverLapLocation(t *testing.T) {
 	first := data[0].(map[string]any)
 	if first["driver_name"] == nil || first["team_name"] == nil {
 		t.Fatalf("expected enriched location payload: %#v", first)
+	}
+}
+
+// TestHandleSendSessionRaceStandingsDirect verifies session standings can be served directly from normalized rows.
+func TestHandleSendSessionRaceStandingsDirect(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionRaceStandingsFn: func(ctx context.Context, sessionID string, at *time.Time) (domain.RaceStandingsWindow, bool, error) {
+			return domain.RaceStandingsWindow{
+				Dataset:    "position",
+				SessionID:  sessionID,
+				SnapshotAt: time.Date(2025, 3, 16, 4, 12, 0, 0, time.UTC),
+				Count:      2,
+				Data: []map[string]any{
+					{"driver_number": 63, "position": 1, "driver_name": "George Russell", "team_name": "Mercedes"},
+					{"driver_number": 1, "position": 2, "driver_name": "Max Verstappen", "team_name": "Red Bull Racing"},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/standings/race", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionRaceStandings(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload map[string]any
+	decodeJSON(t, rec, &payload)
+	if payload["dataset"] != "position" {
+		t.Fatalf("unexpected standings dataset: %#v", payload["dataset"])
+	}
+	if int(payload["count"].(float64)) != 2 {
+		t.Fatalf("unexpected standings count: %#v", payload["count"])
+	}
+}
+
+// TestHandleSendSessionWeatherDirect verifies weather can be served directly from normalized storage.
+func TestHandleSendSessionWeatherDirect(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDatasetFn: func(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+			return domain.SessionDatasetWindow{
+				Dataset:   dataset,
+				SessionID: sessionID,
+				Count:     1,
+				Data: []map[string]any{
+					{"date": "2025-03-16T04:00:00Z", "air_temperature": 21.5},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/weather", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionWeather(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleSendSessionFactsDirect verifies race control facts can be served directly from normalized storage.
+func TestHandleSendSessionFactsDirect(t *testing.T) {
+	handler := newReadHandler(&mocks.RaceArchiveStoreMock{
+		GetSessionDatasetFn: func(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+			return domain.SessionDatasetWindow{
+				Dataset:   dataset,
+				SessionID: sessionID,
+				Count:     1,
+				Data: []map[string]any{
+					{"date": "2025-03-16T04:00:00Z", "flag": "YELLOW", "message": "Incident"},
+				},
+			}, true, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/session-race-9693/facts", nil)
+	req.SetPathValue("sessionId", "session-race-9693")
+	rec := httptest.NewRecorder()
+	handler.HandleSendSessionFacts(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

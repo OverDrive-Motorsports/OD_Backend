@@ -315,6 +315,26 @@ func (h *RaceHandler) HandleSendSessionMetadata(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionMetadata(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session metadata: %v", err))
+		return
+	}
+	if direct {
+		if len(window.Metadata) == 0 && len(window.Meeting) == 0 && len(window.AllSessions) == 0 && len(window.RaceSession) == 0 && window.StoredAt.IsZero() {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no stored race data found for session id=%q", sessionID))
+			return
+		}
+		writeJSON(w, http.StatusOK, window)
+		return
+	}
+
 	archive, storedAt, ok := h.getSessionArchive(w, r)
 	if !ok {
 		return
@@ -333,6 +353,26 @@ func (h *RaceHandler) HandleSendSessionMetadata(w http.ResponseWriter, r *http.R
 func (h *RaceHandler) HandleListSessionDatasets(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionDatasetCatalog(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session dataset catalog: %v", err))
+		return
+	}
+	if direct {
+		if len(window.Metadata) == 0 && len(window.Data) == 0 {
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no stored race data found for session id=%q", sessionID))
+			return
+		}
+		writeJSON(w, http.StatusOK, window)
 		return
 	}
 
@@ -368,14 +408,27 @@ func (h *RaceHandler) HandleSendSessionDataset(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	archive, _, ok := h.getSessionArchive(w, r)
-	if !ok {
-		return
-	}
-
 	dataset, found := resolveDatasetName(r.PathValue("dataset"))
 	if !found {
 		writeError(w, http.StatusBadRequest, "unknown dataset")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID != "" {
+		window, direct, err := h.raceService.GetSessionDataset(r.Context(), sessionID, dataset)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session dataset: %v", err))
+			return
+		}
+		if direct {
+			writeJSON(w, http.StatusOK, window)
+			return
+		}
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
 		return
 	}
 
@@ -394,6 +447,22 @@ func (h *RaceHandler) HandleSendSessionDataset(w http.ResponseWriter, r *http.Re
 func (h *RaceHandler) HandleListSessionDrivers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionDataset(r.Context(), sessionID, "drivers")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session drivers: %v", err))
+		return
+	}
+	if direct {
+		writeJSON(w, http.StatusOK, window)
 		return
 	}
 
@@ -416,6 +485,22 @@ func (h *RaceHandler) HandleListSessionDrivers(w http.ResponseWriter, r *http.Re
 func (h *RaceHandler) HandleListSessionTeams(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionDataset(r.Context(), sessionID, "teams")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session teams: %v", err))
+		return
+	}
+	if direct {
+		writeJSON(w, http.StatusOK, window)
 		return
 	}
 
@@ -494,11 +579,6 @@ func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *h
 		return
 	}
 
-	archive, _, ok := h.getSessionArchive(w, r)
-	if !ok {
-		return
-	}
-
 	driverNumber, err := parsePathDriverNumber(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -508,6 +588,23 @@ func (h *RaceHandler) HandleSendSessionDriverDataset(w http.ResponseWriter, r *h
 	dataset, found := resolveDatasetName(datasetPathValue(r))
 	if !found {
 		writeError(w, http.StatusBadRequest, "unknown driver dataset")
+		return
+	}
+
+	if sessionID := strings.TrimSpace(r.PathValue("sessionId")); sessionID != "" {
+		window, direct, err := h.raceService.GetSessionDriverDataset(r.Context(), sessionID, driverNumber, dataset)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read session driver dataset: %v", err))
+			return
+		}
+		if direct {
+			writeJSON(w, http.StatusOK, window)
+			return
+		}
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
 		return
 	}
 
@@ -530,18 +627,57 @@ func (h *RaceHandler) HandleSendSessionDriverLapLocation(w http.ResponseWriter, 
 		return
 	}
 
-	archive, _, ok := h.getSessionArchive(w, r)
-	if !ok {
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
 		return
 	}
 
-	h.writeDriverLapLocationPayload(w, r, archive, true)
+	driverNumber, err := parsePathDriverNumber(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	lapNumber, err := parseLapNumberPath(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	window, found, err := h.raceService.GetSessionDriverLapLocation(r.Context(), sessionID, driverNumber, lapNumber)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read lap location: %v", err))
+		return
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no lap location found for session id=%q driver_number=%d lap_number=%d", sessionID, driverNumber, lapNumber))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, window)
 }
 
 // HandleSendSessionWeather returns race weather for one explicit stored session.
 func (h *RaceHandler) HandleSendSessionWeather(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionDataset(r.Context(), sessionID, "weather")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read weather: %v", err))
+		return
+	}
+	if direct {
+		writeJSON(w, http.StatusOK, window)
 		return
 	}
 
@@ -567,6 +703,22 @@ func (h *RaceHandler) HandleSendSessionFacts(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
+		return
+	}
+
+	window, direct, err := h.raceService.GetSessionDataset(r.Context(), sessionID, "race_control")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read race facts: %v", err))
+		return
+	}
+	if direct {
+		writeJSON(w, http.StatusOK, window)
+		return
+	}
+
 	archive, _, ok := h.getSessionArchive(w, r)
 	if !ok {
 		return
@@ -589,14 +741,42 @@ func (h *RaceHandler) HandleSendSessionRaceStandings(w http.ResponseWriter, r *h
 		return
 	}
 
-	archive, _, ok := h.getSessionArchive(w, r)
-	if !ok {
+	sessionID := strings.TrimSpace(r.PathValue("sessionId"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "missing sessionId path parameter")
 		return
 	}
 
 	at, hasAt, err := parseSnapshotTime(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var directAt *time.Time
+	if hasAt {
+		directAt = &at
+	}
+	window, direct, err := h.raceService.GetSessionRaceStandings(r.Context(), sessionID, directAt)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read race standings: %v", err))
+		return
+	}
+	if direct {
+		if window.Count == 0 {
+			if hasAt {
+				writeError(w, http.StatusNotFound, fmt.Sprintf("no position rows found at or before %s", at.Format(time.RFC3339)))
+				return
+			}
+			writeError(w, http.StatusNotFound, "no valid position rows found in stored payload")
+			return
+		}
+		writeJSON(w, http.StatusOK, window)
+		return
+	}
+
+	archive, _, ok := h.getSessionArchive(w, r)
+	if !ok {
 		return
 	}
 
