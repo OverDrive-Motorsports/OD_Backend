@@ -225,8 +225,50 @@ func TestSessionArchiveAndBroadcastDelegation(t *testing.T) {
 		GetSessionMergedFn: func(ctx context.Context, sessionID string) (domain.RaceArchive, time.Time, bool, error) {
 			return archive, storedAt, true, nil
 		},
+		GetSessionMetadataFn: func(ctx context.Context, sessionID string) (domain.SessionMetadataWindow, bool, error) {
+			return domain.SessionMetadataWindow{
+				Metadata: map[string]any{"meeting_name": "Australian Grand Prix"},
+				StoredAt: storedAt,
+			}, true, nil
+		},
+		GetSessionDatasetCatalogFn: func(ctx context.Context, sessionID string) (domain.SessionDatasetCatalogWindow, bool, error) {
+			return domain.SessionDatasetCatalogWindow{
+				SessionID: sessionID,
+				Metadata:  map[string]any{"meeting_name": "Australian Grand Prix"},
+				Count:     1,
+				Data:      []map[string]any{{"dataset": "drivers", "count": 2}},
+			}, true, nil
+		},
 		GetSessionDriverBroadcastFn: func(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
 			return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9693&driver=63", true, nil
+		},
+		GetSessionDatasetFn: func(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+			return domain.SessionDatasetWindow{
+				Dataset:   dataset,
+				SessionID: sessionID,
+				Count:     2,
+				Data:      []map[string]any{{"driver_number": 63}, {"driver_number": 1}},
+			}, true, nil
+		},
+		GetSessionDriverDatasetFn: func(ctx context.Context, sessionID string, driverNumber int, dataset string) (domain.DriverDatasetWindow, bool, error) {
+			return domain.DriverDatasetWindow{
+				Dataset:      dataset,
+				SessionID:    sessionID,
+				DriverNumber: driverNumber,
+				DriverName:   "George Russell",
+				TeamName:     "Mercedes",
+				Count:        1,
+				Data:         []map[string]any{{"driver_number": 63, "lap_number": 27}},
+			}, true, nil
+		},
+		GetSessionRaceStandingsFn: func(ctx context.Context, sessionID string, at *time.Time) (domain.RaceStandingsWindow, bool, error) {
+			return domain.RaceStandingsWindow{
+				Dataset:    "position",
+				SessionID:  sessionID,
+				SnapshotAt: time.Date(2025, 3, 16, 4, 0, 0, 0, time.UTC),
+				Count:      1,
+				Data:       []map[string]any{{"driver_number": 63, "position": 1}},
+			}, true, nil
 		},
 	})
 
@@ -238,11 +280,51 @@ func TestSessionArchiveAndBroadcastDelegation(t *testing.T) {
 		t.Fatalf("unexpected session archive payload: %#v %v %v", gotArchive, gotStoredAt, found)
 	}
 
+	metadataWindow, direct, err := svc.GetSessionMetadata(context.Background(), "session-race-9693")
+	if err != nil {
+		t.Fatalf("unexpected session metadata error: %v", err)
+	}
+	if !direct || metadataWindow.Metadata["meeting_name"] != "Australian Grand Prix" {
+		t.Fatalf("unexpected session metadata payload: %#v direct=%v", metadataWindow, direct)
+	}
+
+	catalog, direct, err := svc.GetSessionDatasetCatalog(context.Background(), "session-race-9693")
+	if err != nil {
+		t.Fatalf("unexpected session dataset catalog error: %v", err)
+	}
+	if !direct || catalog.Count != 1 {
+		t.Fatalf("unexpected session dataset catalog payload: %#v direct=%v", catalog, direct)
+	}
+
 	url, found, err := svc.GetSessionDriverBroadcast(context.Background(), "session-race-9693", 63)
 	if err != nil {
 		t.Fatalf("unexpected session broadcast error: %v", err)
 	}
 	if !found || !strings.Contains(url, "driver=63") {
 		t.Fatalf("unexpected broadcast payload: %q found=%v", url, found)
+	}
+
+	sessionDataset, direct, err := svc.GetSessionDataset(context.Background(), "session-race-9693", "drivers")
+	if err != nil {
+		t.Fatalf("unexpected session dataset error: %v", err)
+	}
+	if !direct || sessionDataset.Dataset != "drivers" || sessionDataset.Count != 2 {
+		t.Fatalf("unexpected direct session dataset payload: %#v direct=%v", sessionDataset, direct)
+	}
+
+	window, direct, err := svc.GetSessionDriverDataset(context.Background(), "session-race-9693", 63, "laps")
+	if err != nil {
+		t.Fatalf("unexpected session driver dataset error: %v", err)
+	}
+	if !direct || window.Dataset != "laps" || window.DriverName != "George Russell" {
+		t.Fatalf("unexpected direct dataset payload: %#v direct=%v", window, direct)
+	}
+
+	standings, direct, err := svc.GetSessionRaceStandings(context.Background(), "session-race-9693", nil)
+	if err != nil {
+		t.Fatalf("unexpected session standings error: %v", err)
+	}
+	if !direct || standings.Dataset != "position" || standings.Count != 1 {
+		t.Fatalf("unexpected direct standings payload: %#v direct=%v", standings, direct)
 	}
 }

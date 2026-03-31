@@ -106,6 +106,13 @@ Base URL: `http://localhost:8080`
     - `radio`
     - `result`
 
+- `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location`
+  - Returns all stored `x/y/z` location samples for one driver during one lap.
+  - The backend resolves the lap time window from:
+    - the lap `date_start`
+    - the next lap `date_start`
+    - or `lap_duration` as fallback when the next lap is unavailable
+
 - `GET /api/v1/sessions/{sessionId}/weather`
   - Returns weather samples for one explicit session.
 
@@ -208,6 +215,10 @@ Base URL: `http://localhost:8080`
     - `radio`
     - `result`
 
+- `GET /api/v1/race/drivers/{driverNumber}/laps/{lapNumber}/location`
+  - Latest-session mirror of the lap-scoped location endpoint.
+  - Returns all stored `x/y/z` samples for one driver during one lap in the merged latest stored session.
+
 - `GET /api/v1/race/driver?driver_number={driverNumber}`
   - Legacy query-param variant returning the full latest-session payload for one driver.
 
@@ -258,8 +269,10 @@ curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/archive"
 curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/drivers"
 curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/championship_drivers"
 curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/session_result"
+curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/drivers/63/laps/27/location"
 curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/drivers/63/broadcast"
 curl "http://localhost:8080/api/v1/race/sendrace"
 curl "http://localhost:8080/api/v1/race/datasets/weather"
+curl "http://localhost:8080/api/v1/race/drivers/63/laps/27/location"
 curl "http://localhost:8080/api/v1/race/standings/race?at=2025-03-16T04:45:00Z"
 ```

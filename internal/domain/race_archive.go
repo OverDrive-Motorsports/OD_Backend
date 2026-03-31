@@ -35,3 +35,67 @@ type Metadata struct {
 	EndpointSize int       `json:"endpoint_count"`
 	DriverNumber int       `json:"driver_number,omitempty"`
 }
+
+// DriverLapLocationWindow represents all stored location samples for one driver during one lap window.
+type DriverLapLocationWindow struct {
+	Dataset      string           `json:"dataset"`
+	SessionID    string           `json:"session_id,omitempty"`
+	DriverNumber int              `json:"driver_number"`
+	DriverName   string           `json:"driver_name,omitempty"`
+	TeamName     string           `json:"team_name,omitempty"`
+	LapNumber    int              `json:"lap_number"`
+	WindowStart  time.Time        `json:"window_start"`
+	WindowEnd    time.Time        `json:"window_end"`
+	Count        int              `json:"count"`
+	Data         []map[string]any `json:"data"`
+	Metadata     map[string]any   `json:"metadata,omitempty"`
+}
+
+// DriverDatasetWindow represents one driver-scoped dataset read directly from normalized storage.
+type DriverDatasetWindow struct {
+	Dataset      string           `json:"dataset"`
+	SessionID    string           `json:"session_id,omitempty"`
+	DriverNumber int              `json:"driver_number"`
+	DriverName   string           `json:"driver_name,omitempty"`
+	TeamName     string           `json:"team_name,omitempty"`
+	Count        int              `json:"count"`
+	Data         []map[string]any `json:"data"`
+	Metadata     map[string]any   `json:"metadata,omitempty"`
+}
+
+// RaceStandingsWindow represents one race standings snapshot read directly from normalized storage.
+type RaceStandingsWindow struct {
+	Dataset     string           `json:"dataset"`
+	SessionID   string           `json:"session_id,omitempty"`
+	SnapshotAt  time.Time        `json:"snapshot_at"`
+	RequestedAt *time.Time       `json:"requested_at,omitempty"`
+	Count       int              `json:"count"`
+	Data        []map[string]any `json:"data"`
+	Metadata    map[string]any   `json:"metadata,omitempty"`
+}
+
+// SessionDatasetWindow represents one session-scoped dataset read directly from normalized storage.
+type SessionDatasetWindow struct {
+	Dataset   string           `json:"dataset"`
+	SessionID string           `json:"session_id,omitempty"`
+	Count     int              `json:"count"`
+	Data      []map[string]any `json:"data"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
+}
+
+// SessionMetadataWindow represents the light metadata envelope for one session without rebuilding all datasets.
+type SessionMetadataWindow struct {
+	Metadata    map[string]any   `json:"metadata"`
+	Meeting     map[string]any   `json:"meeting"`
+	AllSessions []map[string]any `json:"all_sessions"`
+	RaceSession map[string]any   `json:"race_session"`
+	StoredAt    time.Time        `json:"stored_at"`
+}
+
+// SessionDatasetCatalogWindow represents the dataset catalog for one session without decoding all chunks.
+type SessionDatasetCatalogWindow struct {
+	SessionID string           `json:"session_id,omitempty"`
+	Metadata  map[string]any   `json:"metadata"`
+	Count     int              `json:"count"`
+	Data      []map[string]any `json:"data"`
+}

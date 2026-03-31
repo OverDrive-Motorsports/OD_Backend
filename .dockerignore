@@ -3,3 +3,4 @@
 scripts
 docs
 .gitignore
+resources/db

@@ -201,6 +201,7 @@ This file is the API surface used by clients.
 | `HandleSendSessionDriverRace` | Returns the full per-driver payload for one explicit session. | Historical equivalent of the active-session driver payload. |
 | `HandleSendSessionDriverProfile` | Returns one driver profile for one explicit session. | Lightweight historical driver lookup. |
 | `HandleSendSessionDriverDataset` | Returns one driver-scoped dataset for one explicit session. | Fine-grained session navigation for replay or AR views. |
+| `HandleSendSessionDriverLapLocation` | Returns all stored XYZ samples for one driver during one lap in one explicit session. | Removes client-side filtering across `laps` and `location` datasets. |
 | `HandleSendSessionWeather` | Returns weather for one explicit session. | Session-scoped weather access. |
 | `HandleSendSessionFacts` | Returns race control events for one explicit session. | Session-scoped incidents and flags access. |
 | `HandleSendSessionRaceStandings` | Returns standings snapshots for one explicit session. | Replay and history-safe standings lookup. |
@@ -226,6 +227,7 @@ This file is the API surface used by clients.
 | `HandleSendDriverRaceResource` | Returns the full per-driver payload via path param. | Cleaner REST alternative to query-string driver access. |
 | `HandleSendDriverProfile` | Returns only the driver profile row. | Lightweight driver info endpoint. |
 | `HandleSendDriverDataset` | Returns one dataset filtered to one driver. | Fine-grained AR/mobile fetching. |
+| `HandleSendDriverLapLocation` | Returns all stored XYZ samples for one driver during one lap in the latest merged stored session. | Convenience mirror of the session-scoped lap location endpoint. |
 
 #### Handler internals
 
@@ -238,6 +240,7 @@ This file is the API surface used by clients.
 | `parseDriverNumberForRace` | Resolves `driver_number` from query string or stored metadata. | Supports both explicit and default driver workflows. |
 | `writeDriverRacePayload` | Builds and writes the full per-driver response. | Centralizes the per-driver payload shape. |
 | `parsePathDriverNumber` | Parses driver number from route path. | Used by `/drivers/{driverNumber}/...` endpoints. |
+| `parseLapNumberPath` | Parses lap number from route path. | Used by lap-scoped location endpoints. |
 | `parseSnapshotTime` | Parses the optional `at` timestamp for replay/standings. | Allows time-travel queries in standings endpoint. |
 | `buildRaceStandings` | Builds one latest position row per driver at a given time. | Core logic behind replay/live standings snapshots. |
 | `indexDriversByNumber` | Creates a map of `driver_number -> driver row`. | Used to enrich standings rows with driver info. |
@@ -246,10 +249,14 @@ This file is the API surface used by clients.
 | `sortDriverRows` | Sorts drivers by number. | Makes driver list output stable. |
 | `buildTeams` | Builds unique team rows from driver rows. | There is no direct `teams` dataset from OpenF1 in this archive shape. |
 | `filterRowsByDriver` | Keeps rows matching one `driver_number`. | Reused across per-driver endpoints. |
+| `writeDriverLapLocationPayload` | Resolves a lap time window and writes all matching location rows. | Centralizes lap-scoped XYZ payload generation. |
+| `lapWindow` | Computes one lap start/end window from `laps` rows. | Lets the API convert lap numbers into time ranges. |
+| `filterRowsByTimeWindow` | Keeps rows whose timestamps fall inside one time window. | Used by lap-scoped location responses. |
 | `resolveDatasetName` | Maps public aliases like `telemetry` or `facts` to stored dataset keys. | Gives cleaner API naming without changing storage keys. |
 | `datasetPathValue` | Resolves dataset names from routed path values or the final path segment. | Keeps concrete driver dataset routes and generic dataset routes aligned. |
 | `readStringValue` | Reads string-like values from a row. | Handles weakly typed `map[string]any` rows. |
 | `readIntField` | Reads int-like values from a row. | Same reason as above for numeric fields. |
+| `readFloatField` | Reads float-like values from a row. | Used for `lap_duration` fallback parsing in lap-scoped location reads. |
 
 ## Prisma Repository
 

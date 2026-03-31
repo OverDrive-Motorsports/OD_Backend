@@ -93,6 +93,24 @@ func (s *RaceService) GetSessionMergedStored(ctx context.Context, sessionID stri
 	return archive, storedAt, true, nil
 }
 
+// GetSessionMetadata returns one light metadata envelope for one session when supported by storage.
+func (s *RaceService) GetSessionMetadata(ctx context.Context, sessionID string) (domain.SessionMetadataWindow, bool, error) {
+	window, direct, err := s.store.GetSessionMetadata(ctx, sessionID)
+	if err != nil {
+		return domain.SessionMetadataWindow{}, false, fmt.Errorf("session metadata lookup failed: %w", err)
+	}
+	return window, direct, nil
+}
+
+// GetSessionDatasetCatalog returns the light dataset catalog for one session when supported by storage.
+func (s *RaceService) GetSessionDatasetCatalog(ctx context.Context, sessionID string) (domain.SessionDatasetCatalogWindow, bool, error) {
+	window, direct, err := s.store.GetSessionDatasetCatalog(ctx, sessionID)
+	if err != nil {
+		return domain.SessionDatasetCatalogWindow{}, false, fmt.Errorf("session dataset catalog lookup failed: %w", err)
+	}
+	return window, direct, nil
+}
+
 // GetSessionDriverBroadcast returns the broadcast URL for one driver in one session.
 func (s *RaceService) GetSessionDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, bool, error) {
 	url, found, err := s.store.GetSessionDriverBroadcast(ctx, sessionID, driverNumber)
@@ -100,6 +118,42 @@ func (s *RaceService) GetSessionDriverBroadcast(ctx context.Context, sessionID s
 		return "", false, fmt.Errorf("session driver broadcast lookup failed: %w", err)
 	}
 	return url, found, nil
+}
+
+// GetSessionDataset returns one session-scoped dataset directly from normalized storage when supported.
+func (s *RaceService) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetWindow, bool, error) {
+	window, direct, err := s.store.GetSessionDataset(ctx, sessionID, dataset)
+	if err != nil {
+		return domain.SessionDatasetWindow{}, false, fmt.Errorf("session dataset lookup failed: %w", err)
+	}
+	return window, direct, nil
+}
+
+// GetSessionDriverDataset returns one driver-scoped dataset directly from normalized storage when supported.
+func (s *RaceService) GetSessionDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (domain.DriverDatasetWindow, bool, error) {
+	window, direct, err := s.store.GetSessionDriverDataset(ctx, sessionID, driverNumber, dataset)
+	if err != nil {
+		return domain.DriverDatasetWindow{}, false, fmt.Errorf("session driver dataset lookup failed: %w", err)
+	}
+	return window, direct, nil
+}
+
+// GetSessionDriverLapLocation returns all stored location samples for one driver during one lap in one session.
+func (s *RaceService) GetSessionDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (domain.DriverLapLocationWindow, bool, error) {
+	window, found, err := s.store.GetSessionDriverLapLocation(ctx, sessionID, driverNumber, lapNumber)
+	if err != nil {
+		return domain.DriverLapLocationWindow{}, false, fmt.Errorf("session driver lap location lookup failed: %w", err)
+	}
+	return window, found, nil
+}
+
+// GetSessionRaceStandings returns one race standings snapshot directly from normalized storage when supported.
+func (s *RaceService) GetSessionRaceStandings(ctx context.Context, sessionID string, at *time.Time) (domain.RaceStandingsWindow, bool, error) {
+	window, direct, err := s.store.GetSessionRaceStandings(ctx, sessionID, at)
+	if err != nil {
+		return domain.RaceStandingsWindow{}, false, fmt.Errorf("session race standings lookup failed: %w", err)
+	}
+	return window, direct, nil
 }
 
 // ListChampionships returns all stored championships.

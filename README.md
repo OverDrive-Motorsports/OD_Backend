@@ -117,12 +117,14 @@ go run ./cmd/api
   - `GET /api/v1/sessions/{sessionId}/datasets/{dataset}`
   - `GET /api/v1/sessions/{sessionId}/drivers`
   - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile`
+  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location`
   - `GET /api/v1/sessions/{sessionId}/broadcast`
   - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
 - Latest-session convenience reads:
   - `GET|POST /sendrace`
   - `GET|POST /api/v1/race/sendrace`
   - `GET /api/v1/race/datasets/{dataset}`
+  - `GET /api/v1/race/drivers/{driverNumber}/laps/{lapNumber}/location`
   - `GET /api/v1/race/championship/drivers`
   - `GET /api/v1/race/championship/constructors`
   - `GET /api/v1/race/weather`

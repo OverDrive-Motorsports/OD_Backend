@@ -6,7 +6,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
+RUN rm -rf resources/db \
+    && mkdir -p resources/db \
+    && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
 RUN go build -o /app/backend ./cmd/api
 
 FROM golang:1.22 AS dbsync
