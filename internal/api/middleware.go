@@ -13,7 +13,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -52,11 +54,15 @@ func withRecovery(logger *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					logger.Error("panic recovered",
-						"request_id", requestIDFromContext(r.Context()),
-						"method", r.Method,
-						"path", r.URL.Path,
-						"panic", recovered,
+					logger.Error("request failed with panic",
+						"type", "panic_recovery",
+						slog.Group("request",
+							"id", requestIDFromContext(r.Context()),
+							"method", r.Method,
+							"path", r.URL.Path,
+							"client_ip", clientIPFromRemoteAddr(r.RemoteAddr),
+						),
+						"panic", fmt.Sprint(recovered),
 					)
 					writeError(w, http.StatusInternalServerError, "internal server error")
 				}
@@ -75,16 +81,33 @@ func withAccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(recorder, r)
 
-			logger.Info("http_request",
-				"request_id", requestIDFromContext(r.Context()),
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", recorder.status,
-				"duration_ms", time.Since(start).Milliseconds(),
-				"remote_addr", r.RemoteAddr,
+			logger.Info("HTTP request completed",
+				"type", "http_request",
+				slog.Group("request",
+					"id", requestIDFromContext(r.Context()),
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", recorder.status,
+					"duration_ms", time.Since(start).Milliseconds(),
+					"client_ip", clientIPFromRemoteAddr(r.RemoteAddr),
+					"user_agent", r.UserAgent(),
+				),
 			)
 		})
 	}
+}
+
+// clientIPFromRemoteAddr extracts a readable client IP from the remote address field.
+func clientIPFromRemoteAddr(remoteAddr string) string {
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	if remoteAddr == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
 }
 
 // requestIDFromContext returns the request ID attached by the request ID middleware.

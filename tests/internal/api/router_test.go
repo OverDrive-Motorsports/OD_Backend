@@ -10,6 +10,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -72,5 +73,67 @@ func TestRouterDriverProfileRoute(t *testing.T) {
 	}
 	if int(payload["driver_number"].(float64)) != 1 {
 		t.Fatalf("unexpected driver number: %#v", payload["driver_number"])
+	}
+}
+
+// TestRouterAccessLogStructured verifies access logs are emitted as structured JSON with nested request context.
+func TestRouterAccessLogStructured(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuffer, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			switch attr.Key {
+			case slog.TimeKey:
+				attr.Key = "timestamp"
+			case slog.MessageKey:
+				attr.Key = "message"
+			case slog.LevelKey:
+				attr.Value = slog.StringValue(attr.Value.String())
+			}
+			return attr
+		},
+	}))
+
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		logger,
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.RemoteAddr = "172.18.0.1:35842"
+	req.Header.Set("User-Agent", "overdrive-test")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d", rec.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(logBuffer.Bytes()), &payload); err != nil {
+		t.Fatalf("failed to decode log payload: %v", err)
+	}
+
+	if payload["timestamp"] == nil {
+		t.Fatalf("expected timestamp in log payload: %#v", payload)
+	}
+	if payload["message"] != "HTTP request completed" {
+		t.Fatalf("unexpected message: %#v", payload["message"])
+	}
+	if payload["type"] != "http_request" {
+		t.Fatalf("unexpected type: %#v", payload["type"])
+	}
+
+	request, ok := payload["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested request object: %#v", payload)
+	}
+	if request["method"] != "GET" || request["path"] != "/health" {
+		t.Fatalf("unexpected request payload: %#v", request)
+	}
+	if request["client_ip"] != "172.18.0.1" {
+		t.Fatalf("unexpected client_ip: %#v", request["client_ip"])
+	}
+	if request["id"] == nil || request["id"] == "" {
+		t.Fatalf("expected request id in log payload: %#v", request)
 	}
 }
