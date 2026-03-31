@@ -251,6 +251,14 @@ func (s *RaceArchiveStore) GetSessionDataset(ctx context.Context, sessionID stri
 		return domain.SessionDatasetWindow{}, false, nil
 	}
 
+	exists, err := s.sessionExists(ctx, sessionID)
+	if err != nil {
+		return domain.SessionDatasetWindow{}, false, err
+	}
+	if !exists {
+		return domain.SessionDatasetWindow{}, false, nil
+	}
+
 	archiveMetadata, err := s.loadSessionArchiveMetadata(ctx, sessionID)
 	if err != nil {
 		return domain.SessionDatasetWindow{}, false, err
@@ -287,6 +295,14 @@ func (s *RaceArchiveStore) GetSessionDriverDataset(ctx context.Context, sessionI
 	sessionID = strings.TrimSpace(sessionID)
 	dataset = strings.TrimSpace(dataset)
 	if sessionID == "" || driverNumber <= 0 || dataset == "" {
+		return domain.DriverDatasetWindow{}, false, nil
+	}
+
+	exists, err := s.sessionExists(ctx, sessionID)
+	if err != nil {
+		return domain.DriverDatasetWindow{}, false, err
+	}
+	if !exists {
 		return domain.DriverDatasetWindow{}, false, nil
 	}
 
@@ -444,6 +460,14 @@ func (s *RaceArchiveStore) GetSessionDriverLapLocation(ctx context.Context, sess
 func (s *RaceArchiveStore) GetSessionRaceStandings(ctx context.Context, sessionID string, at *time.Time) (domain.RaceStandingsWindow, bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
+		return domain.RaceStandingsWindow{}, false, nil
+	}
+
+	exists, err := s.sessionExists(ctx, sessionID)
+	if err != nil {
+		return domain.RaceStandingsWindow{}, false, err
+	}
+	if !exists {
 		return domain.RaceStandingsWindow{}, false, nil
 	}
 
@@ -1051,6 +1075,19 @@ func metadataMap(meta domain.Metadata) map[string]any {
 		"endpoint_count":    meta.EndpointSize,
 		"driver_number":     meta.DriverNumber,
 	}
+}
+
+func (s *RaceArchiveStore) sessionExists(ctx context.Context, sessionID string) (bool, error) {
+	_, err := s.client.Session.FindUnique(
+		db.Session.ID.Equals(sessionID),
+	).Exec(ctx)
+	if err != nil {
+		if db.IsErrNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("find session: %w", err)
+	}
+	return true, nil
 }
 
 func (s *RaceArchiveStore) loadSessionArchiveSnapshot(ctx context.Context, sessionID string) (sessionArchiveSnapshot, bool, error) {
