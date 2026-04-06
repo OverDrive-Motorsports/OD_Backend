@@ -24,6 +24,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"overdrive/internal/api"
 	"overdrive/internal/app"
 	"overdrive/internal/config"
@@ -31,6 +33,8 @@ import (
 
 // main boots the API server and handles graceful startup and shutdown.
 func main() {
+	_ = godotenv.Load()
+
 	cfg := config.Load()
 	logger := newLogger(cfg.LogFormat)
 

@@ -12,13 +12,15 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"overdrive/internal/config"
 )
 
 // NewRouter wires all API routes and applies the middleware stack.
-func NewRouter(handler *RaceHandler, logger *slog.Logger) http.Handler {
+func NewRouter(handler *RaceHandler, logger *slog.Logger, cfg config.Config) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	cfg = normalizeSecurityConfig(cfg)
 
 	mux := http.NewServeMux()
 
@@ -94,5 +96,10 @@ func NewRouter(handler *RaceHandler, logger *slog.Logger) http.Handler {
 		withRequestID,
 		withRecovery(logger),
 		withAccessLog(logger),
+		withSecurityHeaders,
+		withRequestValidation(logger, cfg),
+		withCORS(logger, cfg),
+		withOptionalAuth(logger, cfg),
+		withRateLimit(logger, cfg),
 	)
 }

@@ -13,9 +13,10 @@ Scope:
 ### 1. Startup flow
 
 1. Developer starts the backend through a local script or directly with `go run ./cmd/api`
-2. PostgreSQL must already be available and `DATABASE_URL` must be set
-3. [`main.go`](/cmd/api/main.go) loads config, connects DB, builds server, starts HTTP
-4. The default `driver-number` CLI flag is `0`, so ingestion is full-race by default unless one driver is explicitly requested
+2. If a local `.env` file exists, [`main.go`](/home/bastou/delivery/eip/OD_Backend/cmd/api/main.go) loads it before building runtime config
+3. PostgreSQL must already be available and `DATABASE_URL` must be set
+4. [`main.go`](/home/bastou/delivery/eip/OD_Backend/cmd/api/main.go) loads config, connects DB, builds server, starts HTTP
+5. The default `driver-number` CLI flag is `0`, so ingestion is full-race by default unless one driver is explicitly requested
 
 ### 2. Write flow: fetch and store a race
 
@@ -41,8 +42,9 @@ Scope:
 4. Prisma repository either:
    - rebuilds the merged latest session archive
    - rebuilds the merged archive for one explicit `sessionId`
-   - serves catalog and broadcast lookup data
-5. Handler serializes JSON response
+   - serves catalog, broadcast, and direct normalized-table lookup data
+5. Security middleware can reject the request before business handler execution
+6. Handler serializes JSON response
 
 ## Runtime Entry
 
@@ -68,6 +70,7 @@ Scope:
 | `getEnv` | Reads a string env var with fallback. | Small helper for simple string config. |
 | `getEnvInt` | Reads an int env var with fallback. | Prevents repeated parse boilerplate. |
 | `getEnvDuration` | Reads a duration env var with fallback. | Used for timeouts, retry delays, and polling intervals. |
+| `getEnvCSV` | Reads a comma-separated env var into a string slice. | Used for allowlists such as CORS origins. |
 
 ### `internal/database/database.go`
 
@@ -153,6 +156,27 @@ This layer is thin on purpose. It orchestrates use case + repository calls.
 | `withAccessLog` | Logs one structured event per request. | Gives basic observability without extra infra. |
 | `requestIDFromContext` | Reads the request ID from context. | Shared utility for log entries and error reporting. |
 | `(*statusRecorder).WriteHeader` | Captures the response status code. | Needed by access logging middleware. |
+
+### `internal/api/security.go`
+
+| Function | Purpose | Why it exists |
+|---|---|---|
+| `normalizeSecurityConfig` | Applies fallback values to security config. | Prevents zero-value config from silently disabling protections. |
+| `withSecurityHeaders` | Adds hardening headers to every response. | Reduces browser-side attack surface. |
+| `withRequestValidation` | Rejects oversized paths and query strings. | Blocks simple abusive request targets early. |
+| `withCORS` | Enforces the configured origin allowlist. | Prevents arbitrary browser origins from consuming the API. |
+| `withRateLimit` | Applies an in-memory per-IP request limit. | Reduces basic flooding and abuse. |
+| `withOptionalAuth` | Validates JWTs when a token is presented. | Adds auth hardening without forcing login on the current public API. |
+| `requireRoles` | Checks that an authenticated request has one of the allowed roles. | Preparation hook for future protected routes. |
+| `authContextFromRequest` | Reads validated auth context from the request. | Lets later handlers or middleware reuse auth state. |
+| `logSuspicious` | Emits structured warnings for blocked or suspicious requests. | Improves debugging and monitoring. |
+| `bearerTokenFromRequest` | Extracts bearer tokens from headers or WS-style query params. | Centralizes token extraction logic. |
+| `isWebSocketUpgrade` | Detects a WebSocket upgrade request. | Supports secure token extraction for future WS endpoints. |
+| `validateJWT` | Verifies JWT signature and security claims. | Core auth hardening path for presented tokens. |
+| `jwtAudience` | Normalizes JWT `aud` claims into a slice. | Supports both single-string and array audience formats. |
+| `containsString` | Checks membership in a string slice. | Shared helper for audience and role checks. |
+| `newIPRateLimiter` | Builds the in-memory rate limiter. | Isolates limiter construction and defaults. |
+| `(*ipRateLimiter).Allow` | Tracks and enforces quotas per client IP. | Implements the actual rate limiting decision. |
 
 ### `internal/api/response.go`
 
@@ -279,8 +303,8 @@ When `RaceService.FetchAndStore` persists an archive, the repository flow is:
 When a read endpoint asks for stored race data, the repository flow is:
 
 1. `GetLatest`, `GetLatestMerged`, `GetSessionMerged`, `GetSession`, or `GetSessionDriverBroadcast`
-2. `archiveFromModel`, `mergeArchiveModels`, or direct catalog/broadcast lookup
-3. handlers serialize the rebuilt domain archive
+2. `archiveFromModel`, `mergeArchiveModels`, or direct catalog/broadcast/normalized lookup
+3. handlers serialize either the rebuilt domain archive or a direct DB-backed response window
 
 ### [`race_archive_store.go`](/internal/repository/prisma/race_archive_store.go)
 

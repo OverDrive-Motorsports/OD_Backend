@@ -12,7 +12,11 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,6 +25,7 @@ import (
 	"time"
 
 	"overdrive/internal/api"
+	"overdrive/internal/config"
 	"overdrive/internal/domain"
 	"overdrive/internal/service"
 	"overdrive/tests/internal/mocks"
@@ -31,6 +36,7 @@ func TestRouterHealthAddsRequestID(t *testing.T) {
 	router := api.NewRouter(
 		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -57,6 +63,7 @@ func TestRouterDriverProfileRoute(t *testing.T) {
 	router := api.NewRouter(
 		api.NewRaceHandler(service.NewRaceService(nil, store), api.RaceDefaults{}, time.Second),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/race/drivers/1/profile", nil)
@@ -96,6 +103,7 @@ func TestRouterAccessLogStructured(t *testing.T) {
 	router := api.NewRouter(
 		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
 		logger,
+		config.Config{},
 	)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -136,4 +144,126 @@ func TestRouterAccessLogStructured(t *testing.T) {
 	if request["id"] == nil || request["id"] == "" {
 		t.Fatalf("expected request id in log payload: %#v", request)
 	}
+}
+
+func TestRouterCORSPreflightAllowed(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{CORSAllowedOrigins: []string{"http://localhost:3000"}},
+	)
+
+	req := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	req.Header.Set("Origin", "http://localhost:3000")
+	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+		t.Fatalf("unexpected allow origin: %q", rec.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
+func TestRouterCORSRejectsUnknownOrigin(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{CORSAllowedOrigins: []string{"http://localhost:3000"}},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRouterRateLimitRejectsBurst(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{
+			RateLimitRequests: 1,
+			RateLimitWindow:   time.Minute,
+		},
+	)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.RemoteAddr = "172.18.0.1:40000"
+	rec1 := httptest.NewRecorder()
+	router.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("unexpected first status: %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.RemoteAddr = "172.18.0.1:40000"
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("unexpected second status: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+}
+
+func TestRouterRejectsInvalidJWT(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{JWTSecret: "top-secret"},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("Authorization", "Bearer not-a-jwt")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRouterAcceptsValidJWT(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{
+			JWTSecret:   "top-secret",
+			JWTIssuer:   "overdrive",
+			JWTAudience: "beta-client",
+		},
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("Authorization", "Bearer "+signedTestJWT(t, "top-secret"))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func signedTestJWT(t *testing.T, secret string) string {
+	t.Helper()
+
+	header := `{"alg":"HS256","typ":"JWT"}`
+	claims := fmt.Sprintf(`{"sub":"user-1","user_id":"user-1","exp":%d,"iss":"overdrive","aud":"beta-client","roles":["beta_tester"]}`, time.Now().Add(time.Hour).Unix())
+
+	encodedHeader := base64.RawURLEncoding.EncodeToString([]byte(header))
+	encodedClaims := base64.RawURLEncoding.EncodeToString([]byte(claims))
+	signingInput := encodedHeader + "." + encodedClaims
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, err := mac.Write([]byte(signingInput))
+	if err != nil {
+		t.Fatalf("failed to sign jwt: %v", err)
+	}
+	signature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return signingInput + "." + signature
 }

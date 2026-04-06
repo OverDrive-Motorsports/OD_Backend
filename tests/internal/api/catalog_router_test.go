@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"overdrive/internal/api"
+	"overdrive/internal/config"
 	"overdrive/internal/domain"
 	"overdrive/internal/service"
 	"overdrive/tests/internal/mocks"
@@ -55,6 +56,7 @@ func TestRouterCatalogRoutes(t *testing.T) {
 	router := api.NewRouter(
 		api.NewRaceHandler(service.NewRaceService(nil, store), api.RaceDefaults{}, time.Second),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{},
 	)
 
 	cases := []struct {

@@ -12,6 +12,34 @@ Base URL: `http://localhost:8080`
 - Legacy routes are still available for `/getrace` and `/sendrace`.
 - Dataset rows that expose `driver_number` are enriched with `driver_name` and `team_name` when the corresponding driver exists in the stored session.
 - There is currently no dedicated `GET /api/v1/championships/{code}/drivers` or `GET /api/v1/championships/{code}/teams` endpoint.
+- Browser requests are filtered through `CORS_ALLOWED_ORIGINS`.
+- Repeated bursts from the same client IP can be rejected with `429 rate limit exceeded`.
+- If a client sends a bearer token, the backend validates it and rejects invalid or expired JWTs with `401`.
+- The API remains public by default today: JWT parsing and RBAC hooks exist, but no current public route is yet role-protected.
+- Local runtime variables can be bootstrapped from `.env`, using `.env.example` as the reference template.
+
+## Security Behavior
+
+- Security headers are applied on all responses:
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: no-referrer`
+  - strict `Content-Security-Policy`
+  - `Cache-Control: no-store`
+- Oversized request targets are rejected before handler execution:
+  - path too long
+  - query string too long
+- CORS only matters for browser clients. `curl`, Postman, and server-to-server requests are not blocked by browser CORS rules.
+- JWT validation supports:
+  - `Authorization: Bearer <token>`
+  - `access_token` query parameter on WebSocket-style upgrade requests
+- JWT checks include:
+  - HMAC SHA-256 signature
+  - `exp`
+  - `nbf`
+  - `iss` when configured
+  - `aud` when configured
+- Suspicious requests such as blocked origins, invalid JWTs, oversized request targets, and rate limit violations are logged as structured warning events.
 
 ## Health
 
