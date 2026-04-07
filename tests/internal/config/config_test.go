@@ -23,6 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("OPENF1_REQUEST_INTERVAL", "")
 	t.Setenv("OPENF1_MAX_RETRIES", "")
 	t.Setenv("OPENF1_RETRY_DELAY", "")
+	t.Setenv("LOG_FORMAT", "")
 	t.Setenv("API_ADDR", "")
 	t.Setenv("GETRACE_TIMEOUT", "")
 	t.Setenv("API_SHUTDOWN_TIMEOUT", "")
@@ -38,6 +39,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MaxRetries != 2 {
 		t.Fatalf("unexpected default retries: %d", cfg.MaxRetries)
 	}
+	if cfg.LogFormat != "pretty" {
+		t.Fatalf("unexpected default log format: %s", cfg.LogFormat)
+	}
 	if cfg.APIAddr != ":8080" {
 		t.Fatalf("unexpected default api addr: %s", cfg.APIAddr)
 	}
@@ -50,6 +54,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("OPENF1_REQUEST_INTERVAL", "150ms")
 	t.Setenv("OPENF1_MAX_RETRIES", "5")
 	t.Setenv("OPENF1_RETRY_DELAY", "2s")
+	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("API_ADDR", ":9090")
 	t.Setenv("GETRACE_TIMEOUT", "15m")
 	t.Setenv("API_SHUTDOWN_TIMEOUT", "20s")
@@ -70,6 +75,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.RetryDelay != 2*time.Second {
 		t.Fatalf("unexpected override retry delay: %s", cfg.RetryDelay)
+	}
+	if cfg.LogFormat != "json" {
+		t.Fatalf("unexpected override log format: %s", cfg.LogFormat)
 	}
 	if cfg.APIAddr != ":9090" {
 		t.Fatalf("unexpected override api addr: %s", cfg.APIAddr)

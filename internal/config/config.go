@@ -22,6 +22,7 @@ type Config struct {
 	RequestInterval time.Duration
 	MaxRetries      int
 	RetryDelay      time.Duration
+	LogFormat       string
 	APIAddr         string
 	GetRaceTimeout  time.Duration
 	ShutdownTimeout time.Duration
@@ -35,6 +36,7 @@ func Load() Config {
 		RequestInterval: getEnvDuration("OPENF1_REQUEST_INTERVAL", 350*time.Millisecond),
 		MaxRetries:      getEnvInt("OPENF1_MAX_RETRIES", 2),
 		RetryDelay:      getEnvDuration("OPENF1_RETRY_DELAY", 1200*time.Millisecond),
+		LogFormat:       getEnv("LOG_FORMAT", "pretty"),
 		APIAddr:         getEnv("API_ADDR", ":8080"),
 		GetRaceTimeout:  getEnvDuration("GETRACE_TIMEOUT", 10*time.Minute),
 		ShutdownTimeout: getEnvDuration("API_SHUTDOWN_TIMEOUT", 10*time.Second),

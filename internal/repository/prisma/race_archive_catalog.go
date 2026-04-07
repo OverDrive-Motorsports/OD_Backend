@@ -251,6 +251,7 @@ func (s *RaceArchiveStore) GetSessionDataset(ctx context.Context, sessionID stri
 		return domain.SessionDatasetWindow{}, false, nil
 	}
 
+
 	exists, err := s.sessionExists(ctx, sessionID)
 	if err != nil {
 		return domain.SessionDatasetWindow{}, false, err
