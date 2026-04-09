@@ -105,18 +105,6 @@ So the correct reading is:
 - the backend now has a stronger HTTP security baseline
 - it does not yet have a fully productized auth/authorization system
 
-## Local Setup
-
-At minimum, set:
-
-```env
-DATABASE_URL=postgresql://user:pass@127.0.0.1:5432/OverDriveDB?schema=public
-CORS_ALLOWED_ORIGINS=http://localhost:3000
-JWT_SECRET=replace-me
-JWT_ISSUER=overdrive
-JWT_AUDIENCE=overdrive-client
-```
-
 ## Operational Notes
 
 - `curl` is not subject to browser CORS restrictions
