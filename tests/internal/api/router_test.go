@@ -228,6 +228,36 @@ func TestRouterRejectsInvalidJWT(t *testing.T) {
 	}
 }
 
+func TestRouterRateLimitAppliesBeforeInvalidJWTRejection(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{
+			JWTSecret:         "top-secret",
+			RateLimitRequests: 1,
+			RateLimitWindow:   time.Minute,
+		},
+	)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.RemoteAddr = "172.18.0.1:40000"
+	req1.Header.Set("Authorization", "Bearer not-a-jwt")
+	rec1 := httptest.NewRecorder()
+	router.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusUnauthorized {
+		t.Fatalf("unexpected first status: %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.RemoteAddr = "172.18.0.1:40000"
+	req2.Header.Set("Authorization", "Bearer not-a-jwt")
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("unexpected second status: %d body=%s", rec2.Code, rec2.Body.String())
+	}
+}
+
 func TestRouterAcceptsValidJWT(t *testing.T) {
 	router := api.NewRouter(
 		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
@@ -246,6 +276,36 @@ func TestRouterAcceptsValidJWT(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("unexpected status: %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRouterRateLimitUsesForwardedIPForTrustedProxy(t *testing.T) {
+	router := api.NewRouter(
+		api.NewRaceHandler(service.NewRaceService(nil, &mocks.RaceArchiveStoreMock{}), api.RaceDefaults{}, time.Second),
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		config.Config{
+			RateLimitRequests: 1,
+			RateLimitWindow:   time.Minute,
+			TrustedProxyCIDRs: []string{"10.0.0.0/8"},
+		},
+	)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req1.RemoteAddr = "10.1.1.10:40000"
+	req1.Header.Set("X-Forwarded-For", "203.0.113.10")
+	rec1 := httptest.NewRecorder()
+	router.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("unexpected first status: %d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	req2.RemoteAddr = "10.1.1.10:40001"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.11")
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("unexpected second status: %d body=%s", rec2.Code, rec2.Body.String())
 	}
 }
 

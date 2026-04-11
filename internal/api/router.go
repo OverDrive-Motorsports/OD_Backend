@@ -99,7 +99,7 @@ func NewRouter(handler *RaceHandler, logger *slog.Logger, cfg config.Config) htt
 		withSecurityHeaders,
 		withRequestValidation(logger, cfg),
 		withCORS(logger, cfg),
-		withOptionalAuth(logger, cfg),
 		withRateLimit(logger, cfg),
+		withOptionalAuth(logger, cfg),
 	)
 }

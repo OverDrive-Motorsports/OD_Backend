@@ -46,6 +46,9 @@ Behavior:
 - if a client exceeds the configured quota, the backend returns `429 rate limit exceeded`
 - `Retry-After` is returned
 - `/health` and CORS preflight requests are excluded
+- rate limiting is applied before JWT rejection, so repeated invalid-token traffic is also throttled
+- when the request comes from a configured trusted proxy, the limiter uses the forwarded client IP instead of the proxy IP
+`TRUSTED_PROXY_CIDRS` should remain empty unless the backend is deployed behind a proxy or ingress that you control.
 
 ### Request Target Validation
 

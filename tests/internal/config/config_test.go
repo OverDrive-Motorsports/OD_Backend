@@ -25,6 +25,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("OPENF1_RETRY_DELAY", "")
 	t.Setenv("LOG_FORMAT", "")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
 	t.Setenv("RATE_LIMIT_REQUESTS", "")
 	t.Setenv("RATE_LIMIT_WINDOW", "")
 	t.Setenv("MAX_PATH_LENGTH", "")
@@ -65,6 +66,9 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.CORSAllowedOrigins) != 0 {
 		t.Fatalf("unexpected default cors origins: %#v", cfg.CORSAllowedOrigins)
 	}
+	if len(cfg.TrustedProxyCIDRs) != 0 {
+		t.Fatalf("unexpected default trusted proxy cidrs: %#v", cfg.TrustedProxyCIDRs)
+	}
 	if cfg.APIAddr != ":8080" {
 		t.Fatalf("unexpected default api addr: %s", cfg.APIAddr)
 	}
@@ -79,6 +83,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("OPENF1_RETRY_DELAY", "2s")
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, https://beta.overdrive.app")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8,127.0.0.1/32")
 	t.Setenv("RATE_LIMIT_REQUESTS", "12")
 	t.Setenv("RATE_LIMIT_WINDOW", "30s")
 	t.Setenv("MAX_PATH_LENGTH", "256")
@@ -112,6 +117,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if len(cfg.CORSAllowedOrigins) != 2 {
 		t.Fatalf("unexpected cors origins: %#v", cfg.CORSAllowedOrigins)
+	}
+	if len(cfg.TrustedProxyCIDRs) != 2 {
+		t.Fatalf("unexpected trusted proxy cidrs: %#v", cfg.TrustedProxyCIDRs)
 	}
 	if cfg.RateLimitRequests != 12 {
 		t.Fatalf("unexpected rate limit requests: %d", cfg.RateLimitRequests)

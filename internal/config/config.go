@@ -25,6 +25,7 @@ type Config struct {
 	RetryDelay         time.Duration
 	LogFormat          string
 	CORSAllowedOrigins []string
+	TrustedProxyCIDRs  []string
 	RateLimitRequests  int
 	RateLimitWindow    time.Duration
 	MaxPathLength      int
@@ -47,6 +48,7 @@ func Load() Config {
 		RetryDelay:         getEnvDuration("OPENF1_RETRY_DELAY", 1200*time.Millisecond),
 		LogFormat:          getEnv("LOG_FORMAT", "pretty"),
 		CORSAllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS"),
+		TrustedProxyCIDRs:  getEnvCSV("TRUSTED_PROXY_CIDRS"),
 		RateLimitRequests:  getEnvInt("RATE_LIMIT_REQUESTS", 60),
 		RateLimitWindow:    getEnvDuration("RATE_LIMIT_WINDOW", time.Minute),
 		MaxPathLength:      getEnvInt("MAX_PATH_LENGTH", 512),

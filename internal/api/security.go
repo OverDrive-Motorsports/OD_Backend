@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"overdrive/internal/config"
 	"strings"
@@ -186,6 +187,7 @@ func withCORS(logger *slog.Logger, cfg config.Config) func(http.Handler) http.Ha
 func withRateLimit(logger *slog.Logger, cfg config.Config) func(http.Handler) http.Handler {
 	cfg = normalizeSecurityConfig(cfg)
 	limiter := newIPRateLimiter(cfg.RateLimitRequests, cfg.RateLimitWindow)
+	trustedProxies := parseTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +196,7 @@ func withRateLimit(logger *slog.Logger, cfg config.Config) func(http.Handler) ht
 				return
 			}
 
-			clientIP := clientIPFromRemoteAddr(r.RemoteAddr)
+			clientIP := clientIPFromRequest(r, trustedProxies)
 			if clientIP == "" {
 				clientIP = "unknown"
 			}
@@ -448,4 +450,84 @@ func containsString(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func parseTrustedProxyCIDRs(raw []string) []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(raw))
+	for _, item := range raw {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+
+		if strings.Contains(item, "/") {
+			_, network, err := net.ParseCIDR(item)
+			if err == nil {
+				out = append(out, network)
+			}
+			continue
+		}
+
+		ip := net.ParseIP(item)
+		if ip == nil {
+			continue
+		}
+		maskSize := 32
+		if ip.To4() == nil {
+			maskSize = 128
+		}
+		out = append(out, &net.IPNet{IP: ip, Mask: net.CIDRMask(maskSize, maskSize)})
+	}
+	return out
+}
+
+func clientIPFromRequest(r *http.Request, trustedProxies []*net.IPNet) string {
+	remoteIP := clientIPFromRemoteAddr(r.RemoteAddr)
+	if remoteIP == "" {
+		return ""
+	}
+	if len(trustedProxies) == 0 {
+		return remoteIP
+	}
+
+	parsedRemote := net.ParseIP(remoteIP)
+	if parsedRemote == nil || !ipInNetworks(parsedRemote, trustedProxies) {
+		return remoteIP
+	}
+
+	if forwarded := firstForwardedIP(r.Header.Get("X-Forwarded-For")); forwarded != "" {
+		return forwarded
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		if parsed := net.ParseIP(realIP); parsed != nil {
+			return parsed.String()
+		}
+	}
+
+	return remoteIP
+}
+
+func ipInNetworks(ip net.IP, networks []*net.IPNet) bool {
+	for _, network := range networks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstForwardedIP(header string) string {
+	if strings.TrimSpace(header) == "" {
+		return ""
+	}
+	for _, part := range strings.Split(header, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if parsed := net.ParseIP(part); parsed != nil {
+			return parsed.String()
+		}
+	}
+	return ""
 }
