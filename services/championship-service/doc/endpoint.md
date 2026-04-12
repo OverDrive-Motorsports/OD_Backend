@@ -1,10 +1,18 @@
-# championship-service endpoint
+# championship-service endpoints
 
-## `GET /health`
+## Endpoint `GET /health`
 
 Returns the runtime status of the service.
 
-### Response
+### Parameters
+
+| Parameter | Location | Mandatory | Description |
+| --- | --- | --- | --- |
+| None | - | No | This endpoint does not accept path parameters, query parameters, headers, or request body fields. |
+
+### Returned Message
+
+Status: `200 OK`
 
 ```json
 {
@@ -13,3 +21,6 @@ Returns the runtime status of the service.
 }
 ```
 
+### Error Messages
+
+No endpoint-specific error response is currently implemented for this handler.
