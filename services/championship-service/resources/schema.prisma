@@ -1,0 +1,258 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## database_scheme.sql - Database scheme file for PostgreSQL
+ ##
+*/
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CHAMPIONSHIP_DATABASE_URL")
+}
+
+generator db {
+  provider = "go run github.com/steebchen/prisma-client-go"
+}
+
+enum ProviderStatus {
+  active
+  beta
+  disabled
+}
+
+enum EventStatus {
+  scheduled
+  live
+  finished
+}
+
+enum SessionType {
+  race
+  sprint
+  quali
+  practice
+}
+
+enum SessionStatus {
+  scheduled
+  live
+  finished
+}
+
+//-------------------------
+// Championship Catalog
+//-------------------------
+model Provider {
+  id        String         @id @default(uuid())
+  code      String         @unique @db.VarChar(20)
+  name      String         @db.VarChar(50)
+  status    ProviderStatus @default(active)
+  createdAt DateTime       @default(now())
+
+  connections ProviderConnection[]
+  championships Championship[]
+}
+
+//-------------------------
+// Championship Structure
+//-------------------------
+model Championship {
+  id          String   @id @default(uuid())
+  providerId  String
+  code        String   @db.VarChar(20)
+  name        String   @db.VarChar(80)
+  category    String?  @db.VarChar(40)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  events   Event[]
+  teams    Team[]
+  drivers  Driver[]
+
+  @@unique([providerId, code])
+  @@index([providerId])
+}
+
+//-------------------------
+// Event Schedule
+//-------------------------
+model Event {
+  id             String      @id @default(uuid())
+  championshipId String
+  seasonYear     Int
+  roundNumber    Int?
+  name           String      @db.VarChar(120)
+  officialName   String?     @db.VarChar(255)
+  location       String      @db.VarChar(255)
+  countryName    String?     @db.VarChar(80)
+  countryCode    String?     @db.VarChar(3)
+  circuitName    String?     @db.VarChar(120)
+  externalKey    String?     @db.VarChar(64)
+  startTimeUtc   DateTime
+  endTimeUtc     DateTime
+  status         EventStatus
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  sessions     Session[]
+
+  @@unique([championshipId, externalKey])
+  @@index([championshipId])
+  @@index([seasonYear, startTimeUtc])
+}
+
+//-------------------------
+// Session Timeline
+//-------------------------
+model Session {
+  id           String        @id @default(uuid())
+  eventId      String
+  type         SessionType
+  status       SessionStatus
+  name         String?       @db.VarChar(80)
+  externalKey  String?       @db.VarChar(64)
+  broadcastUrl String?       @db.VarChar(255)
+  startedAtUtc DateTime
+  endedAtUtc   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  event                  Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  highlights             RaceHighlight[]
+  archives               RaceArchive[]
+  laps                   RaceLap[]
+  telemetrySamples       RaceTelemetrySample[]
+  locationSamples        RaceLocationSample[]
+  positionSamples        RacePositionSample[]
+  intervalSamples        RaceIntervalSample[]
+  stintRows              RaceStint[]
+  pitStops               RacePitStop[]
+  raceControlEvents      RaceControlEvent[]
+  teamRadioMessages      TeamRadioMessage[]
+  weatherSamples         RaceWeatherSample[]
+  sessionResultRows      SessionResultRow[]
+  startingGridRows       StartingGridRow[]
+  overtakeEvents         OvertakeEvent[]
+  driverChampionshipRows DriverChampionshipStanding[]
+  teamChampionshipRows   TeamChampionshipStanding[]
+  driverBroadcasts       SessionDriverBroadcast[]
+
+  @@unique([eventId, externalKey])
+  @@index([eventId])
+}
+
+//-------------------------
+// Championship Participants
+//-------------------------
+model Team {
+  id          String  @id @default(uuid())
+  championshipId String
+  name        String  @db.VarChar(80)
+  code        String? @db.VarChar(20)
+  colorHex    String? @db.VarChar(7)
+  externalKey String? @db.VarChar(64)
+
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  drivers      Driver[]
+
+  @@unique([championshipId, externalKey])
+  @@unique([championshipId, code])
+  @@index([championshipId])
+}
+
+model Driver {
+  id          String   @id @default(uuid())
+  championshipId String
+  teamId      String
+  displayName String   @db.VarChar(80)
+  firstName   String?  @db.VarChar(60)
+  lastName    String?  @db.VarChar(60)
+  code        String?  @db.VarChar(20)
+  number      Int
+  countryCode String?  @db.VarChar(3)
+  externalKey String?  @db.VarChar(64)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sessionBroadcasts SessionDriverBroadcast[]
+
+  @@unique([championshipId, code])
+  @@unique([championshipId, externalKey])
+  @@index([championshipId])
+  @@index([teamId])
+}
+
+//-------------------------
+// Session Standings
+//-------------------------
+model SessionResultRow {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  position     Int?
+  points       Float?
+  status       String?  @db.VarChar(40)
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, position])
+}
+
+model StartingGridRow {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  gridPosition Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, gridPosition])
+}
+
+model DriverChampionshipStanding {
+  id              BigInt   @id @default(autoincrement())
+  sessionId       String
+  driverNumber    Int
+  positionCurrent Int?
+  positionStart   Int?
+  pointsCurrent   Float?
+  pointsStart     Float?
+  raw             Json
+  createdAt       DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, driverNumber])
+  @@index([sessionId, positionCurrent])
+}
+
+model TeamChampionshipStanding {
+  id              BigInt   @id @default(autoincrement())
+  sessionId       String
+  teamName        String?  @db.VarChar(80)
+  teamCode        String?  @db.VarChar(20)
+  positionCurrent Int?
+  positionStart   Int?
+  pointsCurrent   Float?
+  pointsStart     Float?
+  raw             Json
+  createdAt       DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, positionCurrent])
+  @@index([sessionId, teamName])
+}
