@@ -1,6 +1,6 @@
 .git
-.github
-scripts
-docs
-.gitignore
-resources/db
+bin
+dist
+coverage.out
+*.log
+

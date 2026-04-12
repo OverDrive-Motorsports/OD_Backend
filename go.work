@@ -1,0 +1,10 @@
+go 1.22
+
+use (
+	./shared/bootstrap
+	./services/auth-service
+	./services/user-data-service
+	./services/championship-service
+	./services/race-data-service
+	./services/ingestion-service
+)
