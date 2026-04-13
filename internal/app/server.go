@@ -37,7 +37,7 @@ func NewHTTPServer(cfg config.Config, defaults api.RaceDefaults, logger *slog.Lo
 	store := repositoryprisma.NewRaceArchiveStore(database.PrismaClient)
 	raceService := service.NewRaceService(builder, store)
 	raceHandler := api.NewRaceHandler(raceService, defaults, cfg.GetRaceTimeout)
-	router := api.NewRouter(raceHandler, logger)
+	router := api.NewRouter(raceHandler, logger, cfg)
 
 	return &http.Server{
 		Addr:              addr,

@@ -28,6 +28,12 @@ OD_Backend/
 │   │   │  - HTTP middleware stack.
 │   │   │  - Adds request IDs, panic recovery, and structured access logs.
 │   │   │
+│   │   ├── security.go
+│   │   │  Role:
+│   │   │  - HTTP security middleware stack.
+│   │   │  - Adds security headers, CORS filtering, request target validation, optional JWT parsing,
+│   │   │    suspicious activity logging, and per-IP rate limiting.
+│   │   │
 │   │   ├── race_handler.go
 │   │   │  Role:
 │   │   │  - Main HTTP transport layer.
@@ -57,7 +63,7 @@ OD_Backend/
 │   │   └── config.go
 │   │      Role:
 │   │      - Central runtime configuration.
-│   │      - Reads env vars and applies defaults for API, OpenF1, timeouts, retry policy, and throttling.
+│   │      - Reads env vars and applies defaults for API, OpenF1, timeouts, retry policy, throttling, and security controls.
 │   │
 │   ├── database/
 │   │   └── database.go
@@ -154,6 +160,11 @@ OD_Backend/
 │   │  Role:
 │   │  - API route reference.
 │   │  - Documents public endpoints, parameters, and returned payloads.
+│   │
+│   ├── security.md
+│   │  Role:
+│   │  - Security hardening reference.
+│   │  - Documents CORS, JWT validation, rate limiting, request validation, and local security config.
 │   │
 │   ├── tree.md
 │   │  Role:

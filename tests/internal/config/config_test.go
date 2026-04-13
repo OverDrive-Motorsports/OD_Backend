@@ -24,6 +24,15 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("OPENF1_MAX_RETRIES", "")
 	t.Setenv("OPENF1_RETRY_DELAY", "")
 	t.Setenv("LOG_FORMAT", "")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
+	t.Setenv("RATE_LIMIT_REQUESTS", "")
+	t.Setenv("RATE_LIMIT_WINDOW", "")
+	t.Setenv("MAX_PATH_LENGTH", "")
+	t.Setenv("MAX_QUERY_LENGTH", "")
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("JWT_ISSUER", "")
+	t.Setenv("JWT_AUDIENCE", "")
 	t.Setenv("API_ADDR", "")
 	t.Setenv("GETRACE_TIMEOUT", "")
 	t.Setenv("API_SHUTDOWN_TIMEOUT", "")
@@ -42,6 +51,24 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LogFormat != "pretty" {
 		t.Fatalf("unexpected default log format: %s", cfg.LogFormat)
 	}
+	if cfg.RateLimitRequests != 60 {
+		t.Fatalf("unexpected default rate limit requests: %d", cfg.RateLimitRequests)
+	}
+	if cfg.RateLimitWindow != time.Minute {
+		t.Fatalf("unexpected default rate limit window: %s", cfg.RateLimitWindow)
+	}
+	if cfg.MaxPathLength != 512 {
+		t.Fatalf("unexpected default max path length: %d", cfg.MaxPathLength)
+	}
+	if cfg.MaxQueryLength != 2048 {
+		t.Fatalf("unexpected default max query length: %d", cfg.MaxQueryLength)
+	}
+	if len(cfg.CORSAllowedOrigins) != 0 {
+		t.Fatalf("unexpected default cors origins: %#v", cfg.CORSAllowedOrigins)
+	}
+	if len(cfg.TrustedProxyCIDRs) != 0 {
+		t.Fatalf("unexpected default trusted proxy cidrs: %#v", cfg.TrustedProxyCIDRs)
+	}
 	if cfg.APIAddr != ":8080" {
 		t.Fatalf("unexpected default api addr: %s", cfg.APIAddr)
 	}
@@ -55,6 +82,15 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("OPENF1_MAX_RETRIES", "5")
 	t.Setenv("OPENF1_RETRY_DELAY", "2s")
 	t.Setenv("LOG_FORMAT", "json")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, https://beta.overdrive.app")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8,127.0.0.1/32")
+	t.Setenv("RATE_LIMIT_REQUESTS", "12")
+	t.Setenv("RATE_LIMIT_WINDOW", "30s")
+	t.Setenv("MAX_PATH_LENGTH", "256")
+	t.Setenv("MAX_QUERY_LENGTH", "1024")
+	t.Setenv("JWT_SECRET", "top-secret")
+	t.Setenv("JWT_ISSUER", "overdrive")
+	t.Setenv("JWT_AUDIENCE", "beta-client")
 	t.Setenv("API_ADDR", ":9090")
 	t.Setenv("GETRACE_TIMEOUT", "15m")
 	t.Setenv("API_SHUTDOWN_TIMEOUT", "20s")
@@ -78,6 +114,27 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.LogFormat != "json" {
 		t.Fatalf("unexpected override log format: %s", cfg.LogFormat)
+	}
+	if len(cfg.CORSAllowedOrigins) != 2 {
+		t.Fatalf("unexpected cors origins: %#v", cfg.CORSAllowedOrigins)
+	}
+	if len(cfg.TrustedProxyCIDRs) != 2 {
+		t.Fatalf("unexpected trusted proxy cidrs: %#v", cfg.TrustedProxyCIDRs)
+	}
+	if cfg.RateLimitRequests != 12 {
+		t.Fatalf("unexpected rate limit requests: %d", cfg.RateLimitRequests)
+	}
+	if cfg.RateLimitWindow != 30*time.Second {
+		t.Fatalf("unexpected rate limit window: %s", cfg.RateLimitWindow)
+	}
+	if cfg.MaxPathLength != 256 {
+		t.Fatalf("unexpected max path length: %d", cfg.MaxPathLength)
+	}
+	if cfg.MaxQueryLength != 1024 {
+		t.Fatalf("unexpected max query length: %d", cfg.MaxQueryLength)
+	}
+	if cfg.JWTSecret != "top-secret" || cfg.JWTIssuer != "overdrive" || cfg.JWTAudience != "beta-client" {
+		t.Fatalf("unexpected jwt config: %#v", cfg)
 	}
 	if cfg.APIAddr != ":9090" {
 		t.Fatalf("unexpected override api addr: %s", cfg.APIAddr)
