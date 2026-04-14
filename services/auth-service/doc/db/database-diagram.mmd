@@ -1,0 +1,19 @@
+erDiagram
+    USER {
+        string id PK
+        string email UK
+        string displayName
+        string passwordHash
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    AUTH_SESSION {
+        string id PK
+        string userId FK
+        string refreshTokenHash
+        datetime expiresAt
+        datetime createdAt
+    }
+
+    USER ||--o{ AUTH_SESSION : owns
