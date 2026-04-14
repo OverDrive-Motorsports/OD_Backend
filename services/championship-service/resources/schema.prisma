@@ -9,7 +9,6 @@
 
 datasource db {
   provider = "postgresql"
-  url      = env("CHAMPIONSHIP_DATABASE_URL")
 }
 
 generator db {
@@ -51,7 +50,6 @@ model Provider {
   status    ProviderStatus @default(active)
   createdAt DateTime       @default(now())
 
-  connections ProviderConnection[]
   championships Championship[]
 }
 
@@ -122,25 +120,11 @@ model Session {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  event                  Event                        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  highlights             RaceHighlight[]
-  archives               RaceArchive[]
-  laps                   RaceLap[]
-  telemetrySamples       RaceTelemetrySample[]
-  locationSamples        RaceLocationSample[]
-  positionSamples        RacePositionSample[]
-  intervalSamples        RaceIntervalSample[]
-  stintRows              RaceStint[]
-  pitStops               RacePitStop[]
-  raceControlEvents      RaceControlEvent[]
-  teamRadioMessages      TeamRadioMessage[]
-  weatherSamples         RaceWeatherSample[]
+  event                  Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   sessionResultRows      SessionResultRow[]
   startingGridRows       StartingGridRow[]
-  overtakeEvents         OvertakeEvent[]
   driverChampionshipRows DriverChampionshipStanding[]
   teamChampionshipRows   TeamChampionshipStanding[]
-  driverBroadcasts       SessionDriverBroadcast[]
 
   @@unique([eventId, externalKey])
   @@index([eventId])
@@ -180,8 +164,7 @@ model Driver {
   updatedAt   DateTime @updatedAt
 
   championship Championship @relation(fields: [championshipId], references: [id], onDelete: Cascade)
-  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  sessionBroadcasts SessionDriverBroadcast[]
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([championshipId, code])
   @@unique([championshipId, externalKey])

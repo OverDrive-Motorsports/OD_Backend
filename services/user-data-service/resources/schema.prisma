@@ -9,7 +9,6 @@
 
 datasource db {
   provider = "postgresql"
-  url      = env("USER_DATA_DATABASE_URL")
 }
 
 generator db {
@@ -31,10 +30,8 @@ model ProviderConnection {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-
   @@unique([userId, providerId])
+  @@index([userId])
   @@index([providerId])
 }
 
@@ -49,7 +46,6 @@ model UserPreset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   widgets PresetWidget[]
 
   @@index([userId])

@@ -9,7 +9,6 @@
 
 datasource db {
   provider = "postgresql"
-  url      = env("AUTH_DATABASE_URL")
 }
 
 generator db {
@@ -27,9 +26,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  authSessions        AuthSession[]
-  providerConnections ProviderConnection[]
-  presets             UserPreset[]
+  authSessions AuthSession[]
 }
 
 model AuthSession {

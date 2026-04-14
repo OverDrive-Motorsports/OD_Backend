@@ -9,7 +9,6 @@
 
 datasource db {
   provider = "postgresql"
-  url      = env("RACE_DATA_DATABASE_URL")
 }
 
 generator db {
@@ -41,8 +40,6 @@ model RaceLap {
   raw            Json
   createdAt      DateTime  @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@unique([sessionId, driverNumber, lapNumber])
   @@index([sessionId, driverNumber, lapNumber])
   @@index([sessionId, dateStartUtc])
@@ -62,8 +59,6 @@ model RaceTelemetrySample {
   raw          Json
   createdAt    DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId, dateUtc])
   @@index([sessionId, driverNumber, dateUtc])
 }
@@ -78,8 +73,6 @@ model RaceLocationSample {
   z            Float?
   raw          Json
   createdAt    DateTime @default(now())
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, dateUtc])
   @@index([sessionId, driverNumber, dateUtc])
@@ -98,8 +91,6 @@ model RacePositionSample {
   raw          Json
   createdAt    DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId, dateUtc])
   @@index([sessionId, driverNumber, dateUtc])
   @@index([sessionId, position])
@@ -114,8 +105,6 @@ model RaceIntervalSample {
   intervalToFrontDriver String?  @db.VarChar(40)
   raw                   Json
   createdAt             DateTime @default(now())
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, dateUtc])
   @@index([sessionId, driverNumber, dateUtc])
@@ -133,8 +122,6 @@ model RaceStint {
   raw              Json
   createdAt        DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId, driverNumber])
   @@index([sessionId, lapStart, lapEnd])
 }
@@ -148,8 +135,6 @@ model RacePitStop {
   pitDurationSec Float?
   raw            Json
   createdAt      DateTime  @default(now())
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, driverNumber, dateUtc])
   @@index([sessionId, lapNumber])
@@ -167,8 +152,6 @@ model RaceControlEvent {
   message      String?
   raw          Json
   createdAt    DateTime @default(now())
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, dateUtc])
   @@index([sessionId, category])
@@ -189,8 +172,6 @@ model RaceWeatherSample {
   raw              Json
   createdAt        DateTime @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId, dateUtc])
 }
 
@@ -205,8 +186,6 @@ model RaceHighlight {
   summary     String
   metadata    Json
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId])
 }
 
@@ -219,8 +198,6 @@ model OvertakeEvent {
   overtakenDriverNumber  Int?
   raw                    Json
   createdAt              DateTime  @default(now())
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, dateUtc])
   @@index([sessionId, lapNumber])
@@ -236,8 +213,6 @@ model TeamRadioMessage {
   raw          Json
   createdAt    DateTime  @default(now())
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([sessionId, driverNumber, dateUtc])
 }
 
@@ -248,9 +223,6 @@ model SessionDriverBroadcast {
   broadcastUrl String   @db.VarChar(255)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, driverId])
   @@index([sessionId])
@@ -272,7 +244,6 @@ model RaceArchive {
   counts             Json
   fetchErrors        Json?
 
-  session  Session            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   datasets RaceDatasetChunk[]
 
   @@index([sessionId, generatedAt(sort: Desc)])
