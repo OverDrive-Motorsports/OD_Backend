@@ -1,15 +1,26 @@
-import "dotenv/config";
 import path from "node:path";
+import { config as loadEnv } from "dotenv";
 import { defineConfig } from "prisma/config";
 
 const DEFAULT_SCHEMA = "services/auth-service/resources/schema.prisma";
-const FALLBACK_DATABASE_URL = "postgresql://prisma:prisma@localhost:5432/overdrive";
-
-const schemaEnvMap: Record<string, string> = {
-  "services/auth-service/resources/schema.prisma": "AUTH_DATABASE_URL",
-  "services/user-data-service/resources/schema.prisma": "USER_DATA_DATABASE_URL",
-  "services/championship-service/resources/schema.prisma": "CHAMPIONSHIP_DATABASE_URL",
-  "services/race-data-service/resources/schema.prisma": "RACE_DATA_DATABASE_URL",
+const ROOT_ENV_PATH = path.resolve(".env");
+const schemaConfigMap: Record<string, { envName: string; fallbackUrl: string }> = {
+  "services/auth-service/resources/schema.prisma": {
+    envName: "AUTH_DATABASE_URL",
+    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_auth?schema=public",
+  },
+  "services/user-data-service/resources/schema.prisma": {
+    envName: "USER_DATA_DATABASE_URL",
+    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_user_data?schema=public",
+  },
+  "services/championship-service/resources/schema.prisma": {
+    envName: "CHAMPIONSHIP_DATABASE_URL",
+    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_championship?schema=public",
+  },
+  "services/race-data-service/resources/schema.prisma": {
+    envName: "RACE_DATA_DATABASE_URL",
+    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_race_data?schema=public",
+  },
 };
 
 function getSchemaArg(): string | undefined {
@@ -32,12 +43,24 @@ function normalizeSchemaPath(schemaPath: string): string {
   return path.normalize(schemaPath).replace(/\\/g, "/");
 }
 
+function loadServiceEnv(schemaPath: string): void {
+  const serviceDir = path.resolve(path.dirname(schemaPath), "..");
+  const envPath = path.join(serviceDir, ".env");
+
+  loadEnv({ path: envPath, override: false });
+}
+
+loadEnv({ path: ROOT_ENV_PATH, override: false });
+
 const requestedSchema = normalizeSchemaPath(getSchemaArg() ?? DEFAULT_SCHEMA);
 const schemaEntry =
-  Object.entries(schemaEnvMap).find(([schemaPath]) => requestedSchema.endsWith(schemaPath)) ??
-  [DEFAULT_SCHEMA, schemaEnvMap[DEFAULT_SCHEMA]];
-const [schema, envName] = schemaEntry;
-const datasourceUrl = process.env[envName] ?? FALLBACK_DATABASE_URL;
+  Object.entries(schemaConfigMap).find(([schemaPath]) => requestedSchema.endsWith(schemaPath)) ??
+  [DEFAULT_SCHEMA, schemaConfigMap[DEFAULT_SCHEMA]];
+const [schema, schemaConfig] = schemaEntry;
+
+loadServiceEnv(schema);
+
+const datasourceUrl = process.env[schemaConfig.envName] ?? schemaConfig.fallbackUrl;
 
 export default defineConfig({
   schema,

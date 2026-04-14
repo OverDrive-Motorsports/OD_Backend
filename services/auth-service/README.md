@@ -12,6 +12,8 @@ go run ./services/auth-service
 
 Default port: `3001`
 
+Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target its dedicated `overdrive_auth` database locally.
+
 ## Current behavior
 
 - exposes `GET /health`

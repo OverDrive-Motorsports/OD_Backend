@@ -12,6 +12,8 @@ go run ./services/championship-service
 
 Default port: `3003`
 
+Database ownership: `championship-service` owns `CHAMPIONSHIP_DATABASE_URL`, which should target its dedicated `overdrive_championship` database locally.
+
 ## Current behavior
 
 - exposes `GET /health`

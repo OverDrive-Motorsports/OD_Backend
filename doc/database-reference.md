@@ -20,6 +20,7 @@ At the moment, 4 services own a database:
 Each service owns its schema independently.
 There are no direct SQL foreign keys between services.
 Cross-service consistency is handled through shared business identifiers stored as plain fields.
+Each service must also keep an isolated physical database connection in deployment and local development.
 
 <br>
 <br>
@@ -166,3 +167,17 @@ The backend currently uses a distributed database model:
 - no direct relational coupling between services
 - logical consistency maintained through shared identifiers
 - strong separation between transactional data, reference catalog data, and analytical race data
+
+## Configuration rules
+
+The database split is enforced by configuration as well as by schema design.
+
+| Service | Prisma schema | Environment variable | Default local database |
+| --- | --- | --- | --- |
+| `auth-service` | `services/auth-service/resources/schema.prisma` | `AUTH_DATABASE_URL` | `overdrive_auth` |
+| `user-data-service` | `services/user-data-service/resources/schema.prisma` | `USER_DATA_DATABASE_URL` | `overdrive_user_data` |
+| `championship-service` | `services/championship-service/resources/schema.prisma` | `CHAMPIONSHIP_DATABASE_URL` | `overdrive_championship` |
+| `race-data-service` | `services/race-data-service/resources/schema.prisma` | `RACE_DATA_DATABASE_URL` | `overdrive_race_data` |
+
+When Prisma is executed from the repository root, it loads the `.env` file from the owning service directory before resolving the datasource URL.
+If a service-specific environment variable is missing, the local fallback still targets that service's own database rather than a shared `overdrive` database.

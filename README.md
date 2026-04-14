@@ -68,6 +68,21 @@ Each service currently exposes:
 
 Each service includes a scaffolded `.env` file and `.env.template` with `HTTP_PORT` and `APP_VERSION`.
 
+## Database setup
+
+The backend uses one PostgreSQL database per service.
+Root Prisma commands resolve the service-specific `.env` file automatically based on the selected schema.
+
+| Service | Environment variable | Default local database |
+| --- | --- | --- |
+| `auth-service` | `AUTH_DATABASE_URL` | `overdrive_auth` |
+| `user-data-service` | `USER_DATA_DATABASE_URL` | `overdrive_user_data` |
+| `championship-service` | `CHAMPIONSHIP_DATABASE_URL` | `overdrive_championship` |
+| `race-data-service` | `RACE_DATA_DATABASE_URL` | `overdrive_race_data` |
+
+This separation is required to keep database ownership aligned with the multi-service architecture.
+Do not point multiple services to the same physical database in deployment.
+
 ## Next steps
 
 - replace placeholder service info use cases with real domain use cases
