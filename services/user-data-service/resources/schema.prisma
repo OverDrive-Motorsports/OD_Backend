@@ -1,0 +1,75 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## database_scheme.sql - Database scheme file for PostgreSQL
+ ##
+*/
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator db {
+  provider = "go run github.com/steebchen/prisma-client-go"
+}
+
+enum WidgetType {
+  video
+}
+
+//-------------------------
+// External Provider Links
+//-------------------------
+model ProviderConnection {
+  id         String   @id @default(uuid())
+  userId     String
+  providerId String
+  configJson Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, providerId])
+  @@index([userId])
+  @@index([providerId])
+}
+
+//-------------------------
+// User Layout Presets
+//-------------------------
+model UserPreset {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String   @db.VarChar(50)
+  isDefault Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  widgets PresetWidget[]
+
+  @@index([userId])
+}
+
+//-------------------------
+// Preset Widgets
+//-------------------------
+model PresetWidget {
+  id        String   @id @default(uuid())
+  presetId  String
+  type      WidgetType
+  settings  Json
+  posX      Float
+  posY      Float
+  posZ      Float
+  rotX      Float
+  rotY      Float
+  rotZ      Float
+  width     Float
+  height    Float
+  orderIndex Int     @default(0)
+
+  preset UserPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+
+  @@index([presetId])
+}

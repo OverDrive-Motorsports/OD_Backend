@@ -4,5 +4,6 @@ coverage.out
 *.log
 .DS_Store
 .env
+node_modules/
+package-lock.json
 go.work.sum
-

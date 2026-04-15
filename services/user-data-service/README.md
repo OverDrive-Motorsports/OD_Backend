@@ -12,6 +12,8 @@ go run ./services/user-data-service
 
 Default port: `3002`
 
+Database ownership: `user-data-service` owns `USER_DATA_DATABASE_URL`, which should target its dedicated `overdrive_user_data` database locally.
+
 ## Current behavior
 
 - exposes `GET /health`

@@ -1,0 +1,99 @@
+flowchart TB
+    subgraph AUTH_DB["auth-service database"]
+        AUTH_USER["User
+id
+email
+displayName"]
+        AUTH_SESSION["AuthSession
+userId
+refreshTokenHash
+expiresAt"]
+        AUTH_USER --> AUTH_SESSION
+    end
+
+    subgraph USER_DATA_DB["user-data-service database"]
+        UDS_CONNECTION["ProviderConnection
+userId
+providerId
+configJson"]
+        UDS_PRESET["UserPreset
+id
+userId
+name"]
+        UDS_WIDGET["PresetWidget
+presetId
+type
+settings"]
+        UDS_PRESET --> UDS_WIDGET
+    end
+
+    subgraph CHAMPIONSHIP_DB["championship-service database"]
+        CH_PROVIDER["Provider
+id
+code
+status"]
+        CH_CHAMP["Championship
+id
+providerId
+code"]
+        CH_EVENT["Event
+id
+championshipId
+seasonYear"]
+        CH_SESSION["Session
+id
+eventId
+type"]
+        CH_TEAM["Team
+id
+championshipId
+code"]
+        CH_DRIVER["Driver
+id
+teamId
+number"]
+        CH_STANDINGS["Standings tables
+SessionResultRow
+StartingGridRow
+DriverChampionshipStanding
+TeamChampionshipStanding"]
+        CH_PROVIDER --> CH_CHAMP
+        CH_CHAMP --> CH_EVENT
+        CH_CHAMP --> CH_TEAM
+        CH_CHAMP --> CH_DRIVER
+        CH_EVENT --> CH_SESSION
+        CH_TEAM --> CH_DRIVER
+        CH_SESSION --> CH_STANDINGS
+    end
+
+    subgraph RACE_DATA_DB["race-data-service database"]
+        RD_TIMING["Timing and telemetry
+RaceLap
+RaceTelemetrySample
+RaceLocationSample"]
+        RD_FLOW["Race flow
+RacePositionSample
+RaceIntervalSample
+RaceStint
+RacePitStop
+RaceControlEvent
+RaceWeatherSample"]
+        RD_MEDIA["Media and highlights
+RaceHighlight
+OvertakeEvent
+TeamRadioMessage
+SessionDriverBroadcast"]
+        RD_ARCHIVE["Archive
+RaceArchive
+RaceDatasetChunk"]
+        RD_ARCHIVE --> RD_TIMING
+        RD_ARCHIVE --> RD_FLOW
+        RD_ARCHIVE --> RD_MEDIA
+    end
+
+    UDS_CONNECTION -. "userId" .-> AUTH_USER
+    UDS_CONNECTION -. "providerId" .-> CH_PROVIDER
+    RD_TIMING -. "sessionId" .-> CH_SESSION
+    RD_FLOW -. "sessionId" .-> CH_SESSION
+    RD_MEDIA -. "sessionId" .-> CH_SESSION
+    RD_MEDIA -. "driverId / driverNumber" .-> CH_DRIVER

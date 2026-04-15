@@ -12,6 +12,8 @@ go run ./services/race-data-service
 
 Default port: `3004`
 
+Database ownership: `race-data-service` owns `RACE_DATA_DATABASE_URL`, which should target its dedicated `overdrive_race_data` database locally.
+
 ## Current behavior
 
 - exposes `GET /health`

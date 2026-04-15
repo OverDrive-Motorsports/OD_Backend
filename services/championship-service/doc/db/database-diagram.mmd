@@ -1,0 +1,132 @@
+erDiagram
+    PROVIDER {
+        string id PK
+        string code UK
+        string name
+        ProviderStatus status
+        datetime createdAt
+    }
+
+    CHAMPIONSHIP {
+        string id PK
+        string providerId FK
+        string code
+        string name
+        string category
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    EVENT {
+        string id PK
+        string championshipId FK
+        int seasonYear
+        int roundNumber
+        string name
+        string officialName
+        string location
+        string countryName
+        string countryCode
+        string circuitName
+        string externalKey
+        datetime startTimeUtc
+        datetime endTimeUtc
+        EventStatus status
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SESSION {
+        string id PK
+        string eventId FK
+        SessionType type
+        SessionStatus status
+        string name
+        string externalKey
+        string broadcastUrl
+        datetime startedAtUtc
+        datetime endedAtUtc
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    TEAM {
+        string id PK
+        string championshipId FK
+        string name
+        string code
+        string colorHex
+        string externalKey
+    }
+
+    DRIVER {
+        string id PK
+        string championshipId FK
+        string teamId FK
+        string displayName
+        string firstName
+        string lastName
+        string code
+        int number
+        string countryCode
+        string externalKey
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SESSION_RESULT_ROW {
+        bigint id PK
+        string sessionId FK
+        int driverNumber
+        int position
+        float points
+        string status
+        json raw
+        datetime createdAt
+    }
+
+    STARTING_GRID_ROW {
+        bigint id PK
+        string sessionId FK
+        int driverNumber
+        int gridPosition
+        json raw
+        datetime createdAt
+    }
+
+    DRIVER_CHAMPIONSHIP_STANDING {
+        bigint id PK
+        string sessionId FK
+        int driverNumber
+        int positionCurrent
+        int positionStart
+        float pointsCurrent
+        float pointsStart
+        json raw
+        datetime createdAt
+    }
+
+    TEAM_CHAMPIONSHIP_STANDING {
+        bigint id PK
+        string sessionId FK
+        string teamName
+        string teamCode
+        int positionCurrent
+        int positionStart
+        float pointsCurrent
+        float pointsStart
+        json raw
+        datetime createdAt
+    }
+
+    PROVIDER ||--o{ CHAMPIONSHIP : owns
+    CHAMPIONSHIP ||--o{ EVENT : schedules
+    CHAMPIONSHIP ||--o{ TEAM : contains
+    CHAMPIONSHIP ||--o{ DRIVER : registers
+    EVENT ||--o{ SESSION : contains
+    TEAM ||--o{ DRIVER : groups
+    SESSION ||--o{ SESSION_RESULT_ROW : has
+    SESSION ||--o{ STARTING_GRID_ROW : has
+    SESSION ||--o{ DRIVER_CHAMPIONSHIP_STANDING : snapshots
+    SESSION ||--o{ TEAM_CHAMPIONSHIP_STANDING : snapshots
