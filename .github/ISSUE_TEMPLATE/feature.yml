@@ -1,0 +1,44 @@
+name: Feature
+description: Nouvelle fonctionnalite
+title: "[Feature]: "
+labels: ["FEAT"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité
+      description: Importance
+      options:
+        - P0 - Obligatoire
+        - P1 - Important
+        - P2 - Optionnel
+        - P3 - Faible priorité
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Demande
+      description: Decris simplement la fonctionnalite souhaitee.
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Pourquoi
+      description: Quel probleme ca resout ou quel benefice ?
+  - type: textarea
+    id: links
+    attributes:
+      label: Liens / exemples
+      description: Lien, capture, exemple si besoin.
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Vérifications
+      description: Merci de confirmer
+      options:
+        - label: Cette feature n'existe pas déjà dans les tickets ou dans l’application
+          required: true
+        - label: Cette demande est alignée avec la roadmap
+          required: true
