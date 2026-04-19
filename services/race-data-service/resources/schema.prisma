@@ -1,0 +1,266 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## database_scheme.sql - Database scheme file for PostgreSQL
+ ##
+*/
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator db {
+  provider = "go run github.com/steebchen/prisma-client-go"
+}
+
+enum ArchiveMode {
+  full
+  driver_focused
+}
+
+//-------------------------
+// Timing And Telemetry
+//-------------------------
+model RaceLap {
+  id             BigInt    @id @default(autoincrement())
+  sessionId      String
+  driverNumber   Int
+  lapNumber      Int
+  dateStartUtc   DateTime?
+  lapDurationSec Float?
+  sector1Sec     Float?
+  sector2Sec     Float?
+  sector3Sec     Float?
+  speedI1Kph     Int?
+  speedI2Kph     Int?
+  speedTrapKph   Int?
+  isPitOutLap    Boolean?
+  raw            Json
+  createdAt      DateTime  @default(now())
+
+  @@unique([sessionId, driverNumber, lapNumber])
+  @@index([sessionId, driverNumber, lapNumber])
+  @@index([sessionId, dateStartUtc])
+}
+
+model RaceTelemetrySample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  speedKph     Int?
+  rpm          Int?
+  gear         Int?
+  throttlePct  Float?
+  brakePct     Float?
+  drsState     Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RaceLocationSample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  x            Float?
+  y            Float?
+  z            Float?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+//-------------------------
+// Race Flow And Incidents
+//-------------------------
+model RacePositionSample {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime
+  lapNumber    Int?
+  position     Int?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+  @@index([sessionId, position])
+}
+
+model RaceIntervalSample {
+  id                    BigInt   @id @default(autoincrement())
+  sessionId             String
+  driverNumber          Int
+  dateUtc               DateTime
+  gapToLeader           String?  @db.VarChar(40)
+  intervalToFrontDriver String?  @db.VarChar(40)
+  raw                   Json
+  createdAt             DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model RaceStint {
+  id               BigInt   @id @default(autoincrement())
+  sessionId        String
+  driverNumber     Int
+  stintNumber      Int?
+  lapStart         Int?
+  lapEnd           Int?
+  compound         String?  @db.VarChar(40)
+  tyreAgeLapsStart Int?
+  raw              Json
+  createdAt        DateTime @default(now())
+
+  @@index([sessionId, driverNumber])
+  @@index([sessionId, lapStart, lapEnd])
+}
+
+model RacePitStop {
+  id             BigInt    @id @default(autoincrement())
+  sessionId      String
+  driverNumber   Int
+  lapNumber      Int?
+  dateUtc        DateTime?
+  pitDurationSec Float?
+  raw            Json
+  createdAt      DateTime  @default(now())
+
+  @@index([sessionId, driverNumber, dateUtc])
+  @@index([sessionId, lapNumber])
+}
+
+model RaceControlEvent {
+  id           BigInt   @id @default(autoincrement())
+  sessionId    String
+  dateUtc      DateTime
+  lapNumber    Int?
+  driverNumber Int?
+  category     String?  @db.VarChar(60)
+  flag         String?  @db.VarChar(40)
+  scope        String?  @db.VarChar(80)
+  message      String?
+  raw          Json
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, category])
+  @@index([sessionId, flag])
+}
+
+model RaceWeatherSample {
+  id               BigInt   @id @default(autoincrement())
+  sessionId        String
+  dateUtc          DateTime
+  airTempC         Float?
+  trackTempC       Float?
+  humidityPct      Float?
+  pressureHpa      Float?
+  windSpeedKph     Float?
+  windDirectionDeg Int?
+  rainfallMm       Float?
+  raw              Json
+  createdAt        DateTime @default(now())
+
+  @@index([sessionId, dateUtc])
+}
+
+//-------------------------
+// Highlights And Broadcast
+//-------------------------
+model RaceHighlight {
+  id          String   @id @default(uuid())
+  sessionId   String
+  timestampMs Int
+  type        String   @db.VarChar(50)
+  summary     String
+  metadata    Json
+
+  @@index([sessionId])
+}
+
+model OvertakeEvent {
+  id                     BigInt    @id @default(autoincrement())
+  sessionId              String
+  dateUtc                DateTime?
+  lapNumber              Int?
+  overtakingDriverNumber Int?
+  overtakenDriverNumber  Int?
+  raw                    Json
+  createdAt              DateTime  @default(now())
+
+  @@index([sessionId, dateUtc])
+  @@index([sessionId, lapNumber])
+}
+
+model TeamRadioMessage {
+  id           BigInt    @id @default(autoincrement())
+  sessionId    String
+  driverNumber Int
+  dateUtc      DateTime?
+  recordingUrl String?   @db.VarChar(500)
+  transcript   String?
+  raw          Json
+  createdAt    DateTime  @default(now())
+
+  @@index([sessionId, driverNumber, dateUtc])
+}
+
+model SessionDriverBroadcast {
+  id           String   @id @default(uuid())
+  sessionId    String
+  driverId     String
+  broadcastUrl String   @db.VarChar(255)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sessionId, driverId])
+  @@index([sessionId])
+  @@index([driverId])
+}
+
+//-------------------------
+// Archived Datasets
+//-------------------------
+model RaceArchive {
+  id                 String      @id @default(uuid())
+  sessionId          String
+  mode               ArchiveMode @default(full)
+  generatedAt        DateTime    @default(now())
+  sourceMeetingKey   Int?
+  sourceSessionKey   Int?
+  sourceDriverNumber Int?
+  metadata           Json
+  counts             Json
+  fetchErrors        Json?
+
+  datasets RaceDatasetChunk[]
+
+  @@index([sessionId, generatedAt(sort: Desc)])
+  @@index([sourceMeetingKey, sourceSessionKey])
+}
+
+model RaceDatasetChunk {
+  id         BigInt   @id @default(autoincrement())
+  archiveId  String
+  dataset    String   @db.VarChar(50)
+  chunkIndex Int      @default(0)
+  rowCount   Int      @default(0)
+  rows       Json
+  createdAt  DateTime @default(now())
+
+  archive RaceArchive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
+
+  @@unique([archiveId, dataset, chunkIndex])
+  @@index([dataset])
+}

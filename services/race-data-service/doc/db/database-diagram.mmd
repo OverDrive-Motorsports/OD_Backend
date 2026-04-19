@@ -1,0 +1,185 @@
+erDiagram
+    RACE_LAP {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        int lapNumber
+        datetime dateStartUtc
+        float lapDurationSec
+        float sector1Sec
+        float sector2Sec
+        float sector3Sec
+        int speedI1Kph
+        int speedI2Kph
+        int speedTrapKph
+        boolean isPitOutLap
+        json raw
+        datetime createdAt
+    }
+
+    RACE_TELEMETRY_SAMPLE {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        datetime dateUtc
+        int speedKph
+        int rpm
+        int gear
+        float throttlePct
+        float brakePct
+        int drsState
+        json raw
+        datetime createdAt
+    }
+
+    RACE_LOCATION_SAMPLE {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        datetime dateUtc
+        float x
+        float y
+        float z
+        json raw
+        datetime createdAt
+    }
+
+    RACE_POSITION_SAMPLE {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        datetime dateUtc
+        int lapNumber
+        int position
+        json raw
+        datetime createdAt
+    }
+
+    RACE_INTERVAL_SAMPLE {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        datetime dateUtc
+        string gapToLeader
+        string intervalToFrontDriver
+        json raw
+        datetime createdAt
+    }
+
+    RACE_STINT {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        int stintNumber
+        int lapStart
+        int lapEnd
+        string compound
+        int tyreAgeLapsStart
+        json raw
+        datetime createdAt
+    }
+
+    RACE_PIT_STOP {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        int lapNumber
+        datetime dateUtc
+        float pitDurationSec
+        json raw
+        datetime createdAt
+    }
+
+    RACE_CONTROL_EVENT {
+        bigint id PK
+        string sessionId
+        datetime dateUtc
+        int lapNumber
+        int driverNumber
+        string category
+        string flag
+        string scope
+        string message
+        json raw
+        datetime createdAt
+    }
+
+    RACE_WEATHER_SAMPLE {
+        bigint id PK
+        string sessionId
+        datetime dateUtc
+        float airTempC
+        float trackTempC
+        float humidityPct
+        float pressureHpa
+        float windSpeedKph
+        int windDirectionDeg
+        float rainfallMm
+        json raw
+        datetime createdAt
+    }
+
+    RACE_HIGHLIGHT {
+        string id PK
+        string sessionId
+        int timestampMs
+        string type
+        string summary
+        json metadata
+    }
+
+    OVERTAKE_EVENT {
+        bigint id PK
+        string sessionId
+        datetime dateUtc
+        int lapNumber
+        int overtakingDriverNumber
+        int overtakenDriverNumber
+        json raw
+        datetime createdAt
+    }
+
+    TEAM_RADIO_MESSAGE {
+        bigint id PK
+        string sessionId
+        int driverNumber
+        datetime dateUtc
+        string recordingUrl
+        string transcript
+        json raw
+        datetime createdAt
+    }
+
+    SESSION_DRIVER_BROADCAST {
+        string id PK
+        string sessionId
+        string driverId
+        string broadcastUrl
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    RACE_ARCHIVE {
+        string id PK
+        string sessionId
+        string mode
+        datetime generatedAt
+        int sourceMeetingKey
+        int sourceSessionKey
+        int sourceDriverNumber
+        json metadata
+        json counts
+        json fetchErrors
+    }
+
+    RACE_DATASET_CHUNK {
+        bigint id PK
+        string archiveId FK
+        string dataset
+        int chunkIndex
+        int rowCount
+        json rows
+        datetime createdAt
+    }
+
+    RACE_ARCHIVE ||--o{ RACE_DATASET_CHUNK : contains

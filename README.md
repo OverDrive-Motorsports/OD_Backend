@@ -1,157 +1,90 @@
-<!--
-##
-## OverDrive 2026
-## All Technical rights reserved
-##
-## README.md - Project overview and backend quick-start documentation.
-##
--->
+# OverDrive Backend
 
-<div align="center">
+This repository contains a Go monorepo split into multiple services.
+The gateway is intentionally not included yet.
 
-# OverDrive – VR Experience for Motorsport
+## Services
 
-**A Meta Quest VR application that reinvents the motorsport viewing experience with total immersion, interactivity, and customization.**
+- `auth-service`
+- `user-data-service`
+- `championship-service`
+- `race-data-service`
+- `ingestion-service`
 
-</div>
+## Target structure
 
-<br>
+Each service now follows the same hexagonal structure, adapted to Go:
 
-## Project Vision
-
-Today, motorsport viewing remains mostly linear and passive, despite the wealth of available data. OverDrive transforms the spectator into an active participant by integrating telemetry and race information directly into a virtual environment.
-
-**Key Objectives:**
-- Make motorsport **explorable, understandable, and alive**.
-- Combine **immersion, comprehension, and customization**.
-- Provide an innovative alternative to traditional broadcasts.
-
-<br>
-
-## Key Features
-
-| Category               | Details                                                                                     |
-|-------------------------|---------------------------------------------------------------------------------------------|
-| **VR Experience**       | Dedicated environment, 3D mini-circuit, cars updated in near real-time.                    |
-| **Real-Time Data**      | Standings, gaps, strategies, key events (stops, penalties, incidents).                      |
-| **Customization**       | Panel movement and resizing, saving user configurations.                                     |
-| **Mobile Application**  | Simplified/expert mode, notifications, parallel tracking with VR.                           |
-
-<br>
-
-## Target Personas
-
-OverDrive is designed for three main user profiles:
-- **The analytical fan**: In-depth data analysis.
-- **The curious viewer**: Simple understanding of race dynamics.
-- **The tech enthusiast**: Seeking immersion and innovation.
-
-The application adapts information density and hierarchy according to the user profile.
-
-<br>
-
-## Technical Architecture
-
-**Recommended Stack:**
-- **VR**: Unity (native Meta Quest)
-- **Backend**: Go or Node.js/TypeScript
-- **Database**: PostgreSQL + Redis
-- **Mobile**: Flutter
-- **Communication**: WebSocket
-
-**Features:**
-- Scalable and modular.
-- Real-time oriented.
-- Compatible with progressive scaling.
-
-<br>
-
-## Contributors
-
-Project developed by the **OverDrive Team – Epitech Paris (2026)**.
-
-| Name            |
-|-----------------|
-| Anthony El Achkar |
-| Clément-Alexis Fournier |
-| Mariia Semenchenko |
-| Batien Leroux |
-| Corto Morrow |
-
-<br>
-
-## Installation & Usage
-
-The project is currently under development. No public version is available at this time.
-
-## Backend V1 (Go)
-
-Current backend entrypoint:
-
-```bash
-go run ./cmd/api
+```text
+service-name/
+├── src/
+│   ├── core/
+│   │   ├── domain/
+│   │   ├── ports/
+│   │   └── usecases/
+│   └── adapters/
+│       └── http/
+├── doc/
+│   └── endpoint.md
+├── .env.template
+├── .env
+├── README.md
+├── go.mod
+└── main.go
 ```
 
-### Navigation model
+## Layer responsibilities
 
-- `Provider -> Championship -> Event -> Session`
-- Session-scoped endpoints are the preferred read API.
-- `/api/v1/race/*` endpoints are convenience routes resolved against the merged latest stored session.
+- `src/core/domain`: pure business entities
+- `src/core/ports`: contracts exposed by the core
+- `src/core/usecases`: application use cases
+- `src/adapters/http`: incoming HTTP entrypoints
+- `doc/endpoint.md`: endpoint documentation for the service
+- `.env.template`: environment template for local setup
 
-### Main endpoint groups
+## Run a service
 
-- Health:
-  - `GET /`
-  - `GET /health`
-- Ingestion:
-  - `GET /getrace`
-  - `GET /api/v1/race/getrace`
-- Catalog:
-  - `GET /api/v1/championships`
-  - `GET /api/v1/championships/{code}/events`
-  - `GET /api/v1/events/{eventId}`
-  - `GET /api/v1/events/{eventId}/sessions`
-  - `GET /api/v1/sessions/{sessionId}`
-- Session-scoped reads:
-  - `GET /api/v1/sessions/{sessionId}/archive`
-  - `GET /api/v1/sessions/{sessionId}/datasets/{dataset}`
-  - `GET /api/v1/sessions/{sessionId}/drivers`
-  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/profile`
-  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location`
-  - `GET /api/v1/sessions/{sessionId}/broadcast`
-  - `GET /api/v1/sessions/{sessionId}/drivers/{driverNumber}/broadcast`
-- Latest-session convenience reads:
-  - `GET|POST /sendrace`
-  - `GET|POST /api/v1/race/sendrace`
-  - `GET /api/v1/race/datasets/{dataset}`
-  - `GET /api/v1/race/drivers/{driverNumber}/laps/{lapNumber}/location`
-  - `GET /api/v1/race/championship/drivers`
-  - `GET /api/v1/race/championship/constructors`
-  - `GET /api/v1/race/weather`
-  - `GET /api/v1/race/facts`
-  - `GET /api/v1/race/standings/race`
-  - `GET /api/v1/race/video-url`
-
-Full route reference:
-
-- [docs/endpoint.md](/docs/endpoint.md)
-
-Example flow:
+From the repository root:
 
 ```bash
-# 1) fetch from OpenF1 and persist in PostgreSQL
-curl "http://localhost:8080/api/v1/race/getrace?year=2025&country=Australia&meeting=Australian%20Grand%20Prix&driver_number=0"
-
-# 2) browse catalog
-curl "http://localhost:8080/api/v1/championships/f1/events"
-
-# 3) read one stored session explicitly
-curl "http://localhost:8080/api/v1/events/<EVENT_ID>/sessions"
-curl "http://localhost:8080/api/v1/sessions/<SESSION_ID>/datasets/session_result"
+go run ./services/auth-service
+go run ./services/user-data-service
+go run ./services/championship-service
+go run ./services/race-data-service
+go run ./services/ingestion-service
 ```
 
-<br>
+Each service currently exposes:
 
-## License
+- `GET /health`
 
-To be determined.
+## Default ports
+
+- `auth-service`: `3001`
+- `user-data-service`: `3002`
+- `championship-service`: `3003`
+- `race-data-service`: `3004`
+- `ingestion-service`: `3005`
+
+Each service includes a scaffolded `.env` file and `.env.template` with `HTTP_PORT` and `APP_VERSION`.
+
+## Database setup
+
+The backend uses one PostgreSQL database per service.
+Root Prisma commands resolve the service-specific `.env` file automatically based on the selected schema.
+
+| Service | Environment variable | Default local database |
+| --- | --- | --- |
+| `auth-service` | `AUTH_DATABASE_URL` | `overdrive_auth` |
+| `user-data-service` | `USER_DATA_DATABASE_URL` | `overdrive_user_data` |
+| `championship-service` | `CHAMPIONSHIP_DATABASE_URL` | `overdrive_championship` |
+| `race-data-service` | `RACE_DATA_DATABASE_URL` | `overdrive_race_data` |
+
+This separation is required to keep database ownership aligned with the multi-service architecture.
+Do not point multiple services to the same physical database in deployment.
+
+## Next steps
+
+- replace placeholder service info use cases with real domain use cases
+- add service-specific controllers, routes, entities, and repositories
+- introduce inter-service communication once the gateway is added
