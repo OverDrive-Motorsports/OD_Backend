@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"overdrive/services/ingestion-service/src/core/domain"
 	"overdrive/services/ingestion-service/src/core/ports"
@@ -42,7 +43,7 @@ func (c *IngestionController) TriggerOpenF1Ingestion(w http.ResponseWriter, r *h
 		status := http.StatusInternalServerError
 		if errors.Is(err, r.Context().Err()) {
 			status = http.StatusRequestTimeout
-		} else if request.MeetingKey <= 0 || request.SessionKey <= 0 {
+		} else if isClientInputError(err, request) {
 			status = http.StatusBadRequest
 		}
 		writeError(w, status, err.Error())
@@ -50,6 +51,15 @@ func (c *IngestionController) TriggerOpenF1Ingestion(w http.ResponseWriter, r *h
 	}
 
 	writeJSON(w, http.StatusAccepted, result)
+}
+
+// isClientInputError reports whether an ingestion error was caused by invalid caller input.
+func isClientInputError(err error, request domain.OpenF1IngestionRequest) bool {
+	if request.MeetingKey <= 0 || request.SessionKey <= 0 {
+		return true
+	}
+
+	return strings.Contains(err.Error(), "unsupported OpenF1 resource")
 }
 
 // writeError serializes an error response with the provided HTTP status code.

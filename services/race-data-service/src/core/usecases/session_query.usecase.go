@@ -213,6 +213,13 @@ func (u *SessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID st
 		if err != nil {
 			return nil, err
 		}
+		if payload == nil {
+			payload = map[string]any{
+				"session_id": sessionID,
+				"dataset":    "session_result",
+				"metadata":   sessionMetadata(event, session),
+			}
+		}
 		data, _ := payload["data"].([]any)
 		filtered := make([]map[string]any, 0, 1)
 		for _, item := range data {
