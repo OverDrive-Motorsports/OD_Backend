@@ -1,26 +1,51 @@
 # championship-service endpoints
 
-## Endpoint `GET /health`
+## `GET /health`
 
 Returns the runtime status of the service.
 
-### Parameters
+## `POST /internal/ingestion/batches`
 
-| Parameter | Location | Mandatory | Description |
-| --- | --- | --- | --- |
-| None | - | No | This endpoint does not accept path parameters, query parameters, headers, or request body fields. |
+Internal endpoint used by `ingestion-service` to push normalized catalog and standings datasets.
 
-### Returned Message
+Accepted dataset names:
 
-Status: `200 OK`
+- `event_catalog`
+- `session_catalog`
+- `driver_catalog`
+- `session_result`
+- `starting_grid`
+- `driver_championship_standings`
+- `team_championship_standings`
 
-```json
-{
-  "status": "ok",
-  "service": "championship-service"
-}
+## Public catalog endpoints
+
+- `GET /championships`
+- `GET /championships/{code}/events`
+- `GET /events/{eventId}`
+- `GET /events/{eventId}/sessions`
+- `GET /sessions/{sessionId}`
+- `GET /sessions/{sessionId}/drivers`
+- `GET /sessions/{sessionId}/teams`
+- `GET /sessions/{sessionId}/datasets/{dataset}`
+- `GET /sessions/{sessionId}/standings/race`
+- `GET /sessions/{sessionId}/broadcast`
+
+Supported session datasets:
+
+- `session_result`
+- `starting_grid`
+- `championship_drivers`
+- `championship_teams`
+
+`starting_grid` may be sourced from the relevant qualifying session when OpenF1 does not expose grid data directly on the Race session. It is still persisted against the requested Race session ID.
+
+### Example
+
+```bash
+curl http://localhost:3003/championships
+curl http://localhost:3003/championships/f1/events
+curl http://localhost:3003/events/<EVENT_ID>/sessions
+curl http://localhost:3003/sessions/<SESSION_ID>/datasets/session_result
+curl http://localhost:3003/sessions/<SESSION_ID>/datasets/starting_grid
 ```
-
-### Error Messages
-
-No endpoint-specific error response is currently implemented for this handler.

@@ -1,0 +1,148 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: overdrive-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - overdrive-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/10-init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  championship-dbsync:
+    image: golang:1.22
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/services/championship-service
+    environment:
+      CHAMPIONSHIP_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_championship?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run github.com/steebchen/prisma-client-go db push --schema resources/schema.prisma --skip-generate
+    volumes:
+      - .:/app
+    restart: "no"
+
+  race-data-dbsync:
+    image: golang:1.22
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/services/race-data-service
+    environment:
+      RACE_DATA_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_race_data?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run github.com/steebchen/prisma-client-go db push --schema resources/schema.prisma --skip-generate
+    volumes:
+      - .:/app
+    restart: "no"
+
+  championship-service:
+    image: golang:1.22
+    depends_on:
+      postgres:
+        condition: service_healthy
+      championship-dbsync:
+        condition: service_completed_successfully
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3003"
+      APP_VERSION: dev
+      CHAMPIONSHIP_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_championship?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./services/championship-service
+    volumes:
+      - .:/app
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
+  race-data-service:
+    image: golang:1.22
+    depends_on:
+      postgres:
+        condition: service_healthy
+      race-data-dbsync:
+        condition: service_completed_successfully
+      championship-service:
+        condition: service_healthy
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3004"
+      APP_VERSION: dev
+      RACE_DATA_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_race_data?schema=public
+      CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./services/race-data-service
+    volumes:
+      - .:/app
+    ports:
+      - "3004:3004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
+  ingestion-service:
+    image: golang:1.22
+    depends_on:
+      championship-service:
+        condition: service_healthy
+      race-data-service:
+        condition: service_healthy
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3005"
+      APP_VERSION: dev
+      OPENF1_BASE_URL: https://api.openf1.org/v1
+      OPENF1_TIMEOUT: 10s
+      OPENF1_RETRY_COUNT: "2"
+      OPENF1_RETRY_DELAY: 500ms
+      DISPATCH_TIMEOUT: 10m
+      CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
+      RACE_DATA_SERVICE_URL: http://race-data-service:3004
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./services/ingestion-service
+    volumes:
+      - .:/app
+    ports:
+      - "3005:3005"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
+volumes:
+  overdrive-postgres-data:
