@@ -1,9 +1,11 @@
-/**
+/*
+*
+
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
 	##
-	## health.service.go - Core port defining the race-data-service health use case contract.
+	## health.service.go - Package ports source file for services/race-data-service/src/core/ports.
 	##
 */
 package ports

@@ -1,8 +1,8 @@
 # ingestion-service
 
-`ingestion-service` is the future service responsible for collecting and transforming data coming from external providers.
+`ingestion-service` collects provider data, maps it into the internal OverDrive ingestion schema, and dispatches normalized batches to downstream services.
 
-For now, it only exposes a healthcheck endpoint so we can validate the service bootstrapping and keep the architecture stable while the real ingestion logic is still being built.
+The first provider implemented here is `OpenF1`.
 
 ## Run
 
@@ -15,11 +15,49 @@ Default port: `3005`
 ## Current behavior
 
 - exposes `GET /health`
-- returns the service status and service name
+- exposes `POST /providers/openf1/ingestions`
+- fetches supported OpenF1 resources with retry and timeout handling
+- maps provider rows into an internal normalized batch format
+- dispatches catalog datasets to `championship-service`
+- dispatches timing and race datasets to `race-data-service`
 
-## Planned scope
+## Supported OpenF1 resources
 
-- external API collection
-- payload transformation
-- ingestion workflows
-- provider integrations
+- `meetings`
+- `sessions`
+- `drivers`
+- `championship_drivers`
+- `championship_teams`
+- `session_result`
+- `starting_grid`
+- `laps`
+- `car_data`
+- `location`
+- `position`
+- `intervals`
+- `stints`
+- `pit`
+- `weather`
+- `team_radio`
+- `overtakes`
+- `race_control`
+
+## Operational notes
+
+- Ingest `meetings`, `sessions`, and `drivers` before standings or race-data resources.
+- `starting_grid` falls back to the relevant qualifying session when OpenF1 does not expose grid data directly on the Race session.
+- `car_data`, `location`, and `intervals` can be large. Use `driver_number` where possible and keep `DISPATCH_TIMEOUT` high enough for downstream Prisma writes.
+
+## Example request
+
+```bash
+curl -X POST http://localhost:3005/providers/openf1/ingestions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "meeting_key": 1255,
+    "session_key": 9998,
+    "driver_number": 63,
+    "resources": ["drivers", "laps", "car_data", "position"],
+    "dispatch": true
+  }'
+```

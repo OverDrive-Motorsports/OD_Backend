@@ -2,9 +2,7 @@
 
 ## Service purpose
 
-`championship-service` is intended to manage championship metadata, seasons, and calendar-related information.
-
-The current implementation only exposes a health endpoint, but the project structure is already organized for future domain features.
+`championship-service` manages championship metadata, seasons, calendar-related information, and normalized catalog datasets received from ingestion.
 
 ## Current architecture
 
@@ -19,13 +17,13 @@ This service follows a simple layered architecture with clear responsibilities:
 
 ## Request flow
 
-For the current endpoint, the request flow is:
+For a typical catalog endpoint, the request flow is:
 
 1. `main.go` loads the config and wires the dependencies.
-2. `src/adapters/http/health.routes.go` registers `GET /health`.
-3. `src/adapters/http/health.controller.go` receives the HTTP request.
-4. The controller calls the use case through the `ports.HealthUseCase` interface.
-5. `src/core/usecases/get_health.usecase.go` builds the `domain.HealthStatus` response.
+2. `src/adapters/http/ingestion.routes.go` creates the router and registers health, ingestion, and catalog routes.
+3. The matching HTTP controller receives the request and parses path or body data.
+4. The controller calls the use case through a port interface.
+5. `src/core/usecases` builds the domain response or ingestion acknowledgement.
 6. The controller serializes the response as JSON.
 
 ## How to add a new endpoint

@@ -54,9 +54,18 @@ go run ./services/race-data-service
 go run ./services/ingestion-service
 ```
 
-Each service currently exposes:
+Every service exposes:
 
 - `GET /health`
+
+The active Docker Compose stack currently runs:
+
+- `championship-service`
+- `race-data-service`
+- `ingestion-service`
+- PostgreSQL
+
+`auth-service` and `user-data-service` are scaffolded for later work and are not started by Docker Compose yet.
 
 ## Default ports
 
@@ -66,12 +75,36 @@ Each service currently exposes:
 - `race-data-service`: `3004`
 - `ingestion-service`: `3005`
 
-Each service includes a scaffolded `.env` file and `.env.template` with `HTTP_PORT` and `APP_VERSION`.
+Each service includes a scaffolded `.env.template`. Local `.env` files are ignored by git.
 
 ## Database setup
 
 The backend uses one PostgreSQL database per service.
 Root Prisma commands resolve the service-specific `.env` file automatically based on the selected schema.
+
+Start only PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+Start the microservice stack with schema sync:
+
+```bash
+docker compose up -d championship-dbsync race-data-dbsync championship-service race-data-service ingestion-service
+```
+
+Useful endpoints once the stack is up:
+
+- `http://localhost:3003/health`
+- `http://localhost:3004/health`
+- `http://localhost:3005/health`
+
+Stop the stack:
+
+```bash
+docker compose down
+```
 
 | Service | Environment variable | Default local database |
 | --- | --- | --- |
@@ -82,6 +115,56 @@ Root Prisma commands resolve the service-specific `.env` file automatically base
 
 This separation is required to keep database ownership aligned with the multi-service architecture.
 Do not point multiple services to the same physical database in deployment.
+
+## Prisma utilities
+
+Install the local Node dev dependencies before running Prisma Studio or validation commands:
+
+```bash
+npm install
+```
+
+Validate the active Prisma schemas:
+
+```bash
+npm run prisma:validate:active
+```
+
+`auth-service` and `user-data-service` schemas are scaffolded and are not part of the active stack yet.
+
+Open Prisma Studio for the active databases:
+
+```bash
+CHAMPIONSHIP_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_championship?schema=public' \
+npx prisma studio --schema services/championship-service/resources/schema.prisma --port 5555
+
+RACE_DATA_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_race_data?schema=public' \
+npx prisma studio --schema services/race-data-service/resources/schema.prisma --port 5556
+```
+
+## Ingestion quick start
+
+For a new OpenF1 Race session, ingest catalog data first:
+
+```bash
+curl -X POST http://localhost:3005/providers/openf1/ingestions \
+  -H 'Content-Type: application/json' \
+  -d '{"meeting_key":1255,"session_key":9998,"resources":["meetings","sessions","drivers","session_result"],"dispatch":true}'
+```
+
+Then ingest standings and grid data:
+
+```bash
+curl -X POST http://localhost:3005/providers/openf1/ingestions \
+  -H 'Content-Type: application/json' \
+  -d '{"meeting_key":1255,"session_key":9998,"resources":["championship_drivers","championship_teams","starting_grid"],"dispatch":true}'
+```
+
+Then ingest race-data resources in manageable batches. Large driver-scoped resources such as `car_data` and `location` should include `driver_number` when possible.
+
+## Security
+
+See `docs/security.md` for the current local security posture, known gaps, and deployment notes.
 
 ## Next steps
 

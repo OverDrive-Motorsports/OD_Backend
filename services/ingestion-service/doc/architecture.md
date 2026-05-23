@@ -2,44 +2,53 @@
 
 ## Service purpose
 
-`ingestion-service` is intended to synchronize and ingest data from external providers.
+`ingestion-service` is responsible for three things:
 
-The current implementation only exposes a health endpoint, but the structure is already prepared for future ingestion workflows.
+1. fetching provider data
+2. mapping provider payloads into the internal OverDrive ingestion schema
+3. dispatching normalized batches to downstream services
+
+The first provider implemented is `OpenF1`.
 
 ## Current architecture
 
-This service follows a simple layered architecture with clear responsibilities:
+This service follows the project hexagonal structure:
 
-- `main.go`: bootstraps the service configuration, creates the use case and controller, and starts the HTTP server.
-- `src/adapters/http`: contains the HTTP controller and route registration. This is the entry point for incoming HTTP requests.
-- `src/core/usecases`: contains application logic. A use case receives data from the controller and returns a domain result.
-- `src/core/ports`: contains interfaces used to decouple the controller layer from the application logic.
-- `src/core/domain`: contains business entities and response models used by the service.
-- `shared/bootstrap`: shared module used to load environment variables and common runtime configuration.
+- `main.go`: wires config, provider adapter, mapper, dispatcher, and HTTP adapters.
+- `src/config`: service-specific runtime configuration.
+- `src/adapters/http`: HTTP controllers and route registration.
+- `src/adapters/providers/openf1`: OpenF1 client and mapping logic.
+- `src/adapters/dispatch/http`: reusable HTTP dispatcher for downstream services.
+- `src/core/usecases`: ingestion orchestration.
+- `src/core/ports`: provider, mapper, and dispatcher contracts.
+- `src/core/domain`: ingestion request and result models.
+- `shared/contracts/ingestion`: normalized batch contract shared with downstream services.
 
 ## Request flow
 
-For the current endpoint, the request flow is:
+1. `POST /providers/openf1/ingestions` receives an ingestion request.
+2. The use case validates the request and decides which resources must be fetched.
+3. The OpenF1 adapter fetches each resource with timeout and retry handling.
+4. The mapper converts provider rows into normalized internal datasets.
+5. Datasets are grouped by target service.
+6. The dispatcher forwards each batch to the corresponding downstream service.
+7. The controller returns a batch summary with fetched resources and dispatch results.
 
-1. `main.go` loads the config and wires the dependencies.
-2. `src/adapters/http/health.routes.go` registers `GET /health`.
-3. `src/adapters/http/health.controller.go` receives the HTTP request.
-4. The controller calls the use case through the `ports.HealthUseCase` interface.
-5. `src/core/usecases/get_health.usecase.go` builds the `domain.HealthStatus` response.
-6. The controller serializes the response as JSON.
+## Dispatch strategy
 
-## How to add a new endpoint
+- `championship-service`
+  - `meetings`
+  - `sessions`
+  - `drivers`
+- `race-data-service`
+  - `laps`
+  - `car_data`
+  - `location`
+  - `position`
+  - `intervals`
+  - `stints`
+  - `pit`
+  - `weather`
+  - `team_radio`
 
-Use this flow when adding a new endpoint:
-
-1. Create or update the domain model in `src/core/domain` if the endpoint needs a new response or business entity.
-2. Define or extend the interface in `src/core/ports` for the new use case contract.
-3. Implement the business logic in `src/core/usecases`.
-4. Add a controller method in `src/adapters/http` to parse the request and call the use case.
-5. Register the route in a route file inside `src/adapters/http`.
-6. Wire the new use case and controller dependency in `main.go`.
-7. Document the endpoint in `doc/endpoint.md`.
-
-## Practical guideline
-
-Keep HTTP concerns in the adapter layer, business rules in use cases, and data structures in the domain layer. This keeps the service easy to extend and avoids mixing transport logic with business logic.
+This routing is intentionally table-driven in the mapper so new providers or new datasets can be added without rewriting the use case.

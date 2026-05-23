@@ -1,9 +1,11 @@
-/**
+/*
+*
+
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
 	##
-	## health.service.go - Core port defining the ingestion-service health use case contract.
+	## health.service.go - Package ports source file for services/ingestion-service/src/core/ports.
 	##
 */
 package ports
