@@ -1,0 +1,83 @@
+# How To Contribute (Gateway)
+
+This document explains how to contribute to the gateway while keeping the architecture clean and easy to maintain.
+
+## Architecture Rule
+
+Follow this direction of dependencies only:
+
+1. `core` (domain, ports, use cases)
+2. `adapters` (inbound/outbound implementations)
+3. `app` (composition/wiring)
+4. `main.go` (process bootstrap)
+
+`core` must never import `adapters`.
+
+## Folder Responsibilities
+
+- `internal/core/domain`: business models used by use cases
+- `internal/core/ports`: interfaces for external dependencies
+- `internal/core/usecases`: pure application logic
+- `internal/adapters/outbound`: concrete implementations (auth provider, etc.)
+- `internal/adapters/inbound/http`: HTTP handlers, middleware, proxy behavior
+- `internal/app`: dependency injection and runtime assembly
+
+## Add a New Proxied Route
+
+1. Open `internal/config/config.go`.
+2. Add the route prefix in `buildRoutes()`.
+3. Add corresponding env variable in `gateway/.env.template` and `gateway/.env`.
+4. Document it in `gateway/ROUTES.md`.
+5. Test with `curl` through gateway.
+
+## Replace Static Auth With JWT
+
+1. Keep `core/ports/token_validator.go` unchanged if possible.
+2. Add a new adapter in `internal/adapters/outbound/auth` (e.g. `jwt_token_validator.go`).
+3. Update `internal/app/bootstrap.go` to inject the new validator.
+4. Keep HTTP middleware unchanged (it already depends on use case callback).
+
+## Add a New Use Case
+
+1. Create/extend domain model in `core/domain` if needed.
+2. Add required interface(s) in `core/ports`.
+3. Implement use case in `core/usecases`.
+4. Implement adapter(s) for new ports in `adapters/outbound`.
+5. Wire everything in `internal/app/bootstrap.go`.
+
+## Coding Guidelines
+
+- Keep use cases deterministic and framework-agnostic.
+- Keep adapters focused on I/O and translation.
+- Do not put business rules in middleware/proxy code.
+- Keep HTTP responses consistent JSON.
+- Prefer small files with explicit naming.
+
+## Smoke Test Checklist
+
+```bash
+# Read configured token from gateway/.env
+GATEWAY_TOKEN="$(grep '^GATEWAY_AUTH_TOKEN=' gateway/.env | cut -d= -f2-)"
+
+# Gateway health (no auth header)
+curl -i http://localhost:3000/health
+
+# Gateway health with valid auth header
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" http://localhost:3000/health
+
+# Invalid provided token must fail
+curl -i -H "Authorization: Bearer invalid" http://localhost:3000/health
+
+# Service health via gateway
+curl -i http://localhost:3000/health/auth
+curl -i http://localhost:3000/health/user-data
+curl -i http://localhost:3000/health/championship
+curl -i http://localhost:3000/health/race-data
+curl -i http://localhost:3000/health/ingestion
+```
+
+## Definition of Done
+
+- Route/use case works end-to-end
+- `README.md` and `ROUTES.md` updated
+- No architectural boundary violation (`core` importing `adapters`)
