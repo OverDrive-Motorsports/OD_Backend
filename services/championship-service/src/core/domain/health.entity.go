@@ -1,9 +1,11 @@
-/**
+/*
+*
+
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
 	##
-	## health.entity.go - Domain entity representing the championship-service health response payload.
+	## health.entity.go - Package domain source file for services/championship-service/src/core/domain.
 	##
 */
 package domain

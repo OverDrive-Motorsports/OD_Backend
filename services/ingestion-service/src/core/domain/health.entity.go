@@ -1,9 +1,11 @@
-/**
+/*
+*
+
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
 	##
-	## health.entity.go - Domain entity representing the ingestion-service health response payload.
+	## health.entity.go - Package domain source file for services/ingestion-service/src/core/domain.
 	##
 */
 package domain

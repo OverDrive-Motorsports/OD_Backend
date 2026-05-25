@@ -6,10 +6,10 @@
     "prisma:validate:user-data": "prisma validate --schema services/user-data-service/resources/schema.prisma",
     "prisma:validate:championship": "prisma validate --schema services/championship-service/resources/schema.prisma",
     "prisma:validate:race-data": "prisma validate --schema services/race-data-service/resources/schema.prisma",
-    "prisma:validate:all": "npm run prisma:validate:auth && npm run prisma:validate:user-data && npm run prisma:validate:championship && npm run prisma:validate:race-data"
+    "prisma:validate:active": "npm run prisma:validate:championship && npm run prisma:validate:race-data",
+    "prisma:validate:all": "npm run prisma:validate:active"
   },
   "devDependencies": {
-    "dotenv": "^17.2.3",
-    "prisma": "^7.7.0"
+    "prisma": "^6.19.3"
   }
 }

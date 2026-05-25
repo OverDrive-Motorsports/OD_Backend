@@ -2,9 +2,7 @@
 
 ## Service purpose
 
-`race-data-service` is intended to expose race data queries and normalized read models.
-
-The current implementation only exposes a health endpoint, but the service layout is already prepared for future read-oriented features.
+`race-data-service` exposes race data queries and normalized read models populated by ingestion batches.
 
 ## Current architecture
 
@@ -19,13 +17,13 @@ This service follows a simple layered architecture with clear responsibilities:
 
 ## Request flow
 
-For the current endpoint, the request flow is:
+For a typical race-data endpoint, the request flow is:
 
 1. `main.go` loads the config and wires the dependencies.
-2. `src/adapters/http/health.routes.go` registers `GET /health`.
-3. `src/adapters/http/health.controller.go` receives the HTTP request.
-4. The controller calls the use case through the `ports.HealthUseCase` interface.
-5. `src/core/usecases/get_health.usecase.go` builds the `domain.HealthStatus` response.
+2. `src/adapters/http/ingestion.routes.go` creates the router and registers health, ingestion, and session routes.
+3. The matching HTTP controller receives the request and parses path or body data.
+4. The controller calls the use case through a port interface.
+5. `src/core/usecases` builds the response from local race data and championship-service references.
 6. The controller serializes the response as JSON.
 
 ## How to add a new endpoint

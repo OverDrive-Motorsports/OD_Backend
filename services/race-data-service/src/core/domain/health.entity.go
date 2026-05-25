@@ -1,9 +1,11 @@
-/**
+/*
+*
+
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
 	##
-	## health.entity.go - Domain entity representing the race-data-service health response payload.
+	## health.entity.go - Package domain source file for services/race-data-service/src/core/domain.
 	##
 */
 package domain

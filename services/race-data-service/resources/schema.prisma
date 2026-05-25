@@ -9,6 +9,7 @@
 
 datasource db {
   provider = "postgresql"
+  url      = env("RACE_DATA_DATABASE_URL")
 }
 
 generator db {
