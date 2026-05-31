@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## router.go - Builds HTTP routes, middleware chain, and service proxy handlers.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound
@@ -42,7 +51,7 @@ func NewHandler(
 			serviceHandler = ValidateChampionshipDataset(serviceHandler)
 		}
 
-		if prefix == "/v1/race" {
+		if prefix == "/v1/race-data" {
 			// Explicit edge validation for race dataset and numeric route parameters.
 			serviceHandler = ValidateRaceParameters(serviceHandler)
 		}

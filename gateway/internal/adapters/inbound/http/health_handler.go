@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## health_handler.go - Handles gateway health endpoint responses.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound

@@ -64,7 +64,7 @@ curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
   http://localhost:3000/v1/championship/championships
 
 curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-  http://localhost:3000/v1/race/championships
+  http://localhost:3000/v1/race-data/championships
 ```
 
 Dataset validation examples:
@@ -74,14 +74,14 @@ curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
   http://localhost:3000/v1/championship/sessions/123/datasets/not_allowed
 
 curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
-  http://localhost:3000/v1/race/sessions/123/drivers/not_a_number/profile
+  http://localhost:3000/v1/race-data/sessions/123/drivers/not_a_number/profile
 ```
 
 ## Routes
 
 - Full route mapping: [ROUTES.md](./ROUTES.md)
 - Championship public facade: `/v1/championship/*` -> `championship-service`
-- Race public facade: `/v1/race/*` -> `race-data-service`
+- Race public facade: `/v1/race-data/*` -> `race-data-service`
 
 ## Hexagonal Architecture (simple)
 
@@ -114,10 +114,10 @@ Applied at gateway level:
 Additional route-specific validation:
 
 - `/v1/championship/sessions/{sessionId}/datasets/{dataset}` validates dataset enum at gateway edge
-- `/v1/race/sessions/{sessionId}/datasets/{dataset}` validates race dataset enum at gateway edge
-- `/v1/race/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`/`broadcast`) at gateway edge
-- `/v1/race/sessions/{sessionId}/drivers/{driverNumber}/...` validates `driverNumber` is a positive integer
-- `/v1/race/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` validates `lapNumber` is a positive integer
+- `/v1/race-data/sessions/{sessionId}/datasets/{dataset}` validates race dataset enum at gateway edge
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`/`broadcast`) at gateway edge
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/...` validates `driverNumber` is a positive integer
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` validates `lapNumber` is a positive integer
 
 If no `Authorization` header is provided, request is allowed.
 If an `Authorization` header is provided, it must match the configured token.

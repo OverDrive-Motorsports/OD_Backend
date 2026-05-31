@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## reverse_proxy.go - Implements upstream reverse proxying and path rewriting.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound

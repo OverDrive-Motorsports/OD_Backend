@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## routes_registry.go - Aggregates all service route groups into gateway route maps.
+ ##
+ */
+
 // Package config loads environment configuration and route registries.
 
 package config

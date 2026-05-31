@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## championship_dataset_middleware.go - Validates championship dataset path parameter on public v1 routes.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound

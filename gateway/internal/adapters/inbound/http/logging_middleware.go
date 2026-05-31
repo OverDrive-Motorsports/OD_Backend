@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## logging_middleware.go - Logs inbound HTTP requests with status and duration.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound

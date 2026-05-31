@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## race_parameter_middleware.go - Validates race-data route parameters on public v1 routes.
+ ##
+ */
+
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
 package httpinbound
@@ -47,7 +56,7 @@ var allowedRaceDriverActions = map[string]struct{}{
 	"broadcast": {},
 }
 
-// ValidateRaceParameters validates selected public /v1/race parameters at the gateway edge.
+// ValidateRaceParameters validates selected public /v1/race-data parameters at the gateway edge.
 func ValidateRaceParameters(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -103,7 +112,7 @@ func extractRaceSessionDataset(parts []string) (string, bool) {
 		return "", false
 	}
 
-	if parts[0] != "v1" || parts[1] != "race" || parts[2] != "sessions" || parts[4] != "datasets" {
+	if parts[0] != "v1" || parts[1] != "race-data" || parts[2] != "sessions" || parts[4] != "datasets" {
 		return "", false
 	}
 
@@ -119,7 +128,7 @@ func extractRaceDriverSegment(parts []string) (string, bool) {
 		return "", false
 	}
 
-	if parts[0] != "v1" || parts[1] != "race" || parts[2] != "sessions" || parts[4] != "drivers" {
+	if parts[0] != "v1" || parts[1] != "race-data" || parts[2] != "sessions" || parts[4] != "drivers" {
 		return "", false
 	}
 
@@ -149,7 +158,7 @@ func extractRaceDriverNumber(parts []string) (string, bool) {
 		return "", false
 	}
 
-	if parts[0] != "v1" || parts[1] != "race" || parts[2] != "sessions" || parts[4] != "drivers" {
+	if parts[0] != "v1" || parts[1] != "race-data" || parts[2] != "sessions" || parts[4] != "drivers" {
 		return "", false
 	}
 
@@ -171,7 +180,7 @@ func extractRaceLapNumber(parts []string) (string, bool) {
 	}
 
 	if parts[0] != "v1" ||
-		parts[1] != "race" ||
+		parts[1] != "race-data" ||
 		parts[2] != "sessions" ||
 		parts[4] != "drivers" ||
 		parts[6] != "laps" ||

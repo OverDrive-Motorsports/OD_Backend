@@ -1,3 +1,12 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## config.go - Loads environment configuration and upstream service targets.
+ ##
+ */
+
 // Package config loads environment configuration and route registries.
 
 package config
