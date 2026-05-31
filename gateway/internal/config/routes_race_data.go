@@ -9,6 +9,7 @@ func raceDataServiceRoutes(targets upstreamTargets) serviceRoutes {
 		proxied: map[string][]*url.URL{
 			"/race-data": targets.raceData,
 			"/races":     targets.raceData,
+			"/v1/race":   targets.raceData,
 		},
 		health: map[string][]*url.URL{
 			"/health/race-data": targets.raceData,
