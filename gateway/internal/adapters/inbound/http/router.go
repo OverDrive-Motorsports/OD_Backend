@@ -42,6 +42,11 @@ func NewHandler(
 			serviceHandler = ValidateChampionshipDataset(serviceHandler)
 		}
 
+		if prefix == "/v1/race" {
+			// Explicit edge validation for race dataset and numeric route parameters.
+			serviceHandler = ValidateRaceParameters(serviceHandler)
+		}
+
 		protected := RequireAuthorization(authorizeUseCase.Execute, serviceHandler)
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)

@@ -52,8 +52,9 @@ Forwarded/proxy headers added by gateway:
 | User data | `/users` | `USER_DATA_SERVICE_URLS` | prefix stripped |
 | Championship | `/championships` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped |
 | Championship v1 facade | `/v1/championship` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped |
-| Race data | `/race-data` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
-| Race data | `/races` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
+| Race data (internal) | `/race-data` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
+| Race data (internal) | `/races` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
+| Race data v1 facade | `/v1/race` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
 | Ingestion (internal) | `/ingestion` | `INGESTION_SERVICE_URLS` | prefix stripped |
 
 ## Championship V1 Public Endpoints
@@ -97,6 +98,94 @@ If `{dataset}` is not in this list, gateway returns:
 - status `400`
 - body `{ "error": "invalid parameter" }`
 
+## Race V1 Public Endpoints
+
+All routes below are exposed by gateway under `/v1/race/*` and proxied to `race-data-service`.
+
+### Catalog
+
+| Gateway | Upstream |
+| --- | --- |
+| `GET /v1/race/championships` | `GET /championships` |
+| `GET /v1/race/championships/{code}/events` | `GET /championships/{code}/events` |
+| `GET /v1/race/events/{eventId}` | `GET /events/{eventId}` |
+| `GET /v1/race/events/{eventId}/sessions` | `GET /events/{eventId}/sessions` |
+
+### Session Metadata And References
+
+| Gateway | Upstream |
+| --- | --- |
+| `GET /v1/race/sessions/{sessionId}` | `GET /sessions/{sessionId}` |
+| `GET /v1/race/sessions/{sessionId}/metadata` | `GET /sessions/{sessionId}/metadata` |
+| `GET /v1/race/sessions/{sessionId}/drivers` | `GET /sessions/{sessionId}/drivers` |
+| `GET /v1/race/sessions/{sessionId}/teams` | `GET /sessions/{sessionId}/teams` |
+
+### Session Data And Shortcuts
+
+| Gateway | Upstream |
+| --- | --- |
+| `GET /v1/race/sessions/{sessionId}/datasets/{dataset}` | `GET /sessions/{sessionId}/datasets/{dataset}` |
+| `GET /v1/race/sessions/{sessionId}/standings/race` | `GET /sessions/{sessionId}/standings/race` |
+| `GET /v1/race/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` |
+| `GET /v1/race/sessions/{sessionId}/weather` | `GET /sessions/{sessionId}/weather` |
+| `GET /v1/race/sessions/{sessionId}/facts` | `GET /sessions/{sessionId}/facts` |
+
+Gateway validates `{dataset}` for this route against:
+
+- `laps`
+- `car_data`
+- `telemetry`
+- `location`
+- `position`
+- `intervals`
+- `stints`
+- `pit`
+- `pit_stops`
+- `weather`
+- `team_radio`
+- `overtakes`
+- `race_control`
+- `session_result`
+- `starting_grid`
+- `championship_drivers`
+- `championship_teams`
+
+### Driver
+
+| Gateway | Upstream |
+| --- | --- |
+| `GET /v1/race/sessions/{sessionId}/drivers/{driverNumber}/profile` | `GET /sessions/{sessionId}/drivers/{driverNumber}/profile` |
+| `GET /v1/race/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
+| `GET /v1/race/sessions/{sessionId}/drivers/{driverNumber}/{dataset}` | `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}` |
+| `GET /v1/race/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` |
+
+Supported driver datasets on `/drivers/{driverNumber}/{dataset}`:
+
+- `laps`
+- `telemetry`
+- `location`
+- `position`
+- `intervals`
+- `stints`
+- `pit`
+- `radio`
+- `result`
+
+### WebSocket Live
+
+| Gateway | Upstream |
+| --- | --- |
+| `WS /v1/race/live?sessionId={sessionId}` | `WS /live?sessionId={sessionId}` |
+
+### Parameter Validation
+
+Gateway returns `400` with `{ "error": "invalid parameter" }` when one of these values is invalid on `/v1/race/*`:
+
+- `dataset` for `/sessions/{sessionId}/datasets/{dataset}`
+- `segment` for `/drivers/{driverNumber}/{segment}` (allowed: driver datasets + `profile` + `broadcast`)
+- `driverNumber` when present on a driver path (must be a positive integer)
+- `lapNumber` on `/drivers/{driverNumber}/laps/{lapNumber}/location` (must be a positive integer)
+
 ## Error Handling Notes
 
 - Upstream service responses are passed through as-is (including status code and body).
@@ -104,6 +193,7 @@ If `{dataset}` is not in this list, gateway returns:
   - `401` invalid provided auth header
   - `429` rate limit exceeded
   - `400` invalid championship dataset parameter on v1 dataset route
+  - `400` invalid race v1 parameter (`dataset`, `driverNumber`, `lapNumber`)
   - `502` upstream unavailable/proxy failure
 
 ## Notes
