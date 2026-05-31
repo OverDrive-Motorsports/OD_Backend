@@ -21,25 +21,33 @@ Follow this direction of dependencies only:
 - `internal/adapters/outbound`: concrete implementations (auth provider, etc.)
 - `internal/adapters/inbound/http`: HTTP handlers, middleware, proxy behavior
 - `internal/app`: dependency injection and runtime assembly
+- `internal/config`: env parsing and route registry
 
 ## Add a New Proxied Route
 
-1. Open `internal/config/config.go`.
-2. Add the route prefix in `buildRoutes()`.
-3. Add corresponding env variable in `gateway/.env.template` and `gateway/.env`.
-4. Document it in `gateway/ROUTES.md`.
-5. Test with `curl` through gateway.
+1. Open or create the relevant route registry file in `internal/config/`:
+   - `routes_auth.go`
+   - `routes_user_data.go`
+   - `routes_championship.go`
+   - `routes_race_data.go`
+   - `routes_ingestion.go`
+2. Add the new prefix to the `proxied` map of that service.
+3. If needed, add/update service health path in the `health` map.
+4. If the service is new, wire it in `routes_registry.go` and `config.go`.
+5. Add corresponding env variable in `gateway/.env.template` and `gateway/.env`.
+6. Document changes in `gateway/README.md` and `gateway/ROUTES.md`.
+7. Test with `curl` through the gateway.
 
 ## Replace Static Auth With JWT
 
 1. Keep `core/ports/token_validator.go` unchanged if possible.
-2. Add a new adapter in `internal/adapters/outbound/auth` (e.g. `jwt_token_validator.go`).
+2. Add a new adapter in `internal/adapters/outbound/auth` (for example `jwt_token_validator.go`).
 3. Update `internal/app/bootstrap.go` to inject the new validator.
 4. Keep HTTP middleware unchanged (it already depends on use case callback).
 
 ## Add a New Use Case
 
-1. Create/extend domain model in `core/domain` if needed.
+1. Create or extend domain model in `core/domain` if needed.
 2. Add required interface(s) in `core/ports`.
 3. Implement use case in `core/usecases`.
 4. Implement adapter(s) for new ports in `adapters/outbound`.
@@ -50,7 +58,7 @@ Follow this direction of dependencies only:
 - Keep use cases deterministic and framework-agnostic.
 - Keep adapters focused on I/O and translation.
 - Do not put business rules in middleware/proxy code.
-- Keep HTTP responses consistent JSON.
+- Keep HTTP responses in consistent JSON shape.
 - Prefer small files with explicit naming.
 
 ## Smoke Test Checklist
@@ -81,3 +89,4 @@ curl -i http://localhost:3000/health/ingestion
 - Route/use case works end-to-end
 - `README.md` and `ROUTES.md` updated
 - No architectural boundary violation (`core` importing `adapters`)
+- `go test ./gateway/...` passes

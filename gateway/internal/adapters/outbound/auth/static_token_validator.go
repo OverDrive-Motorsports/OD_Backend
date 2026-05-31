@@ -1,3 +1,5 @@
+// Package auth contains outbound auth adapter implementations.
+
 package auth
 
 import "strings"

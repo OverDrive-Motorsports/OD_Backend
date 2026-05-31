@@ -1,3 +1,5 @@
+// Package main boots the API gateway process and HTTP server.
+
 package main
 
 import (

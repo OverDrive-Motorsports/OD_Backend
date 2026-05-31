@@ -1,3 +1,5 @@
+// Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
+
 package httpinbound
 
 import (
@@ -34,10 +36,19 @@ func NewHandler(
 			return nil, err
 		}
 
-		protected := RequireAuthorization(authorizeUseCase.Execute, proxyHandler)
+		serviceHandler := http.Handler(proxyHandler)
+		if prefix == "/v1/championship" {
+			// Explicit edge validation for dataset enum on public championship v1.
+			serviceHandler = ValidateChampionshipDataset(serviceHandler)
+		}
+
+		protected := RequireAuthorization(authorizeUseCase.Execute, serviceHandler)
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)
 	}
 
+	// Global middleware order for every route:
+	// 1) Rate limit at the edge
+	// 2) Request logging on final status
 	return RequestLogger(RateLimit(rateLimitRPS, rateLimitBurst, mux)), nil
 }
