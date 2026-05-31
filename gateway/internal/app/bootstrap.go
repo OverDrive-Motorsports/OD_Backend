@@ -1,3 +1,5 @@
+// Package app wires gateway dependencies into a runnable runtime.
+
 package app
 
 import (

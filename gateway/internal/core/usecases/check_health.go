@@ -1,3 +1,5 @@
+// Package usecases contains gateway application use cases.
+
 package usecases
 
 import (

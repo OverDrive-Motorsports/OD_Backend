@@ -1,3 +1,5 @@
+// Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
+
 package httpinbound
 
 import (

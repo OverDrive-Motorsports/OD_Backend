@@ -1,3 +1,5 @@
+// Package config loads environment configuration and route registries.
+
 package config
 
 import (
@@ -121,29 +123,6 @@ func buildUpstreamTargets() (upstreamTargets, error) {
 		raceData:     raceDataTargets,
 		ingestion:    ingestionTargets,
 	}, nil
-}
-
-func buildRoutes(targets upstreamTargets) map[string][]*url.URL {
-	return map[string][]*url.URL{
-		"/auth":          targets.auth,
-		"/presets":       targets.userData,
-		"/providers":     targets.userData,
-		"/users":         targets.userData,
-		"/championships": targets.championship,
-		"/race-data":     targets.raceData,
-		"/races":         targets.raceData,
-		"/ingestion":     targets.ingestion,
-	}
-}
-
-func buildServiceHealthRoutes(targets upstreamTargets) map[string][]*url.URL {
-	return map[string][]*url.URL{
-		"/health/auth":         targets.auth,
-		"/health/user-data":    targets.userData,
-		"/health/championship": targets.championship,
-		"/health/race-data":    targets.raceData,
-		"/health/ingestion":    targets.ingestion,
-	}
 }
 
 func parseTargets(raw string) ([]*url.URL, error) {
