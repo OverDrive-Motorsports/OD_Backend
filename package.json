@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "prisma": "^6.19.3"
+  },
+  "dependencies": {
+    "tsx": "^4.22.4"
   }
 }
