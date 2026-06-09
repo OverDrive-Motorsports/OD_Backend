@@ -1,3 +1,14 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## static_token_validator.go - Outbound adapter that validates a static bearer token.
+ ##
+ */
+
+// Package auth contains outbound auth adapter implementations.
+
 package auth
 
 import "strings"

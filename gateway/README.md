@@ -9,7 +9,13 @@ Centralized HTTP gateway for the OverDrive backend microservices.
 - Apply shared cross-cutting concerns (auth, logging, rate limiting)
 - Expose health endpoints for gateway and each service
 
-## Run
+## Start Gateway
+
+Prerequisites:
+
+- Go installed (same version as project toolchain)
+- `gateway/.env` configured (or environment variables exported)
+- Upstream services running on configured URLs
 
 From repository root:
 
@@ -17,12 +23,65 @@ From repository root:
 go run ./gateway
 ```
 
-Gateway configuration is loaded from `gateway/.env`.
-No runtime fallback values are hardcoded in the gateway config.
+From `gateway/` directory:
+
+```bash
+go run .
+```
+
+Gateway starts on `http://localhost:${HTTP_PORT}` (default template: `3000`).
+
+## Use Gateway
+
+Read configured token from `.env`:
+
+```bash
+GATEWAY_TOKEN="$(grep '^GATEWAY_AUTH_TOKEN=' gateway/.env | cut -d= -f2-)"
+```
+
+Liveness:
+
+```bash
+curl -i http://localhost:3000/health
+```
+
+Liveness with auth header:
+
+```bash
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" http://localhost:3000/health
+```
+
+Invalid token example:
+
+```bash
+curl -i -H "Authorization: Bearer invalid" http://localhost:3000/health
+```
+
+Proxied API examples:
+
+```bash
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+  http://localhost:3000/v1/championship/championships
+
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+  http://localhost:3000/v1/race-data/championships
+```
+
+Dataset validation examples:
+
+```bash
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+  http://localhost:3000/v1/championship/sessions/123/datasets/not_allowed
+
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+  http://localhost:3000/v1/race-data/sessions/123/drivers/not_a_number/profile
+```
 
 ## Routes
 
 - Full route mapping: [ROUTES.md](./ROUTES.md)
+- Championship public facade: `/v1/championship/*` -> `championship-service`
+- Race public facade: `/v1/race-data/*` -> `race-data-service`
 
 ## Hexagonal Architecture (simple)
 
@@ -52,8 +111,24 @@ Applied at gateway level:
 - Request logging (method, path, status, duration, remote)
 - In-memory token-bucket rate limiting by client IP
 
+Additional route-specific validation:
+
+- `/v1/championship/sessions/{sessionId}/datasets/{dataset}` validates dataset enum at gateway edge
+- `/v1/race-data/sessions/{sessionId}/datasets/{dataset}` validates race dataset enum at gateway edge
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`/`broadcast`) at gateway edge
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/...` validates `driverNumber` is a positive integer
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` validates `lapNumber` is a positive integer
+
 If no `Authorization` header is provided, request is allowed.
 If an `Authorization` header is provided, it must match the configured token.
+
+## Forwarded Headers
+
+Gateway forwards and enriches:
+
+- `X-Forwarded-Host`
+- `X-Forwarded-Proto`
+- `X-Forwarded-For`
 
 ## Health Endpoints
 

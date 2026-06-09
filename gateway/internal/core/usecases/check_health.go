@@ -1,3 +1,14 @@
+/**
+ ##
+ ## OverDrive 2026
+ ## All Technical rights reserved
+ ##
+ ## check_health.go - Use case returning gateway health status payload.
+ ##
+ */
+
+// Package usecases contains gateway application use cases.
+
 package usecases
 
 import (
