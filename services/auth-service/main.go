@@ -30,11 +30,12 @@ func main() {
 	}
 
 	usecase := usecases.NewGetHealthUseCase(cfg.ServiceName)
-	controller := httpadapter.NewHealthController(usecase)
+	healthController := httpadapter.NewHealthController(usecase)
+	authController := httpadapter.NewAuthController()
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(controller),
+		Handler:           httpadapter.NewRouter(healthController, authController),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

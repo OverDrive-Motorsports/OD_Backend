@@ -10,9 +10,12 @@ package httpadapter
 
 import "net/http"
 
-func NewRouter(controller *HealthController) http.Handler {
+func NewRouter(hc *HealthController, ac *AuthController) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", controller.GetHealth)
+	mux.HandleFunc("/health", hc.GetHealth)
+	mux.HandleFunc("/auth/login", ac.Login)
+	mux.HandleFunc("/auth/signup", ac.Signup)
+	mux.HandleFunc("/auth/refresh", ac.Refresh)
 
 	return mux
 }
