@@ -1,12 +1,12 @@
-/*
-*
+/**
 ##
 ## OverDrive 2026
 ## All Technical rights reserved
 ##
-## user.entity.go - Domain entity representing the auth-service user and auth session response payload.
+## catalog.service.go - Package ports source file for services/championship-service/src/core/ports.
 ##
 */
+
 package domain
 
 import "github.com/steebchen/prisma-client-go/runtime/types"
@@ -22,7 +22,7 @@ type User struct {
 
 type AuthSession struct {
 	ID               string         `json:"id"`
-	UserId           string         `json:"userId"`
+	UserID           string         `json:"userID"`
 	RefreshTokenHash string         `json:"refreshTokenHash"`
 	ExpiresAt        types.DateTime `json:"expiresAt"`
 	CreatedAt        types.DateTime `json:"createdAt"`
