@@ -45,10 +45,12 @@ func main() {
 	sessionRepository := prismaadapter.NewSessionRepository(client)
 	sessionUseCase := usecases.NewSessionQueryUseCase(sessionRepository)
 	sessionController := httpadapter.NewSessionController(sessionUseCase)
+	authUseCase := usecases.NewAuthQueryUseCase(sessionRepository)
+	authController := httpadapter.NewAuthController(authUseCase)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, sessionController),
+		Handler:           httpadapter.NewRouter(healthController, sessionController, authController),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

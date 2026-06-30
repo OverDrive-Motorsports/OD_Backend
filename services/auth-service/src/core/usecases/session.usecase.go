@@ -3,7 +3,7 @@
 ## OverDrive 2026
 ## All Technical rights reserved
 ##
-## session.usecase.go - Package usecases source file for services/championship-service/src/core/usecases.
+## session.usecase.go - Package usecases source file for services/auth-service/src/core/usecases.
 ##
 */
 
@@ -31,9 +31,11 @@ func (u *SessionQueryUseCase) GetUserSessions(ctx context.Context, userID string
 func (u *SessionQueryUseCase) GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error) {
 	return u.repository.GetUserSession(ctx, userID, sessionID)
 }
+
 func (u *SessionQueryUseCase) AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error) {
 	return u.repository.AddUserSession(ctx, userID)
 }
+
 func (u *SessionQueryUseCase) RemoveUserSession(ctx context.Context, userID string, sessionID string) error {
 	return u.repository.RemoveUserSession(ctx, userID, sessionID)
 }
