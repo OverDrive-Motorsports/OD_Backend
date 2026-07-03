@@ -27,3 +27,9 @@ type AuthSession struct {
 	ExpiresAt        types.DateTime `json:"expiresAt"`
 	CreatedAt        types.DateTime `json:"createdAt"`
 }
+
+type LoginResponse struct {
+	Token            string         `json:"token"`
+	RefreshTokenHash string         `json:"refreshTokenHash"`
+	ExpiresAt        types.DateTime `json:"expiresAt"`
+}

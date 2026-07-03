@@ -7,5 +7,5 @@ func registerSessionRoutes(mux *http.ServeMux, sessionController *SessionControl
 	mux.HandleFunc("GET /{userID}/sessions", sessionController.GetUserSessions)
 	mux.HandleFunc("GET /{userID}/session/{sessionID}", sessionController.GetUserSession)
 	mux.HandleFunc("POST /{userID}/session", sessionController.AddUserSession)
-	mux.HandleFunc("DELETE /{userID}/session", sessionController.RemoveUserSession)
+	mux.HandleFunc("DELETE /{userID}/session/{sessionID}", sessionController.RemoveUserSession)
 }

@@ -15,6 +15,6 @@ import (
 )
 
 type AuthQueryUseCase interface {
-	Login(ctx context.Context, email string, password string) (*domain.AuthSession, error)
-	Register(ctx context.Context, email string, password string, userName string) (*domain.AuthSession, error)
+	Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error)
+	Register(ctx context.Context, email string, password string, userName string) (*domain.LoginResponse, error)
 }

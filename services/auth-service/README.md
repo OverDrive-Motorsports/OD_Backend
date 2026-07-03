@@ -1,8 +1,6 @@
 # auth-service
 
-`auth-service` is the future authentication and authorization service of the platform.
-
-For now, it only exposes a healthcheck endpoint so we can validate the service bootstrapping and keep the architecture stable while the real auth logic is still being built.
+`auth-service` is the authentication and authorization service of the platform.
 
 ## Run
 
@@ -16,8 +14,10 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
 
 ## Current behavior
 
-- exposes `GET /health`
-- returns the service status and service name
+- exposes `GET /health` and returns the service status and service name
+- exposes `POST /login` and `POST /register` to login or register a user
+- exposes `GET/POST /{userID}/sessions` for retrieving or creating user sessions
+- exposes `GET/DELETE /{userID}/session/{sessionID}` for retrieving or deleting user session
 
 ## Planned scope
 
