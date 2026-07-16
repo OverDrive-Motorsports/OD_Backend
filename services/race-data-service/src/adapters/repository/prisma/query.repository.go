@@ -14,6 +14,7 @@ package prismaadapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -24,6 +25,13 @@ import (
 
 type QueryRepository struct {
 	client *db.PrismaClient
+}
+
+// isNotFoundErr reports whether err is the Prisma "no row matched" sentinel — this
+// client returns (nil, ErrNotFound) rather than (nil, nil) on a FindUnique/FindFirst
+// miss, so callers must check for it explicitly instead of treating it as a hard error.
+func isNotFoundErr(err error) bool {
+	return errors.Is(err, db.ErrNotFound)
 }
 
 // NewQueryRepository builds and returns a query repository with its required dependencies.
@@ -132,6 +140,9 @@ func (r *QueryRepository) GetDriverLapLocation(ctx context.Context, sessionID st
 		),
 	).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if lap == nil {
@@ -192,6 +203,9 @@ func (r *QueryRepository) GetDriverBroadcast(ctx context.Context, sessionID stri
 		db.SessionDriverBroadcast.DriverID.Equals(driverID),
 	).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return "", nil
+		}
 		return "", err
 	}
 	if row == nil {

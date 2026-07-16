@@ -16,7 +16,7 @@ import "net/url"
 func ingestionServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
 		proxied: map[string][]*url.URL{
-			"/ingestion": targets.ingestion,
+			"/v1/ingestion": targets.ingestion,
 		},
 		health: map[string][]*url.URL{
 			"/health/ingestion": targets.ingestion,

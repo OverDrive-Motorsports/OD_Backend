@@ -39,22 +39,22 @@ Read configured token from `.env`:
 GATEWAY_TOKEN="$(grep '^GATEWAY_AUTH_TOKEN=' gateway/.env | cut -d= -f2-)"
 ```
 
-Liveness:
+Liveness (no auth required, kept open for infra probes):
 
 ```bash
 curl -i http://localhost:3000/health
 ```
 
-Liveness with auth header:
+Invalid token example on a protected `/v1/*` route:
 
 ```bash
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" http://localhost:3000/health
+curl -i -H "Authorization: Bearer invalid" http://localhost:3000/v1/championship/championships
 ```
 
-Invalid token example:
+Missing header example (now rejected — see Middleware section below):
 
 ```bash
-curl -i -H "Authorization: Bearer invalid" http://localhost:3000/health
+curl -i http://localhost:3000/v1/championship/championships
 ```
 
 Proxied API examples:
@@ -107,20 +107,27 @@ Dependency direction:
 
 Applied at gateway level:
 
-- Optional Bearer auth on all routes (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`)
+- Mandatory Bearer auth on all `/v1/*` proxied routes (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`); `/health` and `/health/{service}` stay open for infra probes
 - Request logging (method, path, status, duration, remote)
 - In-memory token-bucket rate limiting by client IP
 
 Additional route-specific validation:
 
 - `/v1/championship/sessions/{sessionId}/datasets/{dataset}` validates dataset enum at gateway edge
+- `/v1/championship/drivers/{driverNumber}/profile` validates `driverNumber` is a positive integer
+- `/v1/championship/*?driverNumber=` validates the `driverNumber` query parameter is a positive integer when present
 - `/v1/race-data/sessions/{sessionId}/datasets/{dataset}` validates race dataset enum at gateway edge
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`/`broadcast`) at gateway edge
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/...` validates `driverNumber` is a positive integer
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` validates `lapNumber` is a positive integer
+- `/v1/race-data/sessions/{sessionId}/race/{action}` validates `action` against the allowed race-live sub-resources (`position`, `laps`, `stints`, `pitstops`, `control`, `weather`, `radio`); `control` is a `POST` (long-poll) route, all others are `GET`
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}` validates `action` against the allowed telemetry sub-resources (`speed`, `engine`, `location`, `intervals`)
+- `/v1/race-data/*?driverNumber=` and `?lapNumber=` validate those query parameters are positive integers when present
 
-If no `Authorization` header is provided, request is allowed.
-If an `Authorization` header is provided, it must match the configured token.
+`/v1/*` proxied routes now require a valid `Authorization: Bearer <token>` header.
+A missing header or a header that does not match the configured token both result
+in `401 Unauthorized`. (Previously, requests with no `Authorization` header at all
+were let through unauthenticated — this was a known bypass and has been fixed.)
 
 ## Forwarded Headers
 

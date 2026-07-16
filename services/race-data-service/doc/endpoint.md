@@ -86,6 +86,37 @@ Supported session datasets:
   - `championship_drivers`
   - `championship_teams`
 
+### Live race routes (public contract, validated 2026-07-08)
+
+All responses below are **camelCase** JSON. List endpoints return **bare JSON
+arrays** (`[...]`), never a `{ "count", "data" }` envelope — see
+`.story/endpoint.md` for the exact field-by-field shape of each response.
+`sessionId` is validated against `championship-service`; unknown sessions
+return `404 { "error": "session not found" }`.
+
+- `GET /sessions/{sessionId}/race/position` (query: `driverNumber`, `lapNumber`) — returns a single position object when `driverNumber` is given, otherwise a bare array of every driver's latest position
+- `GET /sessions/{sessionId}/race/laps` (query: `driverNumber`, `lapNumber`) — returns a single `{driverNumber, laps, bestLap, averageLap}` object when `driverNumber` is given, otherwise a bare array of that object per driver. `bestLap`/`averageLap` are always computed from ALL of that driver's laps, even when `lapNumber` narrows the returned `laps` list.
+- `GET /sessions/{sessionId}/race/stints` (query: `driverNumber`) — bare array
+- `GET /sessions/{sessionId}/race/pitstops` (query: `driverNumber`) — bare array
+- `POST /sessions/{sessionId}/race/control` — **long-poll**: blocks (up to a bounded server-side timeout) until a new race control event batch is ingested for the session, returns it as a bare array, then closes. The client must re-POST to receive the next event. Implemented via an in-memory, single-process pub/sub (`src/core/usecases/race_control_broadcaster.go`) — **this only works correctly with a single race-data-service instance**; horizontal scaling requires swapping in a shared/external broker.
+- `GET /sessions/{sessionId}/race/weather` — bare array, no filters
+- `GET /sessions/{sessionId}/race/radio` (query: `driverNumber`) — bare array
+
+Known gap: `RaceControlEvent.penality` (driverNumber/timePenalty) has no upstream
+data source and is always `null`. `safetyCar` (`"SC"`/`"VSC"`/`null`) is derived
+with a best-effort heuristic from the OpenF1 `category`/`scope` fields, since
+OpenF1 does not expose a dedicated safety-car flag.
+
+### Live telemetry routes (public contract, validated 2026-07-08)
+
+`battery` is intentionally **absent** from `/telemetry/engine` — no data source
+is currently ingested for it.
+
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` (query: `lapNumber`) — single object; `topSpeed`/`averageSpeed` are computed from the scoped samples (whole session, or a single lap when `lapNumber` is given)
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` (query: `lapNumber`) — single object; `drsActive` is a best-effort heuristic (`drsState >= 10`) since OpenF1 encodes DRS as a numeric state code, not a boolean
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` (query: `lapNumber`) — bare array
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/intervals` — single object (latest interval sample)
+
 ### Reserved tables
 
 The Prisma schema also contains archive and highlight-oriented tables:

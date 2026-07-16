@@ -53,8 +53,8 @@ func (u *CatalogQueryUseCase) GetSession(ctx context.Context, sessionID string) 
 }
 
 // ListSessionDrivers returns a collection of session drivers for the requested context.
-func (u *CatalogQueryUseCase) ListSessionDrivers(ctx context.Context, sessionID string) ([]domain.DriverSummary, error) {
-	return u.repository.ListSessionDrivers(ctx, sessionID)
+func (u *CatalogQueryUseCase) ListSessionDrivers(ctx context.Context, sessionID string, teamID string) ([]domain.DriverSummary, error) {
+	return u.repository.ListSessionDrivers(ctx, sessionID, teamID)
 }
 
 // ListSessionTeams returns a collection of session teams for the requested context.
@@ -65,4 +65,14 @@ func (u *CatalogQueryUseCase) ListSessionTeams(ctx context.Context, sessionID st
 // GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
 func (u *CatalogQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetResponse, error) {
 	return u.repository.GetSessionDataset(ctx, sessionID, dataset)
+}
+
+// GetSessionStandings returns the generic session standings, optionally isolating a driver.
+func (u *CatalogQueryUseCase) GetSessionStandings(ctx context.Context, sessionID string, driverNumber *int) ([]domain.StandingRow, error) {
+	return u.repository.GetSessionStandings(ctx, sessionID, driverNumber)
+}
+
+// GetDriverProfile returns the global driver profile for the requested driver number.
+func (u *CatalogQueryUseCase) GetDriverProfile(ctx context.Context, driverNumber int, championshipCode string) (*domain.DriverProfile, error) {
+	return u.repository.GetDriverProfile(ctx, driverNumber, championshipCode)
 }

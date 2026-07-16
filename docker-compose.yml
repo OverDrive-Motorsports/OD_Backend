@@ -3,16 +3,16 @@ services:
     image: postgres:16-alpine
     container_name: overdrive-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - overdrive-postgres-data:/var/lib/postgresql/data
       - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/10-init-databases.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     working_dir: /app/services/championship-service
     environment:
-      CHAMPIONSHIP_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_championship?schema=public
+      CHAMPIONSHIP_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_championship?schema=public
       GOCACHE: /tmp/go-build
     command:
       - sh
@@ -41,7 +41,7 @@ services:
         condition: service_healthy
     working_dir: /app/services/race-data-service
     environment:
-      RACE_DATA_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_race_data?schema=public
+      RACE_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_race_data?schema=public
       GOCACHE: /tmp/go-build
     command:
       - sh
@@ -62,7 +62,7 @@ services:
     environment:
       HTTP_PORT: "3003"
       APP_VERSION: dev
-      CHAMPIONSHIP_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_championship?schema=public
+      CHAMPIONSHIP_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_championship?schema=public
       GOCACHE: /tmp/go-build
     command:
       - sh
@@ -92,7 +92,7 @@ services:
     environment:
       HTTP_PORT: "3004"
       APP_VERSION: dev
-      RACE_DATA_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/overdrive_race_data?schema=public
+      RACE_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_race_data?schema=public
       CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
       GOCACHE: /tmp/go-build
     command:
@@ -137,6 +137,43 @@ services:
       - .:/app
     ports:
       - "3005:3005"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
+  gateway:
+    image: golang:1.22
+    depends_on:
+      championship-service:
+        condition: service_healthy
+      race-data-service:
+        condition: service_healthy
+      ingestion-service:
+        condition: service_healthy
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3000"
+      APP_VERSION: dev
+      GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN}
+      GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS}
+      GATEWAY_RATE_LIMIT_BURST: ${GATEWAY_RATE_LIMIT_BURST}
+      AUTH_SERVICE_URLS: http://auth-service:3001
+      USER_DATA_SERVICE_URLS: http://user-data-service:3002
+      CHAMPIONSHIP_SERVICE_URLS: http://championship-service:3003
+      RACE_DATA_SERVICE_URLS: http://race-data-service:3004
+      INGESTION_SERVICE_URLS: http://ingestion-service:3005
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./gateway
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
       interval: 5s

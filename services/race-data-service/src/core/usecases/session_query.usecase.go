@@ -31,22 +31,22 @@ func NewSessionQueryUseCase(repository ports.SessionQueryRepository, client port
 }
 
 // ListChampionships returns a collection of championships for the requested context.
-func (u *SessionQueryUseCase) ListChampionships(ctx context.Context) (map[string]any, error) {
+func (u *SessionQueryUseCase) ListChampionships(ctx context.Context) (any, error) {
 	return u.client.ListChampionships(ctx)
 }
 
 // ListChampionshipEvents returns a collection of championship events for the requested context.
-func (u *SessionQueryUseCase) ListChampionshipEvents(ctx context.Context, code string) (map[string]any, error) {
+func (u *SessionQueryUseCase) ListChampionshipEvents(ctx context.Context, code string) (any, error) {
 	return u.client.ListChampionshipEvents(ctx, code)
 }
 
 // GetEvent returns the requested event payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetEvent(ctx context.Context, eventID string) (map[string]any, error) {
+func (u *SessionQueryUseCase) GetEvent(ctx context.Context, eventID string) (any, error) {
 	return u.client.GetEventPayload(ctx, eventID)
 }
 
 // ListEventSessions returns a collection of event sessions for the requested context.
-func (u *SessionQueryUseCase) ListEventSessions(ctx context.Context, eventID string) (map[string]any, error) {
+func (u *SessionQueryUseCase) ListEventSessions(ctx context.Context, eventID string) (any, error) {
 	return u.client.ListEventSessions(ctx, eventID)
 }
 
@@ -147,7 +147,7 @@ func (u *SessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID s
 }
 
 // GetSessionRaceStandings returns the requested session race standings payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessionID string) (map[string]any, error) {
+func (u *SessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	return u.client.GetSessionRaceStandings(ctx, sessionID)
 }
 
