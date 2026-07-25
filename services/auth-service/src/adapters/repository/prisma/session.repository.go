@@ -38,7 +38,7 @@ func (r *SessionRepository) GetUserSessions(ctx context.Context, userID string) 
 
 	sessions := make([]domain.AuthSession, 0, len(rows))
 	for _, row := range rows {
-		sessions = append(sessions, mapAuthSession(&row))
+		sessions = append(sessions, mapAuthSessionMin(&row))
 	}
 	return sessions, nil
 }
@@ -54,7 +54,7 @@ func (r *SessionRepository) GetUserSession(ctx context.Context, sessionID string
 		return nil, nil
 	}
 
-	session := mapAuthSession(row)
+	session := mapAuthSessionMin(row)
 	return &session, nil
 }
 
@@ -148,11 +148,20 @@ func (r *SessionRepository) RefreshToken(ctx context.Context, sessionID string) 
 // mapAuthSession maps db auth session rows into an internal ingestion dataset.
 func mapAuthSession(row *db.AuthSessionModel) domain.AuthSession {
 	return domain.AuthSession{
-		ID:               row.ID,
-		UserID:           row.UserID,
-		RefreshTokenHash: row.RefreshTokenHash,
-		ExpiresAt:        row.ExpiresAt,
-		CreatedAt:        row.CreatedAt,
+		ID:           row.ID,
+		UserID:       row.UserID,
+		RefreshToken: row.RefreshTokenHash,
+		ExpiresAt:    row.ExpiresAt,
+		CreatedAt:    row.CreatedAt,
+	}
+}
+
+// mapAuthSession maps db auth session rows into an internal ingestion dataset.
+func mapAuthSessionMin(row *db.AuthSessionModel) domain.AuthSession {
+	return domain.AuthSession{
+		ID:        row.ID,
+		ExpiresAt: row.ExpiresAt,
+		CreatedAt: row.CreatedAt,
 	}
 }
 

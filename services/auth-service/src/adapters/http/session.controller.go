@@ -22,7 +22,7 @@ func (c *SessionController) GetUserSessions(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"count": len(sessions), "data": sessions})
+	writeJSON(w, http.StatusOK, map[string]any{"count": len(sessions), "sessions": sessions})
 }
 
 // GetUserSession returns a specific session for one user

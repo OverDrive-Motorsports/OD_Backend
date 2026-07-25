@@ -53,7 +53,7 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 	return &domain.LoginResponse{
 		Token:        token,
 		SessionID:    session.ID,
-		RefreshToken: session.RefreshTokenHash,
+		RefreshToken: session.RefreshToken,
 		ExpiresAt:    session.ExpiresAt,
 	}, nil
 }
@@ -79,7 +79,7 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 	return &domain.LoginResponse{
 		Token:        token,
 		SessionID:    session.ID,
-		RefreshToken: session.RefreshTokenHash,
+		RefreshToken: session.RefreshToken,
 		ExpiresAt:    session.ExpiresAt,
 	}, nil
 }
@@ -90,7 +90,7 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 	if err != nil {
 		return nil, err
 	}
-	if existingSession == nil || existingSession.RefreshTokenHash != refreshToken {
+	if existingSession == nil || existingSession.RefreshToken != refreshToken {
 		return nil, errors.New("invalid session")
 	}
 
@@ -100,7 +100,7 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 		return nil, err
 	}
 	return &domain.RefreshResponse{
-		RefreshToken: session.RefreshTokenHash,
+		RefreshToken: session.RefreshToken,
 		ExpiresAt:    session.ExpiresAt,
 	}, nil
 }

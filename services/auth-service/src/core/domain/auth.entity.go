@@ -21,11 +21,11 @@ type User struct {
 }
 
 type AuthSession struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"userID"`
-	RefreshTokenHash string         `json:"refreshTokenHash"`
-	ExpiresAt        types.DateTime `json:"expiresAt"`
-	CreatedAt        types.DateTime `json:"createdAt"`
+	ID           string         `json:"id"`
+	UserID       string         `json:"userID"`
+	RefreshToken string         `json:"refreshToken"`
+	ExpiresAt    types.DateTime `json:"expiresAt"`
+	CreatedAt    types.DateTime `json:"createdAt"`
 }
 
 type LoginResponse struct {
