@@ -43,9 +43,8 @@ func (r *SessionRepository) GetUserSessions(ctx context.Context, userID string) 
 	return sessions, nil
 }
 
-func (r *SessionRepository) GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error) {
+func (r *SessionRepository) GetUserSession(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
 	row, err := r.client.AuthSession.FindFirst(
-		db.AuthSession.UserID.Equals(userID),
 		db.AuthSession.ID.Equals(sessionID),
 	).Exec(ctx)
 	if err != nil {
@@ -124,6 +123,26 @@ func generateRefreshTokenHash() (string, error) {
 	}
 
 	return hex.EncodeToString(randomBytes), nil
+}
+
+func (r *SessionRepository) RefreshToken(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
+	refreshTokenHash, err := generateRefreshTokenHash()
+	if err != nil {
+		return nil, err
+	}
+
+	row, err := r.client.AuthSession.FindUnique(
+		db.AuthSession.ID.Equals(sessionID),
+	).Update(
+		db.AuthSession.RefreshTokenHash.Set(refreshTokenHash),
+		db.AuthSession.ExpiresAt.Set(time.Now().Add(30*24*time.Hour)),
+	).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	session := mapAuthSession(row)
+	return &session, nil
 }
 
 // mapAuthSession maps db auth session rows into an internal ingestion dataset.

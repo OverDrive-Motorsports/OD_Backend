@@ -33,6 +33,7 @@ func NewAuthQueryUseCase(repository ports.SessionRepository) *AuthQueryUseCase {
 
 func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {
 	user, err := u.repository.GetUserByEmail(ctx, email)
+
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +51,10 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 		return nil, err
 	}
 	return &domain.LoginResponse{
-		Token:            token,
-		RefreshTokenHash: session.RefreshTokenHash,
-		ExpiresAt:        session.ExpiresAt,
+		Token:        token,
+		SessionID:    session.ID,
+		RefreshToken: session.RefreshTokenHash,
+		ExpiresAt:    session.ExpiresAt,
 	}, nil
 }
 
@@ -71,15 +73,35 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 	token, err := generateJWT(user.ID, user.Email)
 	session, err := u.repository.AddUserSession(ctx, user.ID)
 
-	println(token)
-
 	if err != nil {
 		return nil, err
 	}
 	return &domain.LoginResponse{
-		Token:            token,
-		RefreshTokenHash: session.RefreshTokenHash,
-		ExpiresAt:        session.ExpiresAt,
+		Token:        token,
+		SessionID:    session.ID,
+		RefreshToken: session.RefreshTokenHash,
+		ExpiresAt:    session.ExpiresAt,
+	}, nil
+}
+
+func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
+	existingSession, err := u.repository.GetUserSession(ctx, sessionID)
+
+	if err != nil {
+		return nil, err
+	}
+	if existingSession == nil || existingSession.RefreshTokenHash != refreshToken {
+		return nil, errors.New("invalid session")
+	}
+
+	session, err := u.repository.RefreshToken(ctx, sessionID)
+
+	if err != nil {
+		return nil, err
+	}
+	return &domain.RefreshResponse{
+		RefreshToken: session.RefreshTokenHash,
+		ExpiresAt:    session.ExpiresAt,
 	}, nil
 }
 

@@ -27,9 +27,8 @@ func (c *SessionController) GetUserSessions(w http.ResponseWriter, r *http.Reque
 
 // GetUserSession returns a specific session for one user
 func (c *SessionController) GetUserSession(w http.ResponseWriter, r *http.Request) {
-	userID := r.PathValue("userID")
 	sessionID := r.PathValue("sessionID")
-	session, err := c.usecase.GetUserSession(r.Context(), userID, sessionID)
+	session, err := c.usecase.GetUserSession(r.Context(), sessionID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

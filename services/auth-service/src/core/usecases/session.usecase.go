@@ -28,8 +28,8 @@ func (u *SessionQueryUseCase) GetUserSessions(ctx context.Context, userID string
 	return u.repository.GetUserSessions(ctx, userID)
 }
 
-func (u *SessionQueryUseCase) GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error) {
-	return u.repository.GetUserSession(ctx, userID, sessionID)
+func (u *SessionQueryUseCase) GetUserSession(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
+	return u.repository.GetUserSession(ctx, sessionID)
 }
 
 func (u *SessionQueryUseCase) AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error) {

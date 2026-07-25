@@ -68,3 +68,26 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, session)
 }
+
+type refreshBody struct {
+	SessionID    string `json:"sessionId"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+// Refresh Allow the user to register a new account. Returns the created session
+func (c *AuthController) Refresh(w http.ResponseWriter, r *http.Request) {
+	var body refreshBody
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	session, err := c.usecase.Refresh(r.Context(), body.RefreshToken, body.SessionID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
