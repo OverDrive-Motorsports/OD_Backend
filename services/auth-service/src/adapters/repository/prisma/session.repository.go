@@ -54,7 +54,7 @@ func (r *SessionRepository) GetUserSession(ctx context.Context, sessionID string
 		return nil, nil
 	}
 
-	session := mapAuthSessionMin(row)
+	session := mapAuthSession(row)
 	return &session, nil
 }
 
@@ -89,6 +89,22 @@ func (r *SessionRepository) RemoveUserSession(ctx context.Context, userID string
 func (r *SessionRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	row, err := r.client.User.FindFirst(
 		db.User.Email.Equals(email),
+	).Exec(ctx)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	user := mapUser(row)
+	return &user, nil
+}
+
+func (r *SessionRepository) GetUserByID(ctx context.Context, userID string) (*domain.User, error) {
+	row, err := r.client.User.FindFirst(
+		db.User.ID.Equals(userID),
 	).Exec(ctx)
 	if err != nil {
 		if errors.Is(err, db.ErrNotFound) {

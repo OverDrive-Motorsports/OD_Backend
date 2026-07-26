@@ -36,6 +36,7 @@ type LoginResponse struct {
 }
 
 type RefreshResponse struct {
+	Token        string         `json:"token"`
 	RefreshToken string         `json:"refreshToken"`
 	ExpiresAt    types.DateTime `json:"expiresAt"`
 }

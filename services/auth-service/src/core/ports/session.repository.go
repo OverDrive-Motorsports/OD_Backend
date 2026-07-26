@@ -20,6 +20,7 @@ type SessionRepository interface {
 	AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error)
 	RemoveUserSession(ctx context.Context, userID string, sessionID string) error
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
+	GetUserByID(ctx context.Context, userID string) (*domain.User, error)
 	AddUser(ctx context.Context, email string, passwordHash string, username string) (*domain.User, error)
 	RefreshToken(ctx context.Context, sessionID string) (*domain.AuthSession, error)
 }

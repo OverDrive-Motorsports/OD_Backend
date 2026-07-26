@@ -108,6 +108,7 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
 #### Response:
 ```json
 {
+    "token": "<token>",
     "refreshToken": "<refresh_token>",
     "expiresAt": "2026-08-12T15:45:02.918Z"
 }

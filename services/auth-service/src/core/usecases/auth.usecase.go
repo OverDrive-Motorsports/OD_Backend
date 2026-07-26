@@ -45,6 +45,9 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 		return nil, errors.New("invalid credentials")
 	}
 	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
 	session, err := u.repository.AddUserSession(ctx, user.ID)
 
 	if err != nil {
@@ -71,6 +74,9 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 		return nil, err
 	}
 	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
 	session, err := u.repository.AddUserSession(ctx, user.ID)
 
 	if err != nil {
@@ -87,19 +93,32 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
 	existingSession, err := u.repository.GetUserSession(ctx, sessionID)
 
-	if err != nil {
-		return nil, err
-	}
-	if existingSession == nil || existingSession.RefreshToken != refreshToken {
+	if err != nil || existingSession == nil {
 		return nil, errors.New("invalid session")
+	} else if existingSession.RefreshToken != refreshToken {
+		return nil, errors.New("invalid token")
 	}
 
 	session, err := u.repository.RefreshToken(ctx, sessionID)
-
 	if err != nil {
 		return nil, err
 	}
+
+	user, err := u.repository.GetUserByID(ctx, session.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.New("invalid session")
+	}
+
+	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+
 	return &domain.RefreshResponse{
+		Token:        token,
 		RefreshToken: session.RefreshToken,
 		ExpiresAt:    session.ExpiresAt,
 	}, nil
