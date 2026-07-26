@@ -17,6 +17,8 @@ import (
 	db "overdrive/services/auth-service/resources/db"
 	"overdrive/services/auth-service/src/core/domain"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type SessionRepository struct {
@@ -43,8 +45,24 @@ func (r *SessionRepository) GetUserSessions(ctx context.Context, userID string) 
 	return sessions, nil
 }
 
-func (r *SessionRepository) GetUserSession(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
+func (r *SessionRepository) GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error) {
 	row, err := r.client.AuthSession.FindFirst(
+		db.AuthSession.ID.Equals(sessionID),
+		db.AuthSession.UserID.Equals(userID),
+	).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+
+	session := mapAuthSession(row, "")
+	return &session, nil
+}
+
+func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
+	row, err := r.client.AuthSession.FindUnique(
 		db.AuthSession.ID.Equals(sessionID),
 	).Exec(ctx)
 	if err != nil {
@@ -54,12 +72,17 @@ func (r *SessionRepository) GetUserSession(ctx context.Context, sessionID string
 		return nil, nil
 	}
 
-	session := mapAuthSession(row)
+	session := mapAuthSession(row, "")
 	return &session, nil
 }
 
 func (r *SessionRepository) AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error) {
-	refreshTokenHash, err := generateRefreshTokenHash()
+	refreshToken, err := generateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	refreshTokenHash, err := hashRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +96,7 @@ func (r *SessionRepository) AddUserSession(ctx context.Context, userID string) (
 		return nil, err
 	}
 
-	session := mapAuthSession(row)
+	session := mapAuthSession(row, refreshToken)
 	return &session, nil
 }
 
@@ -132,7 +155,7 @@ func (r *SessionRepository) AddUser(ctx context.Context, email string, passwordH
 	return &user, nil
 }
 
-func generateRefreshTokenHash() (string, error) {
+func generateRefreshToken() (string, error) {
 	randomBytes := make([]byte, 32)
 	if _, err := rand.Read(randomBytes); err != nil {
 		return "", err
@@ -142,7 +165,12 @@ func generateRefreshTokenHash() (string, error) {
 }
 
 func (r *SessionRepository) RefreshToken(ctx context.Context, sessionID string) (*domain.AuthSession, error) {
-	refreshTokenHash, err := generateRefreshTokenHash()
+	refreshToken, err := generateRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+
+	refreshTokenHash, err := hashRefreshToken(refreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -157,16 +185,29 @@ func (r *SessionRepository) RefreshToken(ctx context.Context, sessionID string) 
 		return nil, err
 	}
 
-	session := mapAuthSession(row)
+	session := mapAuthSession(row, refreshToken)
 	return &session, nil
 }
 
+func hashRefreshToken(refreshToken string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hash), nil
+}
+
 // mapAuthSession maps db auth session rows into an internal ingestion dataset.
-func mapAuthSession(row *db.AuthSessionModel) domain.AuthSession {
+func mapAuthSession(row *db.AuthSessionModel, refreshToken string) domain.AuthSession {
+	if refreshToken == "" {
+		refreshToken = row.RefreshTokenHash
+	}
+
 	return domain.AuthSession{
 		ID:           row.ID,
 		UserID:       row.UserID,
-		RefreshToken: row.RefreshTokenHash,
+		RefreshToken: refreshToken,
 		ExpiresAt:    row.ExpiresAt,
 		CreatedAt:    row.CreatedAt,
 	}

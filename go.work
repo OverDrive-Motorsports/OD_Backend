@@ -1,12 +1,11 @@
-go 1.22
+go 1.25.0
 
 use (
-	./shared/bootstrap
 	./gateway
 	./services/auth-service
-	./services/user-data-service
 	./services/championship-service
-	./services/race-data-service
 	./services/ingestion-service
+	./services/race-data-service
+	./services/user-data-service
+	./shared/bootstrap
 )
-

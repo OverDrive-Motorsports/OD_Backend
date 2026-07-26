@@ -11,8 +11,6 @@ package usecases
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"os"
 	"overdrive/services/auth-service/src/core/domain"
@@ -20,6 +18,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthQueryUseCase struct {
@@ -41,7 +40,7 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 		return nil, errors.New("invalid credentials")
 	}
 
-	if hashPassword(password) != user.PasswordHash {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
 	}
 	token, err := generateJWT(user.ID, user.Email)
@@ -68,7 +67,10 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 		return nil, errors.New("email already registered")
 	}
 
-	passwordHash := hashPassword(password)
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		return nil, err
+	}
 	user, err := u.repository.AddUser(ctx, email, passwordHash, username)
 	if err != nil {
 		return nil, err
@@ -91,11 +93,11 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 }
 
 func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
-	existingSession, err := u.repository.GetUserSession(ctx, sessionID)
+	existingSession, err := u.repository.GetSessionByID(ctx, sessionID)
 
 	if err != nil || existingSession == nil {
 		return nil, errors.New("invalid session")
-	} else if existingSession.RefreshToken != refreshToken {
+	} else if err := bcrypt.CompareHashAndPassword([]byte(existingSession.RefreshToken), []byte(refreshToken)); err != nil {
 		return nil, errors.New("invalid token")
 	}
 
@@ -124,9 +126,13 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 	}, nil
 }
 
-func hashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(hash[:])
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hash), nil
 }
 
 func generateJWT(userID string, email string) (string, error) {
