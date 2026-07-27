@@ -1,20 +1,21 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## main.go - Service entrypoint and HTTP server bootstrap for auth-service.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## catalog.service.go - Package ports source file for services/championship-service/src/core/ports.
+##
 */
+
 package main
 
 import (
 	"errors"
 	"log"
 	"net/http"
+	db "overdrive/services/auth-service/resources/db"
 	httpadapter "overdrive/services/auth-service/src/adapters/http"
+	prismaadapter "overdrive/services/auth-service/src/adapters/repository/prisma"
 	"overdrive/services/auth-service/src/core/usecases"
 	"overdrive/shared/bootstrap"
 	"time"
@@ -29,12 +30,27 @@ func main() {
 		log.Fatal(err)
 	}
 
-	usecase := usecases.NewGetHealthUseCase(cfg.ServiceName)
-	controller := httpadapter.NewHealthController(usecase)
+	client := db.NewClient()
+	if err := client.Prisma.Connect(); err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := client.Prisma.Disconnect(); err != nil {
+			log.Printf("failed to disconnect prisma client: %v", err)
+		}
+	}()
+
+	healthUseCase := usecases.NewGetHealthUseCase(cfg.ServiceName)
+	healthController := httpadapter.NewHealthController(healthUseCase)
+	sessionRepository := prismaadapter.NewSessionRepository(client)
+	sessionUseCase := usecases.NewSessionQueryUseCase(sessionRepository)
+	sessionController := httpadapter.NewSessionController(sessionUseCase)
+	authUseCase := usecases.NewAuthQueryUseCase(sessionRepository)
+	authController := httpadapter.NewAuthController(authUseCase)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(controller),
+		Handler:           httpadapter.NewRouter(healthController, sessionController, authController),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

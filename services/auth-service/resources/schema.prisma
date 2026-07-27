@@ -1,14 +1,15 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## database_scheme.sql - Database scheme file for PostgreSQL
- ##
-*/
+ * ##
+ * ## OverDrive 2026
+ * ## All Technical rights reserved
+ * ##
+ * ## database_scheme.sql - Database scheme file for PostgreSQL
+ * ##
+ */
 
 datasource db {
   provider = "postgresql"
+  url      = env("AUTH_DATABASE_URL")
 }
 
 generator db {
@@ -19,24 +20,24 @@ generator db {
 // Authentication Core
 //-------------------------
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique @db.VarChar(255)
-  displayName   String   @db.VarChar(50)
-  passwordHash  String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique @db.VarChar(255)
+  displayName  String   @db.VarChar(50)
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   authSessions AuthSession[]
 }
 
 model AuthSession {
   id               String   @id @default(uuid())
-  userId           String
+  userID           String
   refreshTokenHash String
   expiresAt        DateTime
   createdAt        DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userID], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userID])
 }

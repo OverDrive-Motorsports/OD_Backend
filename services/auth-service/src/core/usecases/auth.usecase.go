@@ -1,0 +1,164 @@
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## auth.usecase.go - Package usecases source file for services/auth-service/src/core/usecases.
+##
+*/
+
+package usecases
+
+import (
+	"context"
+	"errors"
+	"os"
+	"overdrive/services/auth-service/src/core/domain"
+	"overdrive/services/auth-service/src/core/ports"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type AuthQueryUseCase struct {
+	repository ports.SessionRepository
+}
+
+// NewAuthQueryUseCase builds and returns a catalog query use case with its required dependencies.
+func NewAuthQueryUseCase(repository ports.SessionRepository) *AuthQueryUseCase {
+	return &AuthQueryUseCase{repository: repository}
+}
+
+func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {
+	user, err := u.repository.GetUserByEmail(ctx, email)
+
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	session, err := u.repository.AddUserSession(ctx, user.ID)
+
+	if err != nil {
+		return nil, err
+	}
+	return &domain.LoginResponse{
+		Token:        token,
+		SessionID:    session.ID,
+		RefreshToken: session.RefreshToken,
+		ExpiresAt:    session.ExpiresAt,
+	}, nil
+}
+
+func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password string, username string) (*domain.LoginResponse, error) {
+	if existingUser, err := u.repository.GetUserByEmail(ctx, email); err != nil {
+		return nil, err
+	} else if existingUser != nil {
+		return nil, errors.New("email already registered")
+	}
+
+	passwordHash, err := hashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+	user, err := u.repository.AddUser(ctx, email, passwordHash, username)
+	if err != nil {
+		return nil, err
+	}
+	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	session, err := u.repository.AddUserSession(ctx, user.ID)
+
+	if err != nil {
+		return nil, err
+	}
+	return &domain.LoginResponse{
+		Token:        token,
+		SessionID:    session.ID,
+		RefreshToken: session.RefreshToken,
+		ExpiresAt:    session.ExpiresAt,
+	}, nil
+}
+
+func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
+	existingSession, err := u.repository.GetSessionByID(ctx, sessionID)
+
+	if err != nil || existingSession == nil {
+		return nil, errors.New("invalid session")
+	} else if err := bcrypt.CompareHashAndPassword([]byte(existingSession.RefreshToken), []byte(refreshToken)); err != nil {
+		return nil, errors.New("invalid token")
+	}
+
+	session, err := u.repository.RefreshToken(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := u.repository.GetUserByID(ctx, session.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, errors.New("invalid session")
+	}
+
+	token, err := generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.RefreshResponse{
+		Token:        token,
+		RefreshToken: session.RefreshToken,
+		ExpiresAt:    session.ExpiresAt,
+	}, nil
+}
+
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+
+	return string(hash), nil
+}
+
+func generateJWT(userID string, email string) (string, error) {
+	claims := jwt.MapClaims{
+		"sub":   userID,
+		"email": email,
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(15 * time.Minute).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	secret := os.Getenv("AUTH_JWT_SECRET")
+	if secret == "" {
+		secret = "dev-secret"
+	}
+
+	signedToken, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", err
+	}
+
+	_, err = jwt.Parse(signedToken, func(token *jwt.Token) (any, error) {
+		return []byte(secret), nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return signedToken, nil
+}
