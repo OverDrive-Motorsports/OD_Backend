@@ -66,6 +66,7 @@ var allowedRaceLiveActions = map[string]struct{}{
 	"control":  {},
 	"weather":  {},
 	"radio":    {},
+	"replay":   {},
 }
 
 // allowedTelemetryActions lists the sub-resources under

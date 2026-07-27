@@ -71,6 +71,10 @@ func main() {
 	telemetryUsecase := usecases.NewTelemetryUseCase(telemetryRepository, championshipClient)
 	telemetryController := httpadapter.NewTelemetryController(telemetryUsecase)
 
+	raceStreamRepository := prismaadapter.NewRaceStreamRepository(client)
+	raceReplayStreamUsecase := usecases.NewRaceReplayStreamUseCase(raceStreamRepository, championshipClient)
+	raceReplayStreamController := httpadapter.NewRaceReplayStreamController(raceReplayStreamUsecase)
+
 	server := &http.Server{
 		Addr: ":" + cfg.HTTPPort,
 		Handler: httpadapter.NewRouter(
@@ -79,6 +83,7 @@ func main() {
 			sessionController,
 			raceLiveController,
 			telemetryController,
+			raceReplayStreamController,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

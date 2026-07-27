@@ -156,6 +156,61 @@ curl -X POST -H "Authorization: Bearer admin" -H 'Content-Type: application/json
 6. The HTTP response bubbles back up through `ingestion-service` →
    gateway → client, summarizing what was fetched/mapped/dispatched.
 
+## Example 5 — the replay bulk dump: `GET /v1/race-data/sessions/{id}/race/replay`
+
+```bash
+curl -H "Authorization: Bearer admin" \
+  "http://localhost:3000/v1/race-data/sessions/openf1:session:9998/race/replay?driverNumber=63"
+```
+
+Same auth/rate-limit/logging as every other route, and — unlike an earlier
+version of this endpoint — nothing else is special about it end to end: it's
+a single `GET` that returns one JSON object, proxied like any other
+`/race/{action}` route (`replay` is one of `allowedRaceLiveActions` in
+`race_parameter_middleware.go`, matched by the same 6-segment path shape as
+`/race/position`, `/race/laps`, etc.).
+
+On the `race-data-service` side, `race_replay_stream.controller.go` parses
+`sessionId`/optional `driverNumber` and calls `race_replay_stream.usecase.go`'s
+`GetReplay`, which:
+
+1. Validates `sessionId` against `championship-service`, same as every other
+   `/race/*`/`/telemetry/*` route (Example 2's pattern).
+2. Asks `race_stream.repository.go` for **eight** datasets — `telemetry`,
+   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`,
+   `lap` — each queried **once per call**, not once per row, sorted ascending
+   by timestamp. Some of these don't have a natural timestamp at all: `stint`
+   has no timestamp column in the schema, so each stint is anchored to the
+   recorded start time of its `lapStart` lap (a `RaceLap` lookup built once
+   and indexed in memory, the same "fetch once, forward-only pointer" pattern
+   used to resolve `lapNumber` on telemetry frames — see
+   `.claude/agents/od-backend-expert.md` for the full trap writeup).
+3. Groups the six driver-scoped datasets into `map[string][]T` keyed by
+   driver number (as a string), and leaves the two track-wide datasets
+   (`raceControl`, `weather`) as flat arrays. No merging across dataset types
+   is needed — each dataset lives under its own top-level JSON key instead of
+   one interleaved timeline, so each `List*Frames` repository call's own
+   ascending sort is all the ordering that's required.
+4. Returns the assembled `domain.RaceReplay` object as the JSON response body
+   — no pagination, no streaming, no pacing.
+
+This is explicitly a **replay** of already-ingested historical samples, not a
+live feed of an in-progress race — there's no live race happening in this dev
+setup. See `services/race-data-service/doc/endpoint.md` for the full response
+shape and per-dataset notes.
+
+This endpoint used to be a paced Server-Sent Events stream
+(`/race/replay/stream`, with a `speed` query param) that multiplexed the same
+eight datasets onto one long-lived connection. It was simplified to this
+plain-JSON bulk dump — no more pacing/streaming/client-disconnect handling.
+The gateway's SSE flush-passthrough fix (`statusRecorder.Flush()` in
+`logging_middleware.go`) and its regression test (`flush_passthrough_test.go`) were
+kept in place even though no current route uses SSE, since they're harmless
+and directly reusable should a streaming endpoint be added again — see
+`gateway/ROUTES.md` for the writeup of that trap (embedding an
+`http.ResponseWriter` by interface does not promote `Flush()`, which belongs
+to the separate `http.Flusher` interface).
+
 ## Identifiers, end to end
 
 Nothing in the public API uses OpenF1's raw numeric keys directly. Every ID is
@@ -173,7 +228,7 @@ by every service, so the same real-world entity always maps to the same string:
 ## Response contract
 
 Every public route under `/v1/championship/*` and `/v1/race-data/*` follows the
-same shape rules (validated 2026-07-08, see `.story/endpoint.md`):
+same shape rules:
 
 - JSON field names are **camelCase**.
 - Any list-shaped response is a **bare JSON array** (`[...]`), never wrapped in a

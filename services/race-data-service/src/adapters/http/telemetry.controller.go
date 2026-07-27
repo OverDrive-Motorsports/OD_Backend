@@ -26,40 +26,32 @@ func NewTelemetryController(usecase ports.TelemetryUseCase) *TelemetryController
 	return &TelemetryController{usecase: usecase}
 }
 
-// GetSpeed returns speed telemetry for the requested session/driver.
+// GetSpeed returns every speed sample for the requested session/driver.
 func (c *TelemetryController) GetSpeed(w http.ResponseWriter, r *http.Request) {
 	sessionID, driverNumber, lapNumber, ok := c.parseCommon(w, r)
 	if !ok {
 		return
 	}
-	payload, err := c.usecase.GetSpeed(r.Context(), sessionID, driverNumber, lapNumber)
+	items, err := c.usecase.GetSpeed(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
-	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "telemetry not found"})
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
+	writeJSON(w, http.StatusOK, items)
 }
 
-// GetEngine returns engine telemetry for the requested session/driver.
+// GetEngine returns every engine sample for the requested session/driver.
 func (c *TelemetryController) GetEngine(w http.ResponseWriter, r *http.Request) {
 	sessionID, driverNumber, lapNumber, ok := c.parseCommon(w, r)
 	if !ok {
 		return
 	}
-	payload, err := c.usecase.GetEngine(r.Context(), sessionID, driverNumber, lapNumber)
+	items, err := c.usecase.GetEngine(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
-	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "telemetry not found"})
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
+	writeJSON(w, http.StatusOK, items)
 }
 
 // GetLocation returns spatial telemetry for the requested session/driver.

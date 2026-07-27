@@ -37,13 +37,13 @@ func (u *TelemetryUseCase) SessionExists(ctx context.Context, sessionID string) 
 	return session != nil, nil
 }
 
-// GetSpeed returns computed speed telemetry for a driver.
-func (u *TelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) (*domain.TelemetrySpeed, error) {
+// GetSpeed returns every speed sample for a driver, oldest first.
+func (u *TelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
 	return u.repository.GetSpeed(ctx, sessionID, driverNumber, lapNumber)
 }
 
-// GetEngine returns the latest engine telemetry for a driver.
-func (u *TelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) (*domain.TelemetryEngine, error) {
+// GetEngine returns every engine sample for a driver, oldest first.
+func (u *TelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
 	return u.repository.GetEngine(ctx, sessionID, driverNumber, lapNumber)
 }
 

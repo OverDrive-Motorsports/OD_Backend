@@ -29,68 +29,52 @@ func NewTelemetryRepository(client *db.PrismaClient) *TelemetryRepository {
 	return &TelemetryRepository{client: client}
 }
 
-// GetSpeed computes current/top/average speed for a driver, optionally scoped to a lap.
-func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) (*domain.TelemetrySpeed, error) {
+// GetSpeed returns every speed sample for a driver, oldest first, optionally
+// scoped to a lap. Changed 2026-07-08 from an aggregated current/top/average
+// snapshot to the full raw sample list — see domain.TelemetrySpeed.
+func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
 	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
-	if err != nil || len(rows) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	var top int
-	var sum int
-	var count int
+	items := make([]domain.TelemetrySpeed, 0, len(rows))
 	for _, row := range rows {
-		if speed, ok := row.SpeedKph(); ok {
-			if speed > top {
-				top = speed
-			}
-			sum += speed
-			count++
-		}
+		speed, _ := row.SpeedKph()
+		gear, _ := row.Gear()
+		items = append(items, domain.TelemetrySpeed{
+			Speed:     speed,
+			Gear:      gear,
+			Timestamp: time.Time(row.DateUtc),
+		})
 	}
-	latest := rows[0]
-	current := 0
-	if speed, ok := latest.SpeedKph(); ok {
-		current = speed
-	}
-	gear := 0
-	if g, ok := latest.Gear(); ok {
-		gear = g
-	}
-	average := 0.0
-	if count > 0 {
-		average = float64(sum) / float64(count)
-	}
-	return &domain.TelemetrySpeed{
-		DriverNumber: driverNumber,
-		CurrentSpeed: current,
-		TopSpeed:     top,
-		AverageSpeed: average,
-		Gear:         gear,
-		Timestamp:    time.Time(latest.DateUtc),
-	}, nil
+	return items, nil
 }
 
-// GetEngine returns the latest engine sample for a driver, optionally scoped to a lap.
-func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) (*domain.TelemetryEngine, error) {
+// GetEngine returns every engine sample for a driver, oldest first, optionally
+// scoped to a lap. Changed 2026-07-08 from a "latest sample only" snapshot to
+// the full raw sample list — see domain.TelemetryEngine.
+func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
 	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
-	if err != nil || len(rows) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	latest := rows[0]
-	rpm, _ := latest.Rpm()
-	gear, _ := latest.Gear()
-	throttle, _ := latest.ThrottlePct()
-	brake, _ := latest.BrakePct()
-	drsState, _ := latest.DrsState()
-	return &domain.TelemetryEngine{
-		DriverNumber:    driverNumber,
-		Rpm:             rpm,
-		Gear:            gear,
-		ThrottlePercent: throttle,
-		BrakePercent:    brake,
-		DrsActive: drsState >= 10,
-		Timestamp: time.Time(latest.DateUtc),
-	}, nil
+	items := make([]domain.TelemetryEngine, 0, len(rows))
+	for _, row := range rows {
+		rpm, _ := row.Rpm()
+		gear, _ := row.Gear()
+		throttle, _ := row.ThrottlePct()
+		brake, _ := row.BrakePct()
+		drsState, _ := row.DrsState()
+		items = append(items, domain.TelemetryEngine{
+			Rpm:             rpm,
+			Gear:            gear,
+			ThrottlePercent: throttle,
+			BrakePercent:    brake,
+			DrsActive:       drsState >= 10,
+			Timestamp:       time.Time(row.DateUtc),
+		})
+	}
+	return items, nil
 }
 
 // ListLocation returns spatial samples for a driver, optionally scoped to a lap.
@@ -155,7 +139,7 @@ func (r *TelemetryRepository) GetIntervals(ctx context.Context, sessionID string
 	return result, nil
 }
 
-// telemetrySamples loads a driver's telemetry samples, newest first, optionally
+// telemetrySamples loads a driver's telemetry samples, oldest first, optionally
 // scoped to a single lap's time window.
 func (r *TelemetryRepository) telemetrySamples(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]db.RaceTelemetrySampleModel, error) {
 	params := []db.RaceTelemetrySampleWhereParam{
@@ -175,7 +159,7 @@ func (r *TelemetryRepository) telemetrySamples(ctx context.Context, sessionID st
 			db.RaceTelemetrySample.DateUtc.Lt(db.DateTime(end)),
 		)
 	}
-	rows, err := r.client.RaceTelemetrySample.FindMany(params...).OrderBy(db.RaceTelemetrySample.DateUtc.Order(db.SortOrderDesc)).Exec(ctx)
+	rows, err := r.client.RaceTelemetrySample.FindMany(params...).OrderBy(db.RaceTelemetrySample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

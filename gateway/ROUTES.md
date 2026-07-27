@@ -64,7 +64,7 @@ Forwarded/proxy headers added by gateway:
 All routes below are exposed by gateway under `/v1/championship/*` and proxied to `championship-service`.
 
 Response bodies are camelCase JSON; list endpoints return bare arrays (`[...]`), never a
-`{ "count", "data" }` envelope. See `.story/endpoint.md` (validated 2026-07-08) for exact shapes.
+`{ "count", "data" }` envelope.
 
 ### Catalog
 
@@ -178,9 +178,9 @@ Supported driver datasets on `/drivers/{driverNumber}/{dataset}`:
 - `radio`
 - `result`
 
-### Live Race (public contract, camelCase, validated 2026-07-08)
+### Live Race (public contract, camelCase, validated)
 
-All routes below are camelCase, bare-array-or-object JSON per `.story/endpoint.md`
+All routes below are camelCase, bare-array-or-object JSON
 (no `{ "count", "data" }` envelope). `POST /race/control` is a long-poll: the request
 blocks until a new race control event batch is available (bounded server-side
 timeout), then closes — the client must re-POST to keep receiving events.
@@ -194,8 +194,61 @@ timeout), then closes — the client must re-POST to keep receiving events.
 | `POST /v1/race-data/sessions/{sessionId}/race/control` | `POST /sessions/{sessionId}/race/control` (long-poll) |
 | `GET /v1/race-data/sessions/{sessionId}/race/weather` | `GET /sessions/{sessionId}/race/weather` |
 | `GET /v1/race-data/sessions/{sessionId}/race/radio` | `GET /sessions/{sessionId}/race/radio` (query: `driverNumber`) |
+| `GET /v1/race-data/sessions/{sessionId}/race/replay` | `GET /sessions/{sessionId}/race/replay` (query: `driverNumber`), see below |
 
-### Live Telemetry (public contract, camelCase, validated 2026-07-08)
+#### `GET /sessions/{sessionId}/race/replay` (plain JSON bulk dump)
+
+A plain JSON bulk dump of every stored sample for a session across eight
+datasets — `telemetry`, `position`, `raceControl`, `weather`, `radio`,
+`pitStop`, `stint`, `lap` — returned as one response body. Additive, not a
+replacement for the routes above. It replays already-ingested historical
+data for a finished/stored session; there is no pacing/streaming, it's one
+`GET` returning the whole history at once. Driver-scoped datasets
+(`telemetry`, `position`, `radio`, `pitStop`, `stint`, `lap`) are objects
+keyed by driver number (string); `weather`/`raceControl` are always
+track-wide flat arrays (never filtered by `driverNumber`). `stint` entries
+are sorted by an **approximated** timestamp (anchored to the `lapStart`
+lap's recorded start time — `RaceStint` has no timestamp column at all) and
+`lap` entries are ordered by lap **completion**
+(`dateStartUtc + lapDurationSec`), not lap start — see
+`services/race-data-service/doc/endpoint.md` for the full per-dataset
+breakdown and payload shapes.
+
+Note: this route used to be a Server-Sent Events stream
+(`/race/replay/stream`, paced by a `speed` query param). It was replaced by
+this plain-JSON bulk dump — no more streaming, pacing, or `speed` param. The
+gateway's SSE flush-passthrough fix on `statusRecorder`
+(`logging_middleware.go`'s explicit `Flush()` forwarding, see below) and its
+regression test (`flush_passthrough_test.go`) were left in place even though no
+current route uses SSE, since they're harmless and directly reusable if a
+streaming endpoint is added again in the future.
+
+#### SSE flush-passthrough (kept for future streaming endpoints)
+
+Go's `httputil.ReverseProxy` auto-detects `Content-Type: text/event-stream`
+(and any response with unknown `Content-Length`) and flushes immediately
+regardless of `FlushInterval` — no gateway config change is needed for that
+part. However, `RequestLogger`'s `statusRecorder` (`logging_middleware.go`)
+wraps the response writer to capture the status code, and embedding the
+`http.ResponseWriter` **interface** only promotes the methods declared on
+that interface (`Header`/`Write`/`WriteHeader`) — it does **not** promote
+`Flush()`, which belongs to the separate `http.Flusher` interface, even
+though the concrete writer underneath implements it. Left unfixed, this
+silently breaks SSE through the gateway: frames buffer until the whole
+response completes instead of arriving incrementally, even though hitting
+the upstream service directly works fine. `statusRecorder` has an explicit
+`Flush()` that type-asserts and forwards to the underlying writer. **Any
+future ResponseWriter wrapper added to this package's middleware chain needs
+the same explicit forwarding** (`Flush`, and `Hijack`/`Push`/etc. if ever
+needed) — this is not automatic from Go's embedding rules. Verified with
+`gateway/internal/adapters/inbound/http/flush_passthrough_test.go`, which proxies a
+paced fake SSE upstream through the full real middleware chain
+(`RequestLogger` → `RateLimit` → auth → `ValidateRaceParameters` →
+`ReverseProxy`) and asserts the client observes the same inter-frame delay
+the upstream introduced, rather than everything arriving at once at the end
+— useful as a template if a streaming route is added again.
+
+### Live Telemetry (public contract, camelCase, validated)
 
 `battery` is intentionally absent from `/telemetry/engine` (no data source).
 
@@ -218,7 +271,7 @@ Gateway returns `400` with `{ "error": "invalid parameter" }` when one of these 
 
 - `dataset` for `/sessions/{sessionId}/datasets/{dataset}`
 - `segment` for `/drivers/{driverNumber}/{segment}` (allowed: driver datasets + `profile` + `broadcast`)
-- `action` for `/sessions/{sessionId}/race/{action}` (allowed: `position`, `laps`, `stints`, `pitstops`, `control`, `weather`, `radio`)
+- `action` for `/sessions/{sessionId}/race/{action}` (allowed: `position`, `laps`, `stints`, `pitstops`, `control`, `weather`, `radio`, `replay`)
 - `action` for `/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}` (allowed: `speed`, `engine`, `location`, `intervals`)
 - `driverNumber` when present on a driver path or as a `driverNumber` query parameter (must be a positive integer)
 - `lapNumber` on `/drivers/{driverNumber}/laps/{lapNumber}/location` or as a `lapNumber` query parameter (must be a positive integer)

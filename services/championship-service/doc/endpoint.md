@@ -21,8 +21,7 @@ Accepted dataset names:
 ## Public catalog endpoints
 
 All responses are **camelCase** JSON. List endpoints return **bare JSON arrays**
-(`[...]`), never a `{ "count", "data" }` envelope. Contract validated 2026-07-08 —
-see `.story/endpoint.md` for the exact field-by-field shape of each response.
+(`[...]`), never a `{ "count", "data" }` envelope.
 
 - `GET /championships`
 - `GET /championships/{code}/events` (query: `season`)
