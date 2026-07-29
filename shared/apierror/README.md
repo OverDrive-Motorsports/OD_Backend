@@ -1,59 +1,53 @@
 # shared/apierror
 
-Standardized error type shared by every OverDrive backend service (`gateway`, `auth-service`,
-`user-data-service`, `championship-service`, `race-data-service`, `ingestion-service`, and future
-services). One `Error` type, one set of error codes, one terminal log line - no service invents
-its own. Writing the actual HTTP response stays each service's job (see below).
+Standard error type shared by every service (`gateway`, `auth-service`, `user-data-service`,
+`championship-service`, `race-data-service`, `ingestion-service`, ...).
 
-## Adding it to a service
+One `Error` type, one set of codes/status, one log format.
 
-`go.mod`:
-
-```
-require overdrive/shared/apierror v0.0.0
-
-replace overdrive/shared/apierror => ../../shared/apierror
-```
-
-Root `go.work`: add `./shared/apierror` to the `use` block.
+<br>
 
 ## Usage
 
-Build an `*apierror.Error` with a constructor, log it, then write the client response yourself
-with the service's existing JSON helper:
+In a controller: build the error with a constructor, log it, then respond to the client with the
+service's existing JSON helper.
 
 ```go
-func (c *SessionController) GetSession(w http.ResponseWriter, r *http.Request) {
-    payload, err := c.usecase.GetSession(r.Context(), r.PathValue("sessionId"))
-    if err != nil {
-        apiErr := apierror.Internal("Something went wrong.", err)
-        apiErr.LogDebug(r.URL.Path)
-        writeJSON(w, int(apiErr.Status), map[string]any{"error": map[string]any{
-            "code": apiErr.Code, "status": apiErr.Status, "message": apiErr.Message,
-        }})
-        return
-    }
-    if payload == nil {
-        apiErr := apierror.NotFound("SESSION", "No session found for this ID.", nil)
-        apiErr.LogDebug(r.URL.Path)
-        writeJSON(w, int(apiErr.Status), map[string]any{"error": map[string]any{
-            "code": apiErr.Code, "status": apiErr.Status, "message": apiErr.Message,
-        }})
-        return
-    }
-    writeJSON(w, http.StatusOK, payload)
+if payload == nil {
+    apiErr := apierror.NotFound("SESSION", "No session found for this ID.", nil)
+    apiErr.LogDebug(r.URL.Path)
+    writeJSON(w, int(apiErr.Status), map[string]any{"error": map[string]any{
+        "code": apiErr.Code, "status": apiErr.Status, "message": apiErr.Message,
+    }})
+    return
 }
 ```
 
-`LogDebug(path)` prints a plain-text debug line to stderr:
-`status=404 code=SESSION_NOT_FOUND path=/sessions/42 err=<technical detail>` - `Err` (the
-technical cause) only ever appears here, never in the response written to the client.
+- `LogDebug(path)` writes to stderr: `status=404 code=SESSION_NOT_FOUND path=/sessions/42 err=<technical detail>`
+- The constructor's 3rd argument (`err`) is the internal technical error — it goes to the log only, never to the client response.
+- `core`/`repository` layers keep returning plain `error` — only the controller builds an `*apierror.Error`, at the point of responding.
 
-`core`/`repository` layers should keep returning plain `error` - it's the HTTP-facing controller
-that translates into an `*apierror.Error` at the point of response, keeping the domain layer free
-of this dependency.
+<br>
 
-## Constructors
+## Adding a new error message
+
+**1. Reuse an existing constructor first.** If the cause already has one (e.g. `NotFound("RACE", ...)`), just call it with the right message — no new code needed.
+
+**2. No matching constructor? Add one in `apierror.go`:**
+
+```go
+// AuthServiceUnreachable reports the auth service being unreachable (502).
+func AuthServiceUnreachable(message string, err error) *Error {
+    return New(CodeUpstreamUnavailable, StatusBadGateway, message, err)
+}
+```
+
+**3. No matching `Code`/`Status` either?** Add the `Code` constant to the `const` block at the top (`SCREAMING_SNAKE_CASE`), and a `Status` constant if the HTTP status is new too.
+
+**4. Never reuse `INTERNAL_ERROR` (or an unrelated code) out of convenience** — one code per cause, not per endpoint.
+
+
+## Available constructors
 
 | Constructor | Code | Status |
 |---|---|---|
@@ -73,14 +67,14 @@ of this dependency.
 | `ServiceUnavailable(message, err)` | `SERVICE_UNAVAILABLE` | 503 |
 | `UpstreamTimeout(message, err)` | `UPSTREAM_TIMEOUT` | 504 |
 
-`err` is the technical cause (may be `nil`) - it never reaches the client, only the terminal log.
-`message` is client-safe English text.
+<br>
 
-If none of these fit, add a new constructor/code rather than reusing `Internal` or an unrelated
-one - see the parent ticket for the full code table.
+## Adding apierror to a service
 
-## Logging note
+`go.mod`:
+```
+require overdrive/shared/apierror v0.0.0
+replace overdrive/shared/apierror => ../../shared/apierror
+```
 
-`LogDebug` writes to stderr. Each service runs in its own Docker container
-(`docker-compose.yml`), so `docker logs <service>` (or `docker compose logs -f <service>`) shows
-only that service's error lines - no cross-service mixing, no extra wiring needed.
+Root `go.work`: `./shared/apierror` is already in the `use` block.
