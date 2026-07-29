@@ -9,23 +9,26 @@ One `Error` type, one set of codes/status, one log format.
 
 ## Usage
 
-In a controller: build the error with a constructor, log it, then respond to the client with the
-service's existing JSON helper.
+In a controller: build the error with a constructor, then respond to the client with `Write` —
+it logs the technical detail and sends the standardized JSON envelope in one call.
 
 ```go
 if payload == nil {
-    apiErr := apierror.NotFound("SESSION", "No session found for this ID.", nil)
-    apiErr.LogDebug(r.URL.Path)
-    writeJSON(w, int(apiErr.Status), map[string]any{"error": map[string]any{
-        "code": apiErr.Code, "status": apiErr.Status, "message": apiErr.Message,
-    }})
+    apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "No session found for this ID.", nil))
     return
 }
 ```
 
-- `LogDebug(path)` writes to stderr: `status=404 code=SESSION_NOT_FOUND path=/sessions/42 err=<technical detail>`
+`Write` sends:
+```json
+{"error": {"code": "SESSION_NOT_FOUND", "status": 404, "message": "No session found for this ID."}}
+```
+
+and logs to stderr: `status=404 code=SESSION_NOT_FOUND path=/sessions/42 err=<technical detail>`
+
 - The constructor's 3rd argument (`err`) is the internal technical error — it goes to the log only, never to the client response.
 - `core`/`repository` layers keep returning plain `error` — only the controller builds an `*apierror.Error`, at the point of responding.
+- `Write` replaces each service's own `writeJSON(w, status, map[string]any{...})` call for errors — that helper can stay for success responses, it's just no longer needed for errors.
 
 <br>
 
