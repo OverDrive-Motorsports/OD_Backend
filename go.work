@@ -7,5 +7,6 @@ use (
 	./services/ingestion-service
 	./services/race-data-service
 	./services/user-data-service
+	./shared/apierror
 	./shared/bootstrap
 )
