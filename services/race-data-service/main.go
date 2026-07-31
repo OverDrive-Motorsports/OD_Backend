@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -46,9 +44,6 @@ func main() {
 
 	healthUsecase := usecases.NewGetHealthUseCase(cfg.ServiceName)
 	healthController := httpadapter.NewHealthController(healthUsecase)
-	ingestionRepository := prismaadapter.NewIngestionRepository(client)
-	ingestionUsecase := usecases.NewAcceptIngestionBatchUseCase(cfg.ServiceName, ingestionRepository)
-	ingestionController := httpadapter.NewIngestionController(ingestionUsecase)
 	championshipURL := os.Getenv("CHAMPIONSHIP_SERVICE_URL")
 	if championshipURL == "" {
 		championshipURL = "http://localhost:3003"
@@ -58,9 +53,36 @@ func main() {
 	sessionUsecase := usecases.NewSessionQueryUseCase(queryRepository, championshipClient)
 	sessionController := httpadapter.NewSessionController(sessionUsecase)
 
+	// raceControlBroadcaster is a single-instance, in-memory pub/sub backing the
+	// POST /sessions/{sessionId}/race/control long-poll. See
+	// src/core/usecases/race_control_broadcaster.go for the horizontal-scale caveat.
+	raceControlBroadcaster := usecases.NewRaceControlBroadcaster()
+	ingestionRepository := prismaadapter.NewIngestionRepository(client)
+	ingestionUsecase := usecases.NewAcceptIngestionBatchUseCase(cfg.ServiceName, ingestionRepository, raceControlBroadcaster)
+	ingestionController := httpadapter.NewIngestionController(ingestionUsecase)
+
+	raceLiveRepository := prismaadapter.NewRaceLiveRepository(client)
+	raceLiveUsecase := usecases.NewRaceLiveUseCase(raceLiveRepository, championshipClient, raceControlBroadcaster)
+	raceLiveController := httpadapter.NewRaceLiveController(raceLiveUsecase)
+
+	telemetryRepository := prismaadapter.NewTelemetryRepository(client)
+	telemetryUsecase := usecases.NewTelemetryUseCase(telemetryRepository, championshipClient)
+	telemetryController := httpadapter.NewTelemetryController(telemetryUsecase)
+
+	raceStreamRepository := prismaadapter.NewRaceStreamRepository(client)
+	raceReplayStreamUsecase := usecases.NewRaceReplayStreamUseCase(raceStreamRepository, championshipClient)
+	raceReplayStreamController := httpadapter.NewRaceReplayStreamController(raceReplayStreamUsecase)
+
 	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, ingestionController, sessionController),
+		Addr: ":" + cfg.HTTPPort,
+		Handler: httpadapter.NewRouter(
+			healthController,
+			ingestionController,
+			sessionController,
+			raceLiveController,
+			telemetryController,
+			raceReplayStreamController,
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

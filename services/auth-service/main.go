@@ -1,10 +1,10 @@
 /**
-##
-## OverDrive 2026
-## All Technical rights reserved
-##
-## catalog.service.go - Package ports source file for services/championship-service/src/core/ports.
-##
+	##
+	## OverDrive 2026
+	## All Technical rights reserved
+	##
+	## main.go - Service entrypoint and HTTP server bootstrap for auth-service.
+	##
 */
 
 package main

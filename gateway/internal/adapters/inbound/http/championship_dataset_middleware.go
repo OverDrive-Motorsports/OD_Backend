@@ -23,8 +23,9 @@ var allowedChampionshipDatasets = map[string]struct{}{
 	"championship_teams":    {},
 }
 
-// ValidateChampionshipDataset rejects invalid dataset names only for the public
-// championship v1 dataset endpoint. All other paths are forwarded unchanged.
+// ValidateChampionshipDataset rejects invalid dataset names and malformed
+// numeric parameters (driverNumber path/query) for the public championship v1
+// routes. All other paths are forwarded unchanged.
 func ValidateChampionshipDataset(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -32,19 +33,50 @@ func ValidateChampionshipDataset(next http.Handler) http.Handler {
 			return
 		}
 
-		dataset, ok := extractChampionshipDataset(r.URL.Path)
-		if !ok {
-			next.ServeHTTP(w, r)
+		if dataset, ok := extractChampionshipDataset(r.URL.Path); ok {
+			if _, allowed := allowedChampionshipDatasets[dataset]; !allowed {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				return
+			}
+		}
+
+		if driverNumber, ok := extractChampionshipDriverNumber(r.URL.Path); ok && !isPositiveInt(driverNumber) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
 			return
 		}
 
-		if _, allowed := allowedChampionshipDatasets[dataset]; !allowed {
+		if driverNumber := r.URL.Query().Get("driverNumber"); driverNumber != "" && !isPositiveInt(driverNumber) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// extractChampionshipDriverNumber extracts the {driverNumber} segment from
+// /v1/championship/drivers/{driverNumber}/profile.
+func extractChampionshipDriverNumber(path string) (string, bool) {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return "", false
+	}
+
+	parts := strings.Split(trimmed, "/")
+	if len(parts) != 5 {
+		return "", false
+	}
+
+	if parts[0] != "v1" || parts[1] != "championship" || parts[2] != "drivers" || parts[4] != "profile" {
+		return "", false
+	}
+
+	driverNumber := strings.TrimSpace(parts[3])
+	if driverNumber == "" {
+		return "", false
+	}
+
+	return driverNumber, true
 }
 
 func extractChampionshipDataset(path string) (string, bool) {

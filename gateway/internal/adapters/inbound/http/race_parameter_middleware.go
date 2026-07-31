@@ -56,10 +56,32 @@ var allowedRaceDriverActions = map[string]struct{}{
 	"broadcast": {},
 }
 
+// allowedRaceLiveActions lists the sub-resources under
+// /v1/race-data/sessions/{sessionId}/race/{action}.
+var allowedRaceLiveActions = map[string]struct{}{
+	"position": {},
+	"laps":     {},
+	"stints":   {},
+	"pitstops": {},
+	"control":  {},
+	"weather":  {},
+	"radio":    {},
+	"replay":   {},
+}
+
+// allowedTelemetryActions lists the sub-resources under
+// /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}.
+var allowedTelemetryActions = map[string]struct{}{
+	"speed":     {},
+	"engine":    {},
+	"location":  {},
+	"intervals": {},
+}
+
 // ValidateRaceParameters validates selected public /v1/race-data parameters at the gateway edge.
 func ValidateRaceParameters(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -72,6 +94,20 @@ func ValidateRaceParameters(next http.Handler) http.Handler {
 
 		if dataset, ok := extractRaceSessionDataset(parts); ok {
 			if _, allowed := allowedRaceSessionDatasets[dataset]; !allowed {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				return
+			}
+		}
+
+		if action, ok := extractRaceLiveAction(parts); ok {
+			if _, allowed := allowedRaceLiveActions[action]; !allowed {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				return
+			}
+		}
+
+		if action, ok := extractTelemetryAction(parts); ok {
+			if _, allowed := allowedTelemetryActions[action]; !allowed {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
 				return
 			}
@@ -94,8 +130,58 @@ func ValidateRaceParameters(next http.Handler) http.Handler {
 			return
 		}
 
+		if driverNumber := r.URL.Query().Get("driverNumber"); driverNumber != "" && !isPositiveInt(driverNumber) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			return
+		}
+
+		if lapNumber := r.URL.Query().Get("lapNumber"); lapNumber != "" && !isPositiveInt(lapNumber) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
+}
+
+// extractRaceLiveAction extracts the {action} segment from
+// /v1/race-data/sessions/{sessionId}/race/{action}.
+func extractRaceLiveAction(parts []string) (string, bool) {
+	if len(parts) != 6 {
+		return "", false
+	}
+
+	if parts[0] != "v1" || parts[1] != "race-data" || parts[2] != "sessions" || parts[4] != "race" {
+		return "", false
+	}
+
+	if strings.TrimSpace(parts[3]) == "" || strings.TrimSpace(parts[5]) == "" {
+		return "", false
+	}
+
+	return strings.TrimSpace(parts[5]), true
+}
+
+// extractTelemetryAction extracts the {action} segment from
+// /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}.
+func extractTelemetryAction(parts []string) (string, bool) {
+	if len(parts) != 8 {
+		return "", false
+	}
+
+	if parts[0] != "v1" ||
+		parts[1] != "race-data" ||
+		parts[2] != "sessions" ||
+		parts[4] != "drivers" ||
+		parts[6] != "telemetry" {
+		return "", false
+	}
+
+	if strings.TrimSpace(parts[3]) == "" || strings.TrimSpace(parts[5]) == "" || strings.TrimSpace(parts[7]) == "" {
+		return "", false
+	}
+
+	return strings.TrimSpace(parts[7]), true
 }
 
 func splitPath(path string) []string {

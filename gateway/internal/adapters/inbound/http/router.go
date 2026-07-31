@@ -28,15 +28,16 @@ func NewHandler(
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
 
+	// /health and /health/{service} are intentionally left open (no auth
+	// required) so infra/orchestrator liveness probes keep working. Every
+	// other /v1/* route below requires a valid Authorization header.
 	healthHandler := NewHealthHandler(healthUseCase)
-	protectedGatewayHealth := RequireAuthorization(authorizeUseCase.Execute, http.HandlerFunc(healthHandler.HandleHealth))
-	mux.Handle("/health", protectedGatewayHealth)
+	mux.Handle("/health", http.HandlerFunc(healthHandler.HandleHealth))
 
 	for routePath, targets := range serviceHealthRoutes {
 		serviceName := strings.TrimPrefix(routePath, "/health/")
 		serviceHealthHandler := NewServiceHealthHandler(serviceName, targets)
-		protectedServiceHealth := RequireAuthorization(authorizeUseCase.Execute, http.HandlerFunc(serviceHealthHandler.HandleHealth))
-		mux.Handle(routePath, protectedServiceHealth)
+		mux.Handle(routePath, http.HandlerFunc(serviceHealthHandler.HandleHealth))
 	}
 
 	for prefix, targets := range routes {

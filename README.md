@@ -1,7 +1,15 @@
 # OverDrive Backend
 
-This repository contains a Go monorepo split into multiple services.
-The gateway is intentionally not included yet.
+This repository contains a Go monorepo split into a gateway and multiple services.
+It is the backend for the OverDrive AR platform and mobile app, which consume it
+exclusively through the gateway's versioned `/v1/...` routes.
+
+## Gateway
+
+`gateway/` is a centralized HTTP entrypoint that proxies requests to the internal
+services, applying auth, logging, rate limiting, and route-level validation.
+See [gateway/README.md](./gateway/README.md) for setup and usage, and
+[gateway/ROUTES.md](./gateway/ROUTES.md) for the full route mapping.
 
 ## Services
 
@@ -54,6 +62,12 @@ go run ./services/race-data-service
 go run ./services/ingestion-service
 ```
 
+Run the gateway:
+
+```bash
+go run ./gateway
+```
+
 Every service exposes:
 
 - `GET /health`
@@ -63,12 +77,16 @@ The active Docker Compose stack currently runs:
 - `championship-service`
 - `race-data-service`
 - `ingestion-service`
+- `gateway`
 - PostgreSQL
 
 `auth-service` and `user-data-service` are scaffolded for later work and are not started by Docker Compose yet.
+`gateway` requires `championship-service`, `race-data-service`, and `ingestion-service` to be healthy before starting.
+Its proxied routes to `auth-service`/`user-data-service` will return `502` until those services are wired into Compose.
 
 ## Default ports
 
+- `gateway`: `3000`
 - `auth-service`: `3001`
 - `user-data-service`: `3002`
 - `championship-service`: `3003`
@@ -91,7 +109,7 @@ docker compose up -d postgres
 Start the microservice stack with schema sync:
 
 ```bash
-docker compose up -d championship-dbsync race-data-dbsync championship-service race-data-service ingestion-service
+docker compose up -d championship-dbsync race-data-dbsync championship-service race-data-service ingestion-service gateway
 ```
 
 Useful endpoints once the stack is up:
@@ -99,6 +117,7 @@ Useful endpoints once the stack is up:
 - `http://localhost:3003/health`
 - `http://localhost:3004/health`
 - `http://localhost:3005/health`
+- `http://localhost:3000/health` (gateway, no auth required)
 
 Stop the stack:
 
@@ -168,6 +187,6 @@ See `docs/security.md` for the current local security posture, known gaps, and d
 
 ## Next steps
 
-- replace placeholder service info use cases with real domain use cases
-- add service-specific controllers, routes, entities, and repositories
-- introduce inter-service communication once the gateway is added
+- replace placeholder service info use cases with real domain use cases in `auth-service` and `user-data-service`
+- add service-specific controllers, routes, entities, and repositories for `auth-service` and `user-data-service`
+- wire `gateway`, `auth-service`, and `user-data-service` into Docker Compose once they carry real logic

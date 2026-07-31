@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -29,6 +27,13 @@ type CatalogRepository struct {
 
 var errUnknownDataset = errors.New("unknown dataset")
 
+// isNotFoundErr reports whether err is the Prisma "no row matched" sentinel returned
+// by FindUnique — this client returns (nil, ErrNotFound) rather than (nil, nil) on a
+// miss, so callers must check for it explicitly instead of treating it as a hard error.
+func isNotFoundErr(err error) bool {
+	return errors.Is(err, db.ErrNotFound)
+}
+
 // NewCatalogRepository builds and returns a catalog repository with its required dependencies.
 func NewCatalogRepository(client *db.PrismaClient) *CatalogRepository {
 	return &CatalogRepository{client: client}
@@ -43,15 +48,21 @@ func (r *CatalogRepository) ListChampionships(ctx context.Context) ([]domain.Cha
 	items := make([]domain.ChampionshipSummary, 0, len(rows))
 	for _, row := range rows {
 		category, _ := row.Category()
+		provider, err := r.client.Provider.FindUnique(db.Provider.ID.Equals(row.ProviderID)).Exec(ctx)
+		providerCode := ""
+		if err == nil && provider != nil {
+			providerCode = provider.Code
+		}
 		items = append(items, domain.ChampionshipSummary{
-			ID:       row.ID,
-			Code:     row.Code,
-			Name:     row.Name,
-			Category: category,
-			IsActive: row.IsActive,
+			ID:               row.ID,
+			ChampionshipCode: row.Code,
+			Name:             row.Name,
+			Provider:         providerCode,
+			Category:         category,
+			IsActive:         row.IsActive,
 		})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Code < items[j].Code })
+	sort.Slice(items, func(i, j int) bool { return items[i].ChampionshipCode < items[j].ChampionshipCode })
 	return items, nil
 }
 
@@ -70,9 +81,9 @@ func (r *CatalogRepository) ListEventsByChampionship(ctx context.Context, code s
 	}
 	items := make([]domain.EventSummary, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, mapEventSummary(&row))
+		items = append(items, mapEventSummary(&row, code))
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].StartsAtUTC.Before(items[j].StartsAtUTC) })
+	sort.Slice(items, func(i, j int) bool { return items[i].StartDate.Before(items[j].StartDate) })
 	return items, nil
 }
 
@@ -80,12 +91,19 @@ func (r *CatalogRepository) ListEventsByChampionship(ctx context.Context, code s
 func (r *CatalogRepository) GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error) {
 	row, err := r.client.Event.FindUnique(db.Event.ID.Equals(eventID)).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if row == nil {
 		return nil, nil
 	}
-	item := mapEventSummary(row)
+	championshipCode := ""
+	if championship, cErr := r.client.Championship.FindUnique(db.Championship.ID.Equals(row.ChampionshipID)).Exec(ctx); cErr == nil && championship != nil {
+		championshipCode = championship.Code
+	}
+	item := mapEventSummary(row, championshipCode)
 	return &item, nil
 }
 
@@ -96,10 +114,16 @@ func (r *CatalogRepository) ListSessionsByEvent(ctx context.Context, eventID str
 		return nil, err
 	}
 	items := make([]domain.SessionSummary, 0, len(rows))
-	for _, row := range rows {
-		items = append(items, mapSessionSummary(&row))
+	circuit := ""
+	if event, evErr := r.client.Event.FindUnique(db.Event.ID.Equals(eventID)).Exec(ctx); evErr == nil && event != nil {
+		if name, ok := event.CircuitName(); ok {
+			circuit = name
+		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].StartedAtUTC.Before(items[j].StartedAtUTC) })
+	for _, row := range rows {
+		items = append(items, mapSessionSummary(&row, circuit))
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].StartTime.Before(items[j].StartTime) })
 	return items, nil
 }
 
@@ -107,17 +131,27 @@ func (r *CatalogRepository) ListSessionsByEvent(ctx context.Context, eventID str
 func (r *CatalogRepository) GetSession(ctx context.Context, sessionID string) (*domain.SessionSummary, error) {
 	row, err := r.client.Session.FindUnique(db.Session.ID.Equals(sessionID)).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if row == nil {
 		return nil, nil
 	}
-	item := mapSessionSummary(row)
+	circuit := ""
+	if event, evErr := r.client.Event.FindUnique(db.Event.ID.Equals(row.EventID)).Exec(ctx); evErr == nil && event != nil {
+		if name, ok := event.CircuitName(); ok {
+			circuit = name
+		}
+	}
+	item := mapSessionSummary(row, circuit)
 	return &item, nil
 }
 
-// ListSessionDrivers returns a collection of session drivers for the requested context.
-func (r *CatalogRepository) ListSessionDrivers(ctx context.Context, sessionID string) ([]domain.DriverSummary, error) {
+// ListSessionDrivers returns a collection of session drivers for the requested context,
+// optionally filtered by teamId.
+func (r *CatalogRepository) ListSessionDrivers(ctx context.Context, sessionID string, teamID string) ([]domain.DriverSummary, error) {
 	session, event, championship, err := r.loadSessionContext(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -140,6 +174,9 @@ func (r *CatalogRepository) ListSessionDrivers(ctx context.Context, sessionID st
 	}
 	items := make([]domain.DriverSummary, 0, len(drivers))
 	for _, driver := range drivers {
+		if teamID != "" && driver.TeamID != teamID {
+			continue
+		}
 		team := teamByID[driver.TeamID]
 		firstName, _ := driver.FirstName()
 		lastName, _ := driver.LastName()
@@ -149,11 +186,12 @@ func (r *CatalogRepository) ListSessionDrivers(ctx context.Context, sessionID st
 		items = append(items, domain.DriverSummary{
 			ID:           driver.ID,
 			DriverNumber: driver.Number,
-			DriverName:   driver.DisplayName,
+			FullName:     driver.DisplayName,
 			FirstName:    firstName,
 			LastName:     lastName,
 			Code:         code,
 			CountryCode:  countryCode,
+			TeamID:       team.ID,
 			TeamName:     team.Name,
 			TeamColor:    color,
 		})
@@ -188,6 +226,119 @@ func (r *CatalogRepository) ListSessionTeams(ctx context.Context, sessionID stri
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 	return items, nil
+}
+
+// GetSessionStandings returns the generic session standings (race result), optionally
+// isolating a single driver via driverNumber. It generalizes the former
+// GET /sessions/{sessionId}/standings/race endpoint.
+func (r *CatalogRepository) GetSessionStandings(ctx context.Context, sessionID string, driverNumber *int) ([]domain.StandingRow, error) {
+	session, _, championship, err := r.loadSessionContext(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, nil
+	}
+	teamLookup, err := r.loadDriverTeamLookup(ctx, championship.ID)
+	if err != nil {
+		return nil, err
+	}
+	params := []db.SessionResultRowWhereParam{db.SessionResultRow.SessionID.Equals(sessionID)}
+	if driverNumber != nil {
+		params = append(params, db.SessionResultRow.DriverNumber.Equals(*driverNumber))
+	}
+	rows, err := r.client.SessionResultRow.FindMany(params...).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.StandingRow, 0, len(rows))
+	for _, row := range rows {
+		position, _ := row.Position()
+		points, _ := row.Points()
+		raw := rawMap(row.Raw)
+		gapToLeader := stringifyAny(raw["gap_to_leader"])
+		items = append(items, domain.StandingRow{
+			Position:     position,
+			DriverNumber: row.DriverNumber,
+			TeamID:       teamLookup[row.DriverNumber],
+			GapToLeader:  gapToLeader,
+			Points:       points,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Position < items[j].Position })
+	return items, nil
+}
+
+// GetDriverProfile returns the global (session-independent) driver profile for the
+// supplied driver number, optionally scoped by championshipCode.
+func (r *CatalogRepository) GetDriverProfile(ctx context.Context, driverNumber int, championshipCode string) (*domain.DriverProfile, error) {
+	params := []db.DriverWhereParam{db.Driver.Number.Equals(driverNumber)}
+	if championshipCode != "" {
+		championship, err := r.findChampionshipByCode(ctx, championshipCode)
+		if err != nil {
+			return nil, err
+		}
+		if championship == nil {
+			return nil, nil
+		}
+		params = append(params, db.Driver.ChampionshipID.Equals(championship.ID))
+	}
+	driver, err := r.client.Driver.FindFirst(params...).Exec(ctx)
+	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if driver == nil {
+		return nil, nil
+	}
+	championship, err := r.client.Championship.FindUnique(db.Championship.ID.Equals(driver.ChampionshipID)).Exec(ctx)
+	if err != nil && !isNotFoundErr(err) {
+		return nil, err
+	}
+	code := championshipCode
+	if championship != nil {
+		code = championship.Code
+	}
+	countryCode, _ := driver.CountryCode()
+	return &domain.DriverProfile{
+		DriverNumber:     driver.Number,
+		FullName:         driver.DisplayName,
+		Nationality:      countryCode,
+		CurrentTeamID:    driver.TeamID,
+		ChampionshipCode: code,
+		// driverPicture: no data source available yet (see doc/endpoint.md gap note).
+	}, nil
+}
+
+// loadDriverTeamLookup builds a driverNumber -> teamId lookup for a championship.
+func (r *CatalogRepository) loadDriverTeamLookup(ctx context.Context, championshipID string) (map[int]string, error) {
+	drivers, err := r.client.Driver.FindMany(db.Driver.ChampionshipID.Equals(championshipID)).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lookup := make(map[int]string, len(drivers))
+	for _, driver := range drivers {
+		lookup[driver.Number] = driver.TeamID
+	}
+	return lookup, nil
+}
+
+// stringifyAny renders a dynamic raw JSON value as a display string.
+func stringifyAny(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return v
+	default:
+		encoded, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(encoded)
+	}
 }
 
 // GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
@@ -321,20 +472,23 @@ func rawMap(value db.JSON) map[string]any {
 func (r *CatalogRepository) loadSessionContext(ctx context.Context, sessionID string) (*db.SessionModel, *db.EventModel, *db.ChampionshipModel, error) {
 	session, err := r.client.Session.FindUnique(db.Session.ID.Equals(sessionID)).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil, nil, nil
+		}
 		return nil, nil, nil, err
 	}
 	if session == nil {
 		return nil, nil, nil, nil
 	}
 	event, err := r.client.Event.FindUnique(db.Event.ID.Equals(session.EventID)).Exec(ctx)
-	if err != nil {
+	if err != nil && !isNotFoundErr(err) {
 		return nil, nil, nil, err
 	}
 	if event == nil {
 		return session, nil, nil, fmt.Errorf("event %s not found for session %s", session.EventID, session.ID)
 	}
 	championship, err := r.client.Championship.FindUnique(db.Championship.ID.Equals(event.ChampionshipID)).Exec(ctx)
-	if err != nil {
+	if err != nil && !isNotFoundErr(err) {
 		return nil, nil, nil, err
 	}
 	if championship == nil {
@@ -347,6 +501,9 @@ func (r *CatalogRepository) loadSessionContext(ctx context.Context, sessionID st
 func (r *CatalogRepository) findChampionshipByCode(ctx context.Context, code string) (*db.ChampionshipModel, error) {
 	row, err := r.client.Championship.FindFirst(db.Championship.Code.Equals(code)).Exec(ctx)
 	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if row == nil {
@@ -356,7 +513,7 @@ func (r *CatalogRepository) findChampionshipByCode(ctx context.Context, code str
 }
 
 // mapEventSummary maps OpenF1 event summary rows into an internal ingestion dataset.
-func mapEventSummary(row *db.EventModel) domain.EventSummary {
+func mapEventSummary(row *db.EventModel, championshipCode string) domain.EventSummary {
 	officialName, _ := row.OfficialName()
 	countryName, _ := row.CountryName()
 	countryCode, _ := row.CountryCode()
@@ -364,25 +521,26 @@ func mapEventSummary(row *db.EventModel) domain.EventSummary {
 	externalKey, _ := row.ExternalKey()
 	roundNumber, _ := row.RoundNumber()
 	return domain.EventSummary{
-		ID:             row.ID,
-		ChampionshipID: row.ChampionshipID,
-		SeasonYear:     row.SeasonYear,
-		RoundNumber:    intPtrFromInt(roundNumber),
-		Name:           row.Name,
-		OfficialName:   officialName,
-		Location:       row.Location,
-		CountryName:    countryName,
-		CountryCode:    countryCode,
-		CircuitName:    circuitName,
-		ExternalKey:    externalKey,
-		Status:         string(row.Status),
-		StartsAtUTC:    timeValue(row.StartTimeUtc),
-		EndsAtUTC:      timeValue(row.EndTimeUtc),
+		ID:               row.ID,
+		ChampionshipID:   row.ChampionshipID,
+		ChampionshipCode: championshipCode,
+		SeasonYear:       row.SeasonYear,
+		RoundNumber:      intPtrFromInt(roundNumber),
+		Name:             row.Name,
+		OfficialName:     officialName,
+		Circuit:          circuitName,
+		Location:         row.Location,
+		CountryName:      countryName,
+		CountryCode:      countryCode,
+		ExternalKey:      externalKey,
+		Status:           string(row.Status),
+		StartDate:        timeValue(row.StartTimeUtc),
+		EndDate:          timeValue(row.EndTimeUtc),
 	}
 }
 
 // mapSessionSummary maps OpenF1 session summary rows into an internal ingestion dataset.
-func mapSessionSummary(row *db.SessionModel) domain.SessionSummary {
+func mapSessionSummary(row *db.SessionModel, circuit string) domain.SessionSummary {
 	name, _ := row.Name()
 	externalKey, _ := row.ExternalKey()
 	broadcastURL, _ := row.BroadcastURL()
@@ -398,10 +556,11 @@ func mapSessionSummary(row *db.SessionModel) domain.SessionSummary {
 		Type:         string(row.Type),
 		Status:       string(row.Status),
 		Name:         name,
+		Circuit:      circuit,
 		ExternalKey:  externalKey,
 		BroadcastURL: broadcastURL,
-		StartedAtUTC: timeValue(row.StartedAtUtc),
-		EndedAtUTC:   endedAtPtr,
+		StartTime:    timeValue(row.StartedAtUtc),
+		EndTime:      endedAtPtr,
 	}
 }
 

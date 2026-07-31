@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -13,64 +11,95 @@ package domain
 
 import "time"
 
+// NOTE: all response field names are camelCase — this is the public contract
+// consumed by the gateway's /v1/championship/* routes (AR/mobile clients).
+// See .story/endpoint.md, validated 2026-07-08.
+
 type ChampionshipSummary struct {
-	ID       string `json:"id"`
-	Code     string `json:"code"`
-	Name     string `json:"name"`
-	Category string `json:"category,omitempty"`
-	IsActive bool   `json:"is_active"`
+	ID               string `json:"id"`
+	ChampionshipCode string `json:"championshipCode"`
+	Name             string `json:"name"`
+	Provider         string `json:"provider,omitempty"`
+	Category         string `json:"category,omitempty"`
+	Season           int    `json:"season,omitempty"`
+	IsActive         bool   `json:"isActive"`
 }
 
 type EventSummary struct {
-	ID             string    `json:"id"`
-	ChampionshipID string    `json:"championship_id"`
-	SeasonYear     int       `json:"season_year"`
-	RoundNumber    *int      `json:"round_number,omitempty"`
-	Name           string    `json:"name"`
-	OfficialName   string    `json:"official_name,omitempty"`
-	Location       string    `json:"location"`
-	CountryName    string    `json:"country_name,omitempty"`
-	CountryCode    string    `json:"country_code,omitempty"`
-	CircuitName    string    `json:"circuit_name,omitempty"`
-	ExternalKey    string    `json:"external_key,omitempty"`
-	Status         string    `json:"status"`
-	StartsAtUTC    time.Time `json:"starts_at_utc"`
-	EndsAtUTC      time.Time `json:"ends_at_utc"`
+	ID               string    `json:"eventId"`
+	ChampionshipID   string    `json:"championshipId,omitempty"`
+	ChampionshipCode string    `json:"championshipCode,omitempty"`
+	SeasonYear       int       `json:"seasonYear,omitempty"`
+	RoundNumber      *int      `json:"roundNumber,omitempty"`
+	Name             string    `json:"name"`
+	OfficialName     string    `json:"officialName,omitempty"`
+	Circuit          string    `json:"circuit,omitempty"`
+	Location         string    `json:"location"`
+	CountryName      string    `json:"countryName,omitempty"`
+	CountryCode      string    `json:"countryCode,omitempty"`
+	ExternalKey      string    `json:"externalKey,omitempty"`
+	Status           string    `json:"status"`
+	StartDate        time.Time `json:"startDate"`
+	EndDate          time.Time `json:"endDate"`
 }
 
 type SessionSummary struct {
-	ID           string     `json:"id"`
-	EventID      string     `json:"event_id"`
+	ID           string     `json:"sessionId"`
+	EventID      string     `json:"eventId"`
 	Type         string     `json:"type"`
 	Status       string     `json:"status"`
 	Name         string     `json:"name,omitempty"`
-	ExternalKey  string     `json:"external_key,omitempty"`
-	BroadcastURL string     `json:"broadcast_url,omitempty"`
-	StartedAtUTC time.Time  `json:"started_at_utc"`
-	EndedAtUTC   *time.Time `json:"ended_at_utc,omitempty"`
+	Circuit      string     `json:"circuit,omitempty"`
+	ExternalKey  string     `json:"externalKey,omitempty"`
+	BroadcastURL string     `json:"broadcastUrl,omitempty"`
+	StartTime    time.Time  `json:"startTime"`
+	EndTime      *time.Time `json:"endTime,omitempty"`
 }
 
 type DriverSummary struct {
-	ID           string `json:"id"`
-	DriverNumber int    `json:"driver_number"`
-	DriverName   string `json:"driver_name"`
-	FirstName    string `json:"first_name,omitempty"`
-	LastName     string `json:"last_name,omitempty"`
+	ID           string `json:"id,omitempty"`
+	DriverNumber int    `json:"driverNumber"`
+	FullName     string `json:"fullName"`
+	FirstName    string `json:"firstName,omitempty"`
+	LastName     string `json:"lastName,omitempty"`
 	Code         string `json:"code,omitempty"`
-	CountryCode  string `json:"country_code,omitempty"`
-	TeamName     string `json:"team_name,omitempty"`
-	TeamColor    string `json:"team_color,omitempty"`
+	CountryCode  string `json:"countryCode,omitempty"`
+	TeamID       string `json:"teamId,omitempty"`
+	TeamName     string `json:"teamName,omitempty"`
+	TeamColor    string `json:"teamColor,omitempty"`
 }
 
 type TeamSummary struct {
-	ID       string `json:"id"`
+	ID       string `json:"teamId"`
 	Name     string `json:"name"`
 	Code     string `json:"code,omitempty"`
-	ColorHex string `json:"color_hex,omitempty"`
+	ColorHex string `json:"color,omitempty"`
+}
+
+// StandingRow represents a single row of a session's generic standings
+// (race result, starting grid, or championship standings), generalized
+// under GET /sessions/{sessionId}/standings.
+type StandingRow struct {
+	Position     int     `json:"position"`
+	DriverNumber int     `json:"driverNumber"`
+	TeamID       string  `json:"teamId,omitempty"`
+	GapToLeader  string  `json:"gapToLeader,omitempty"`
+	Points       float64 `json:"points,omitempty"`
+}
+
+// DriverProfile is the global (session-independent) driver profile,
+// exposed under GET /drivers/{driverNumber}/profile.
+type DriverProfile struct {
+	DriverNumber     int    `json:"driverNumber"`
+	FullName         string `json:"fullName"`
+	Nationality      string `json:"nationality,omitempty"`
+	CurrentTeamID    string `json:"currentTeamId,omitempty"`
+	ChampionshipCode string `json:"championshipCode,omitempty"`
+	DriverPicture    string `json:"driverPicture,omitempty"`
 }
 
 type SessionDatasetResponse struct {
-	SessionID string           `json:"session_id"`
+	SessionID string           `json:"sessionId"`
 	Dataset   string           `json:"dataset"`
 	Count     int              `json:"count"`
 	Data      []map[string]any `json:"data"`

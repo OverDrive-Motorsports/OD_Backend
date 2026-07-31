@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -17,11 +15,57 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	db "overdrive/services/race-data-service/resources/db"
 	contracts "overdrive/shared/contracts/ingestion"
 )
+
+// ingestionConcurrency bounds how many rows are written to Postgres in parallel per dataset.
+// The generated Prisma client has no CreateMany/bulk-insert support, so high-volume
+// per-sample datasets (telemetry, location, position, intervals) would otherwise be
+// written one row at a time, sequentially — dominated by per-row network round trips.
+const ingestionConcurrency = 16
+
+// runConcurrent applies fn to each row using up to ingestionConcurrency workers and
+// returns the first error encountered (already-started workers are allowed to finish).
+func runConcurrent(rows []map[string]any, fn func(row map[string]any) error) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	sem := make(chan struct{}, ingestionConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	for _, row := range rows {
+		mu.Lock()
+		blocked := firstErr != nil
+		mu.Unlock()
+		if blocked {
+			break
+		}
+
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(row map[string]any) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := fn(row); err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+			}
+		}(row)
+	}
+
+	wg.Wait()
+	return firstErr
+}
 
 type IngestionRepository struct {
 	client *db.PrismaClient
@@ -126,11 +170,11 @@ func (r *IngestionRepository) ensureDriverBroadcasts(ctx context.Context, sessio
 
 // storeLaps persists mapped laps rows into the service database.
 func (r *IngestionRepository) storeLaps(ctx context.Context, sessionID string, rows []map[string]any) error {
-	for _, row := range rows {
+	return runConcurrent(rows, func(row map[string]any) error {
 		driverNumber := intValue(row["driver_number"])
 		lapNumber := intValue(row["lap_number"])
 		if driverNumber == 0 || lapNumber == 0 {
-			continue
+			return nil
 		}
 		payload, err := jsonValue(row)
 		if err != nil {
@@ -158,11 +202,8 @@ func (r *IngestionRepository) storeLaps(ctx context.Context, sessionID string, r
 			db.RaceLap.SpeedTrapKph.SetIfPresent(intPtr(row["speed_trap_kph"])),
 			db.RaceLap.IsPitOutLap.SetIfPresent(boolPtr(row["is_pit_out_lap"])),
 		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+		return err
+	})
 }
 
 // storeTelemetry persists mapped telemetry rows into the service database.
@@ -170,11 +211,11 @@ func (r *IngestionRepository) storeTelemetry(ctx context.Context, sessionID stri
 	if err := r.deleteTelemetryScope(ctx, sessionID, rows); err != nil {
 		return err
 	}
-	for _, row := range rows {
+	return runConcurrent(rows, func(row map[string]any) error {
 		driverNumber := intValue(row["driver_number"])
 		dateUtc, ok := parseTime(row["sample_time_utc"])
 		if driverNumber == 0 || !ok {
-			continue
+			return nil
 		}
 		payload, err := jsonValue(row)
 		if err != nil {
@@ -192,11 +233,8 @@ func (r *IngestionRepository) storeTelemetry(ctx context.Context, sessionID stri
 			db.RaceTelemetrySample.BrakePct.SetIfPresent(floatPtr(row["brake_pct"])),
 			db.RaceTelemetrySample.DrsState.SetIfPresent(intPtr(row["drs_state"])),
 		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+		return err
+	})
 }
 
 // storeLocation persists mapped location rows into the service database.
@@ -204,11 +242,11 @@ func (r *IngestionRepository) storeLocation(ctx context.Context, sessionID strin
 	if err := r.deleteLocationScope(ctx, sessionID, rows); err != nil {
 		return err
 	}
-	for _, row := range rows {
+	return runConcurrent(rows, func(row map[string]any) error {
 		driverNumber := intValue(row["driver_number"])
 		dateUtc, ok := parseTime(row["sample_time_utc"])
 		if driverNumber == 0 || !ok {
-			continue
+			return nil
 		}
 		payload, err := jsonValue(row)
 		if err != nil {
@@ -223,11 +261,8 @@ func (r *IngestionRepository) storeLocation(ctx context.Context, sessionID strin
 			db.RaceLocationSample.Y.SetIfPresent(floatPtr(row["y"])),
 			db.RaceLocationSample.Z.SetIfPresent(floatPtr(row["z"])),
 		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+		return err
+	})
 }
 
 // storePosition persists mapped position rows into the service database.
@@ -235,11 +270,11 @@ func (r *IngestionRepository) storePosition(ctx context.Context, sessionID strin
 	if err := r.deletePositionScope(ctx, sessionID, rows); err != nil {
 		return err
 	}
-	for _, row := range rows {
+	return runConcurrent(rows, func(row map[string]any) error {
 		driverNumber := intValue(row["driver_number"])
 		dateUtc, ok := parseTime(row["sample_time_utc"])
 		if driverNumber == 0 || !ok {
-			continue
+			return nil
 		}
 		payload, err := jsonValue(row)
 		if err != nil {
@@ -253,11 +288,8 @@ func (r *IngestionRepository) storePosition(ctx context.Context, sessionID strin
 			db.RacePositionSample.LapNumber.SetIfPresent(intPtr(row["lap_number"])),
 			db.RacePositionSample.Position.SetIfPresent(intPtr(row["position"])),
 		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+		return err
+	})
 }
 
 // storeIntervals persists mapped intervals rows into the service database.
@@ -265,11 +297,11 @@ func (r *IngestionRepository) storeIntervals(ctx context.Context, sessionID stri
 	if err := r.deleteIntervalsScope(ctx, sessionID, rows); err != nil {
 		return err
 	}
-	for _, row := range rows {
+	return runConcurrent(rows, func(row map[string]any) error {
 		driverNumber := intValue(row["driver_number"])
 		dateUtc, ok := parseTime(row["sample_time_utc"])
 		if driverNumber == 0 || !ok {
-			continue
+			return nil
 		}
 		payload, err := jsonValue(row)
 		if err != nil {
@@ -283,11 +315,8 @@ func (r *IngestionRepository) storeIntervals(ctx context.Context, sessionID stri
 			db.RaceIntervalSample.GapToLeader.SetIfPresent(stringPtr(row["gap_to_leader"])),
 			db.RaceIntervalSample.IntervalToFrontDriver.SetIfPresent(stringPtr(row["interval_to_front_driver"])),
 		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+		return err
+	})
 }
 
 // storeStints persists mapped stints rows into the service database.

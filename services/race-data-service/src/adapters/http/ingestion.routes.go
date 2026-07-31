@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -14,7 +12,14 @@ package httpadapter
 import "net/http"
 
 // NewRouter builds and returns a router with its required dependencies.
-func NewRouter(healthController *HealthController, ingestionController *IngestionController, sessionController *SessionController) http.Handler {
+func NewRouter(
+	healthController *HealthController,
+	ingestionController *IngestionController,
+	sessionController *SessionController,
+	raceLiveController *RaceLiveController,
+	telemetryController *TelemetryController,
+	raceReplayStreamController *RaceReplayStreamController,
+) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthController.GetHealth)
 	mux.Handle("POST /internal/ingestion/batches", limitRequestBody(
@@ -22,5 +27,8 @@ func NewRouter(healthController *HealthController, ingestionController *Ingestio
 		internalIngestionBodyLimitBytes,
 	))
 	registerSessionRoutes(mux, sessionController)
+	registerRaceLiveRoutes(mux, raceLiveController)
+	registerTelemetryRoutes(mux, telemetryController)
+	registerRaceReplayStreamRoutes(mux, raceReplayStreamController)
 	return withSecurityHeaders(mux)
 }

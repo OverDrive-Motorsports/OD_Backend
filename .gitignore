@@ -12,3 +12,5 @@ scripts/
 *.env
 *.tmp
 *.cache
+.claude/
+.story/

@@ -62,18 +62,21 @@ Each Go HTTP server sets `ReadHeaderTimeout` to protect request header parsing.
 
 Local `.env` files are ignored by git. Templates should contain only non-secret placeholders.
 
-Docker Compose currently uses development credentials:
+`docker-compose.yml` reads Postgres and gateway credentials (`POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `POSTGRES_DB`, `GATEWAY_AUTH_TOKEN`, ...) from a root `.env`
+file via variable interpolation, with no hardcoded values or fallback defaults in
+the compose file itself — see `.env.template` for the expected keys. This keeps
+actual values out of version control, even for local development ones.
 
-- PostgreSQL user: `postgres`
-- PostgreSQL password: `postgres`
-
-These values are acceptable for local development only. Production should source database credentials from the deployment secret manager.
+These are development-grade values only. Production should source database and
+gateway credentials from the deployment secret manager, not from a checked-in
+`.env.template`-style file.
 
 ## Known Gaps
 
-- No authentication or authorization is enforced yet on active endpoints.
-- Internal ingestion endpoints rely on deployment topology rather than request signing.
-- No rate limiting is implemented in the Go services.
-- CORS is not configured because the active services are backend APIs intended to be reached by service clients or a future gateway.
+- This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces mandatory Bearer auth (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`) on every proxied `/v1/*` route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/README.md` for current behavior — don't trust the bullet points below at face value.
+- Individual services behind the gateway (`championship-service`, `race-data-service`, etc.) still have no authentication of their own — they rely entirely on the gateway/network topology for access control. Internal ingestion endpoints rely on deployment topology rather than request signing.
+- No rate limiting is implemented inside the individual Go services themselves (only at the gateway edge).
+- CORS is not configured anywhere in the repo. This is consistent with native mobile/AR clients talking to the gateway, but should be revisited if a browser-based client is ever introduced.
 
 These gaps should be addressed before exposing the services beyond a local or private development network.

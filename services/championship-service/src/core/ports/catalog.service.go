@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -23,7 +21,9 @@ type CatalogQueryUseCase interface {
 	GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error)
 	ListSessionsByEvent(ctx context.Context, eventID string) ([]domain.SessionSummary, error)
 	GetSession(ctx context.Context, sessionID string) (*domain.SessionSummary, error)
-	ListSessionDrivers(ctx context.Context, sessionID string) ([]domain.DriverSummary, error)
+	ListSessionDrivers(ctx context.Context, sessionID string, teamID string) ([]domain.DriverSummary, error)
 	ListSessionTeams(ctx context.Context, sessionID string) ([]domain.TeamSummary, error)
 	GetSessionDataset(ctx context.Context, sessionID string, dataset string) (domain.SessionDatasetResponse, error)
+	GetSessionStandings(ctx context.Context, sessionID string, driverNumber *int) ([]domain.StandingRow, error)
+	GetDriverProfile(ctx context.Context, driverNumber int, championshipCode string) (*domain.DriverProfile, error)
 }

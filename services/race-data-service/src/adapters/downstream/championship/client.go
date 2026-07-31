@@ -1,6 +1,4 @@
-/*
-*
-
+/**
 	##
 	## OverDrive 2026
 	## All Technical rights reserved
@@ -38,8 +36,9 @@ func New(baseURL string, timeout time.Duration) *Client {
 }
 
 // ListChampionships returns a collection of championships for the requested context.
-func (c *Client) ListChampionships(ctx context.Context) (map[string]any, error) {
-	var payload map[string]any
+// championship-service now returns a bare JSON array; forward it unchanged.
+func (c *Client) ListChampionships(ctx context.Context) (any, error) {
+	var payload []map[string]any
 	ok, err := c.getJSON(ctx, "/championships", &payload)
 	if err != nil || !ok {
 		return nil, err
@@ -48,8 +47,8 @@ func (c *Client) ListChampionships(ctx context.Context) (map[string]any, error) 
 }
 
 // ListChampionshipEvents returns a collection of championship events for the requested context.
-func (c *Client) ListChampionshipEvents(ctx context.Context, code string) (map[string]any, error) {
-	var payload map[string]any
+func (c *Client) ListChampionshipEvents(ctx context.Context, code string) (any, error) {
+	var payload []map[string]any
 	ok, err := c.getJSON(ctx, "/championships/"+code+"/events", &payload)
 	if err != nil || !ok {
 		return nil, err
@@ -58,7 +57,7 @@ func (c *Client) ListChampionshipEvents(ctx context.Context, code string) (map[s
 }
 
 // GetEventPayload returns the requested event payload payload for the supplied identifiers.
-func (c *Client) GetEventPayload(ctx context.Context, eventID string) (map[string]any, error) {
+func (c *Client) GetEventPayload(ctx context.Context, eventID string) (any, error) {
 	var payload map[string]any
 	ok, err := c.getJSON(ctx, "/events/"+eventID, &payload)
 	if err != nil || !ok {
@@ -68,8 +67,8 @@ func (c *Client) GetEventPayload(ctx context.Context, eventID string) (map[strin
 }
 
 // ListEventSessions returns a collection of event sessions for the requested context.
-func (c *Client) ListEventSessions(ctx context.Context, eventID string) (map[string]any, error) {
-	var payload map[string]any
+func (c *Client) ListEventSessions(ctx context.Context, eventID string) (any, error) {
+	var payload []map[string]any
 	ok, err := c.getJSON(ctx, "/events/"+eventID+"/sessions", &payload)
 	if err != nil || !ok {
 		return nil, err
@@ -98,41 +97,24 @@ func (c *Client) GetEvent(ctx context.Context, eventID string) (*ports.Champions
 }
 
 // ListSessionDrivers returns a collection of session drivers for the requested context.
+// championship-service now returns a bare JSON array (camelCase fields).
 func (c *Client) ListSessionDrivers(ctx context.Context, sessionID string) ([]ports.ChampionshipDriverRef, error) {
-	var payload struct {
-		Data []struct {
-			DriverNumber int    `json:"driver_number"`
-			DriverName   string `json:"driver_name"`
-			TeamName     string `json:"team_name"`
-			TeamColor    string `json:"team_color"`
-		} `json:"data"`
-	}
+	var payload []ports.ChampionshipDriverRef
 	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/drivers", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
-	items := make([]ports.ChampionshipDriverRef, 0, len(payload.Data))
-	for _, row := range payload.Data {
-		items = append(items, ports.ChampionshipDriverRef{
-			DriverNumber: row.DriverNumber,
-			DriverName:   row.DriverName,
-			TeamName:     row.TeamName,
-			TeamColor:    row.TeamColor,
-		})
-	}
-	return items, nil
+	return payload, nil
 }
 
 // ListSessionTeams returns a collection of session teams for the requested context.
 func (c *Client) ListSessionTeams(ctx context.Context, sessionID string) ([]map[string]any, error) {
-	var payload struct {
-		Data []map[string]any `json:"data"`
-	}
+	var payload []map[string]any
 	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/teams", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
-	return payload.Data, nil
+	return payload, nil
 }
 
 // GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
@@ -146,7 +128,7 @@ func (c *Client) GetSessionDataset(ctx context.Context, sessionID string, datase
 }
 
 // GetSessionRaceStandings returns the requested session race standings payload for the supplied identifiers.
-func (c *Client) GetSessionRaceStandings(ctx context.Context, sessionID string) (map[string]any, error) {
+func (c *Client) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	var payload map[string]any
 	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/standings/race", &payload)
 	if err != nil || !ok {
