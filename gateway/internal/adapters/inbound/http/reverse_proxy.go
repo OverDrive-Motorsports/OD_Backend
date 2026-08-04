@@ -20,6 +20,8 @@ import (
 	"path"
 	"strings"
 	"sync/atomic"
+
+	"overdrive/shared/apierror"
 )
 
 type ReverseProxy struct {
@@ -78,7 +80,7 @@ func (p *ReverseProxy) nextTarget() *url.URL {
 
 func (p *ReverseProxy) handleProxyError(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("proxy error for %s: %v", r.URL.Path, err)
-	http.Error(w, "bad gateway", http.StatusBadGateway)
+	apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("upstream service unavailable", err))
 }
 
 func normalizePrefix(prefix string) string {
