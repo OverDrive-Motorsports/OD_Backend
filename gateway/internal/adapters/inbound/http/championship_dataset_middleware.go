@@ -14,6 +14,8 @@ package httpinbound
 import (
 	"net/http"
 	"strings"
+
+	"overdrive/shared/apierror"
 )
 
 var allowedChampionshipDatasets = map[string]struct{}{
@@ -35,18 +37,18 @@ func ValidateChampionshipDataset(next http.Handler) http.Handler {
 
 		if dataset, ok := extractChampionshipDataset(r.URL.Path); ok {
 			if _, allowed := allowedChampionshipDatasets[dataset]; !allowed {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 				return
 			}
 		}
 
 		if driverNumber, ok := extractChampionshipDriverNumber(r.URL.Path); ok && !isPositiveInt(driverNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 
 		if driverNumber := r.URL.Query().Get("driverNumber"); driverNumber != "" && !isPositiveInt(driverNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 
