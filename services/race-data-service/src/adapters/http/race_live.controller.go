@@ -15,6 +15,7 @@ import (
 
 	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 // raceControlLongPollTimeout bounds how long POST /race/control blocks before
@@ -46,11 +47,11 @@ func (c *RaceLiveController) GetPosition(w http.ResponseWriter, r *http.Request)
 	}
 	payload, err := c.usecase.GetPosition(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load position data", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "position data not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("POSITION", "position data not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -72,11 +73,11 @@ func (c *RaceLiveController) GetLaps(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, err := c.usecase.GetLaps(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load lap data", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "lap data not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("LAP", "lap data not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -94,7 +95,7 @@ func (c *RaceLiveController) GetStints(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := c.usecase.GetStints(r.Context(), sessionID, driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load stint data", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -112,7 +113,7 @@ func (c *RaceLiveController) GetPitStops(w http.ResponseWriter, r *http.Request)
 	}
 	items, err := c.usecase.GetPitStops(r.Context(), sessionID, driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load pit stop data", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -126,7 +127,7 @@ func (c *RaceLiveController) GetWeather(w http.ResponseWriter, r *http.Request) 
 	}
 	items, err := c.usecase.GetWeather(r.Context(), sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load weather data", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -144,7 +145,7 @@ func (c *RaceLiveController) GetRadio(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := c.usecase.GetRadio(r.Context(), sessionID, driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load radio data", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -161,7 +162,7 @@ func (c *RaceLiveController) PostRaceControl(w http.ResponseWriter, r *http.Requ
 	}
 	events, err := c.usecase.WaitForRaceControl(r.Context(), sessionID, raceControlLongPollTimeout)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load race control data", err))
 		return
 	}
 	if events == nil {
@@ -175,11 +176,11 @@ func (c *RaceLiveController) PostRaceControl(w http.ResponseWriter, r *http.Requ
 func (c *RaceLiveController) requireSession(w http.ResponseWriter, r *http.Request, sessionID string) bool {
 	exists, err := c.usecase.SessionExists(r.Context(), sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to verify session with championship-service", err))
 		return false
 	}
 	if !exists {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return false
 	}
 	return true

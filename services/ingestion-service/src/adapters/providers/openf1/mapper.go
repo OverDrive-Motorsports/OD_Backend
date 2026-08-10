@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"overdrive/services/ingestion-service/src/core/domain"
 	contracts "overdrive/shared/contracts/ingestion"
 )
 
@@ -87,7 +88,7 @@ func (m *Mapper) Map(resource string, rows []map[string]any) (contracts.Dataset,
 	case "race_control":
 		return m.mapRaceControl(rows), nil
 	default:
-		return contracts.Dataset{}, fmt.Errorf("unsupported OpenF1 resource %q", resource)
+		return contracts.Dataset{}, fmt.Errorf("%w %q", domain.ErrUnsupportedResource, resource)
 	}
 }
 

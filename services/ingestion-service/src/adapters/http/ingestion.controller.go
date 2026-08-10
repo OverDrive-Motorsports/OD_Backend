@@ -10,13 +10,14 @@
 package httpadapter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"overdrive/services/ingestion-service/src/core/domain"
 	"overdrive/services/ingestion-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 type IngestionController struct {
@@ -32,35 +33,36 @@ func NewIngestionController(usecase ports.OpenF1IngestionUseCase) *IngestionCont
 func (c *IngestionController) TriggerOpenF1Ingestion(w http.ResponseWriter, r *http.Request) {
 	var request domain.OpenF1IngestionRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
 		return
 	}
 
 	result, err := c.usecase.Execute(r.Context(), request)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, r.Context().Err()) {
-			status = http.StatusRequestTimeout
-		} else if isClientInputError(err, request) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		apierror.Write(w, r.URL.Path, classifyIngestionError(err, r.Context(), request))
 		return
 	}
 
 	writeJSON(w, http.StatusAccepted, result)
 }
 
-// isClientInputError reports whether an ingestion error was caused by invalid caller input.
-func isClientInputError(err error, request domain.OpenF1IngestionRequest) bool {
-	if request.MeetingKey <= 0 || request.SessionKey <= 0 {
-		return true
+// classifyIngestionError maps an ingestion usecase error to the matching apierror. Invalid
+// caller-supplied identifiers and unsupported OpenF1 resources are both classified as
+// validation errors (400); a context deadline is reported as an upstream timeout (504);
+// anything else is treated as an upstream OpenF1/dispatch failure (502), since Execute only
+// returns errors once request shape has already been checked (see IngestOpenF1UseCase.Execute).
+func classifyIngestionError(err error, ctx context.Context, request domain.OpenF1IngestionRequest) *apierror.Error {
+	if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		return apierror.UpstreamTimeout("OpenF1 request timed out", err)
 	}
 
-	return strings.Contains(err.Error(), "unsupported OpenF1 resource")
-}
+	if request.MeetingKey <= 0 || request.SessionKey <= 0 {
+		return apierror.Validation("meetingKey and sessionKey must be greater than 0", err)
+	}
 
-// writeError serializes an error response with the provided HTTP status code.
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	if errors.Is(err, domain.ErrUnsupportedResource) {
+		return apierror.Validation("unsupported OpenF1 resource requested", err)
+	}
+
+	return apierror.UpstreamUnavailable("failed to ingest data from OpenF1", err)
 }
