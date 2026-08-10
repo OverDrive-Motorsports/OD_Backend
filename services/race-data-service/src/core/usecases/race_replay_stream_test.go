@@ -79,6 +79,26 @@ func t0(offsetSeconds int) time.Time {
 	return base.Add(time.Duration(offsetSeconds) * time.Second)
 }
 
+// TestRaceReplayUseCase_SessionExists mirrors RaceLiveUseCase's/TelemetryUseCase's SessionExists
+// coverage - the same "unknown sessionId -> 404" contract backs GET /race/replay.
+func TestRaceReplayUseCase_SessionExists(t *testing.T) {
+	t.Run("known session", func(t *testing.T) {
+		uc := NewRaceReplayStreamUseCase(&fakeRaceStreamRepository{}, &fakeChampionshipClient{session: &ports.ChampionshipSessionRef{ID: "s1"}})
+		exists, err := uc.SessionExists(context.Background(), "s1")
+		if err != nil || !exists {
+			t.Fatalf("expected exists=true, err=nil, got exists=%v err=%v", exists, err)
+		}
+	})
+
+	t.Run("unknown session", func(t *testing.T) {
+		uc := NewRaceReplayStreamUseCase(&fakeRaceStreamRepository{}, &fakeChampionshipClient{session: nil})
+		exists, err := uc.SessionExists(context.Background(), "missing")
+		if err != nil || exists {
+			t.Fatalf("expected exists=false, err=nil, got exists=%v err=%v", exists, err)
+		}
+	})
+}
+
 // TestGetReplayGroupsDriverScopedDatasetsByDriverNumber feeds two drivers'
 // worth of samples across every driver-scoped dataset and asserts each ends
 // up under the right driver-number key, sorted oldest-first, with the

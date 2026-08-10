@@ -24,12 +24,7 @@ import (
 // next event.
 //
 // IMPORTANT: this is a single-process, in-memory implementation (a Go channel
-// fan-out keyed by sessionID). It intentionally has no external dependency
-// (no Redis/pubsub broker) per the 2026-07-08 decision, but that also means
-// it ONLY works correctly with a single race-data-service instance. If this
-// service is ever scaled horizontally, waiters attached to one instance will
-// never see events ingested via another instance, and this broadcaster must
-// be swapped for a shared/external pub-sub implementation.
+// fan-out keyed by sessionID.
 type RaceControlBroadcaster struct {
 	mu          sync.Mutex
 	subscribers map[string][]chan []domain.RaceControlEvent
