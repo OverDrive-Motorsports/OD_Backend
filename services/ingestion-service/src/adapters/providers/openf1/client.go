@@ -211,7 +211,7 @@ func (c *Client) buildURL(resource string, request domain.OpenF1IngestionRequest
 		"race_control":         true,
 	}
 	if !allowed[resource] {
-		return "", fmt.Errorf("unsupported OpenF1 resource %q", resource)
+		return "", fmt.Errorf("%w %q", domain.ErrUnsupportedResource, resource)
 	}
 
 	query := url.Values{}

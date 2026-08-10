@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"overdrive/services/championship-service/src/core/ports"
+	"overdrive/shared/apierror"
 	contracts "overdrive/shared/contracts/ingestion"
 )
 
@@ -27,16 +28,19 @@ func NewIngestionController(usecase ports.IngestionBatchUseCase) *IngestionContr
 }
 
 // ReceiveBatch handles an incoming HTTP ingestion batch and writes the acknowledgement response.
+// The batch payload is validated up front by the usecase (batch id, datasets, target service),
+// so any error returned by Execute is treated as a validation failure of the caller-supplied
+// batch rather than an internal fault.
 func (c *IngestionController) ReceiveBatch(w http.ResponseWriter, r *http.Request) {
 	var batch contracts.Batch
 	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
 		return
 	}
 
 	ack, err := c.usecase.Execute(r.Context(), batch)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid ingestion batch", err))
 		return
 	}
 

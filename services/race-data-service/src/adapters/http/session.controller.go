@@ -10,10 +10,13 @@
 package httpadapter
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 type SessionController struct {
@@ -29,11 +32,11 @@ func NewSessionController(usecase ports.SessionQueryUseCase) *SessionController 
 func (c *SessionController) GetSession(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSession(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -43,7 +46,7 @@ func (c *SessionController) GetSession(w http.ResponseWriter, r *http.Request) {
 func (c *SessionController) ListChampionships(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.ListChampionships(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -53,11 +56,11 @@ func (c *SessionController) ListChampionships(w http.ResponseWriter, r *http.Req
 func (c *SessionController) ListChampionshipEvents(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.ListChampionshipEvents(r.Context(), r.PathValue("code"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "championship not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("CHAMPIONSHIP", "championship not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -67,11 +70,11 @@ func (c *SessionController) ListChampionshipEvents(w http.ResponseWriter, r *htt
 func (c *SessionController) GetEvent(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetEvent(r.Context(), r.PathValue("eventId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "event not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("EVENT", "event not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -81,11 +84,11 @@ func (c *SessionController) GetEvent(w http.ResponseWriter, r *http.Request) {
 func (c *SessionController) ListEventSessions(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.ListEventSessions(r.Context(), r.PathValue("eventId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "event not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("EVENT", "event not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -95,11 +98,11 @@ func (c *SessionController) ListEventSessions(w http.ResponseWriter, r *http.Req
 func (c *SessionController) GetSessionMetadata(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionMetadata(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -109,11 +112,11 @@ func (c *SessionController) GetSessionMetadata(w http.ResponseWriter, r *http.Re
 func (c *SessionController) ListSessionDrivers(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.ListSessionDrivers(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -123,25 +126,29 @@ func (c *SessionController) ListSessionDrivers(w http.ResponseWriter, r *http.Re
 func (c *SessionController) ListSessionTeams(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.ListSessionTeams(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
 }
 
 // GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
+// The usecase both calls championship-service (session/event context, non-local datasets) and
+// this service's own repository (local datasets), so a failure here cannot be attributed to a
+// single side; it is reported as an internal failure unless it is specifically an unknown
+// dataset name, which is a client validation error.
 func (c *SessionController) GetSessionDataset(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), r.PathValue("dataset"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, classifyDatasetErr(err, "failed to load session dataset"))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -151,11 +158,11 @@ func (c *SessionController) GetSessionDataset(w http.ResponseWriter, r *http.Req
 func (c *SessionController) GetSessionRaceStandings(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionRaceStandings(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -165,11 +172,11 @@ func (c *SessionController) GetSessionRaceStandings(w http.ResponseWriter, r *ht
 func (c *SessionController) GetSessionBroadcast(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionBroadcast(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -179,11 +186,11 @@ func (c *SessionController) GetSessionBroadcast(w http.ResponseWriter, r *http.R
 func (c *SessionController) GetSessionWeather(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), "weather")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load session weather", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -193,11 +200,11 @@ func (c *SessionController) GetSessionWeather(w http.ResponseWriter, r *http.Req
 func (c *SessionController) GetSessionFacts(w http.ResponseWriter, r *http.Request) {
 	payload, err := c.usecase.GetSessionFacts(r.Context(), r.PathValue("sessionId"))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load session facts", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -207,16 +214,16 @@ func (c *SessionController) GetSessionFacts(w http.ResponseWriter, r *http.Reque
 func (c *SessionController) GetDriverProfile(w http.ResponseWriter, r *http.Request) {
 	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid driver number"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
 		return
 	}
 	payload, err := c.usecase.GetDriverProfile(r.Context(), r.PathValue("sessionId"), driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load driver profile", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "driver not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("DRIVER", "driver not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -226,16 +233,16 @@ func (c *SessionController) GetDriverProfile(w http.ResponseWriter, r *http.Requ
 func (c *SessionController) GetDriverBroadcast(w http.ResponseWriter, r *http.Request) {
 	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid driver number"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
 		return
 	}
 	payload, err := c.usecase.GetDriverBroadcast(r.Context(), r.PathValue("sessionId"), driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load driver broadcast", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -245,16 +252,16 @@ func (c *SessionController) GetDriverBroadcast(w http.ResponseWriter, r *http.Re
 func (c *SessionController) GetDriverDataset(w http.ResponseWriter, r *http.Request) {
 	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid driver number"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
 		return
 	}
 	payload, err := c.usecase.GetDriverDataset(r.Context(), r.PathValue("sessionId"), driverNumber, r.PathValue("dataset"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, classifyDatasetErr(err, "failed to load driver dataset"))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -264,22 +271,35 @@ func (c *SessionController) GetDriverDataset(w http.ResponseWriter, r *http.Requ
 func (c *SessionController) GetDriverLapLocation(w http.ResponseWriter, r *http.Request) {
 	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid driver number"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
 		return
 	}
 	lapNumber, err := strconv.Atoi(r.PathValue("lapNumber"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid lap number"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid lap number", err))
 		return
 	}
 	payload, err := c.usecase.GetDriverLapLocation(r.Context(), r.PathValue("sessionId"), driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load driver lap location", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+// classifyDatasetErr maps a session/driver dataset error into the matching apierror. An unknown
+// dataset name is a client validation error (400) - aligned with the gateway's own dataset
+// allow-list validation in race_parameter_middleware.go, which already rejects an unrecognized
+// dataset with 400 rather than 404 at the edge. Anything else is reported with the supplied
+// generic internal-failure message, since the underlying error can originate from either the
+// local repository or the championship-service HTTP client.
+func classifyDatasetErr(err error, message string) *apierror.Error {
+	if errors.Is(err, domain.ErrUnknownDataset) {
+		return apierror.Validation("invalid dataset", err)
+	}
+	return apierror.Internal(message, err)
 }

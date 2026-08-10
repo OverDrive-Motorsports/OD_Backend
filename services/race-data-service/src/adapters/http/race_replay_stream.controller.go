@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"overdrive/services/race-data-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 type RaceReplayStreamController struct {
@@ -33,11 +34,11 @@ func (c *RaceReplayStreamController) GetReplay(w http.ResponseWriter, r *http.Re
 	sessionID := r.PathValue("sessionId")
 	exists, err := c.usecase.SessionExists(r.Context(), sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to verify session with championship-service", err))
 		return
 	}
 	if !exists {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 
@@ -48,7 +49,7 @@ func (c *RaceReplayStreamController) GetReplay(w http.ResponseWriter, r *http.Re
 
 	replay, err := c.usecase.GetReplay(r.Context(), sessionID, driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to build race replay", err))
 		return
 	}
 
