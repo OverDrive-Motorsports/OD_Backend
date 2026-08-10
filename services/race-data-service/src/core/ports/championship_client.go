@@ -12,7 +12,7 @@ package ports
 import "context"
 
 // ChampionshipDriverRef, ChampionshipSessionRef, and ChampionshipEventRef mirror
-// championship-service's camelCase public contract (see .story/endpoint.md).
+// championship-service's camelCase public contract.
 type ChampionshipDriverRef struct {
 	DriverNumber int    `json:"driverNumber"`
 	DriverName   string `json:"fullName"`
@@ -43,8 +43,7 @@ type ChampionshipEventRef struct {
 
 // ChampionshipClient proxies read calls to championship-service. Note that
 // championship-service's public contract returns bare JSON arrays/objects
-// (camelCase, no {"count","data"} envelope) as of 2026-07-08 — the
-// pass-through methods below therefore return `any` and forward whatever
+// the pass-through methods below therefore return `any` and forward whatever
 // shape championship-service produces, instead of assuming an envelope.
 type ChampionshipClient interface {
 	ListChampionships(ctx context.Context) (any, error)

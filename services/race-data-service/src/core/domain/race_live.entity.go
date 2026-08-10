@@ -13,7 +13,6 @@ import "time"
 
 // NOTE: all response field names are camelCase — this is the public contract
 // consumed by the gateway's /v1/race-data/* routes (AR/mobile clients).
-// See .story/endpoint.md, validated 2026-07-08.
 
 // RacePosition represents a driver's live race position, gaps, and lap count.
 type RacePosition struct {
@@ -70,9 +69,6 @@ type RaceControlPenalty struct {
 }
 
 // RaceControlEvent represents a flag, safety car, penalty, or track alert.
-// The JSON key "penality" intentionally matches the documented contract typo
-// in .story/endpoint.md — do not "fix" it without updating the contract doc
-// and consumers together.
 type RaceControlEvent struct {
 	Category  string              `json:"category,omitempty"`
 	Flag      string              `json:"flag,omitempty"`
