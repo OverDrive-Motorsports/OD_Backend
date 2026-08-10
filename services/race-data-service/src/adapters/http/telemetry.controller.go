@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"overdrive/services/race-data-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 type TelemetryController struct {
@@ -32,7 +33,7 @@ func (c *TelemetryController) GetSpeed(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := c.usecase.GetSpeed(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load speed telemetry", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -46,7 +47,7 @@ func (c *TelemetryController) GetEngine(w http.ResponseWriter, r *http.Request) 
 	}
 	items, err := c.usecase.GetEngine(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load engine telemetry", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -60,7 +61,7 @@ func (c *TelemetryController) GetLocation(w http.ResponseWriter, r *http.Request
 	}
 	items, err := c.usecase.GetLocation(r.Context(), sessionID, driverNumber, lapNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load location telemetry", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -78,11 +79,11 @@ func (c *TelemetryController) GetIntervals(w http.ResponseWriter, r *http.Reques
 	}
 	payload, err := c.usecase.GetIntervals(r.Context(), sessionID, driverNumber)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load interval telemetry", err))
 		return
 	}
 	if payload == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "telemetry not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("TELEMETRY", "telemetry not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -111,11 +112,11 @@ func (c *TelemetryController) parseCommon(w http.ResponseWriter, r *http.Request
 func (c *TelemetryController) requireSession(w http.ResponseWriter, r *http.Request, sessionID string) bool {
 	exists, err := c.usecase.SessionExists(r.Context(), sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to verify session with championship-service", err))
 		return false
 	}
 	if !exists {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return false
 	}
 	return true

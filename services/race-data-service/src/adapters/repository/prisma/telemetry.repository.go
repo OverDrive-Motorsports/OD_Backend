@@ -28,8 +28,7 @@ func NewTelemetryRepository(client *db.PrismaClient) *TelemetryRepository {
 }
 
 // GetSpeed returns every speed sample for a driver, oldest first, optionally
-// scoped to a lap. Changed 2026-07-08 from an aggregated current/top/average
-// snapshot to the full raw sample list — see domain.TelemetrySpeed.
+// scoped to a lap.
 func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
 	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
 	if err != nil {
@@ -49,8 +48,7 @@ func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, dr
 }
 
 // GetEngine returns every engine sample for a driver, oldest first, optionally
-// scoped to a lap. Changed 2026-07-08 from a "latest sample only" snapshot to
-// the full raw sample list — see domain.TelemetryEngine.
+// scoped to a lap.
 func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
 	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	db "overdrive/services/race-data-service/resources/db"
+	"overdrive/services/race-data-service/src/core/domain"
 	contracts "overdrive/shared/contracts/ingestion"
 )
 
@@ -88,7 +89,7 @@ func (r *QueryRepository) GetSessionDataset(ctx context.Context, sessionID strin
 		}
 		return data, nil
 	default:
-		return nil, fmt.Errorf("unknown dataset %q", dataset)
+		return nil, fmt.Errorf("%w %q", domain.ErrUnknownDataset, dataset)
 	}
 }
 
@@ -124,7 +125,7 @@ func (r *QueryRepository) GetDriverDataset(ctx context.Context, sessionID string
 	case "radio":
 		return r.radioRows(ctx, sessionID, driverNumber)
 	default:
-		return nil, fmt.Errorf("unknown driver dataset %q", dataset)
+		return nil, fmt.Errorf("%w %q", domain.ErrUnknownDataset, dataset)
 	}
 }
 

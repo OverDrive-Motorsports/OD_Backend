@@ -25,8 +25,6 @@ type CatalogRepository struct {
 	client *db.PrismaClient
 }
 
-var errUnknownDataset = errors.New("unknown dataset")
-
 // isNotFoundErr reports whether err is the Prisma "no row matched" sentinel returned
 // by FindUnique — this client returns (nil, ErrNotFound) rather than (nil, nil) on a
 // miss, so callers must check for it explicitly instead of treating it as a hard error.
@@ -403,7 +401,7 @@ func (r *CatalogRepository) GetSessionDataset(ctx context.Context, sessionID str
 		}
 		return domain.SessionDatasetResponse{SessionID: sessionID, Dataset: dataset, Count: len(data), Data: data, Metadata: metadata}, nil
 	default:
-		return domain.SessionDatasetResponse{}, fmt.Errorf("%w %q", errUnknownDataset, dataset)
+		return domain.SessionDatasetResponse{}, fmt.Errorf("%w %q", domain.ErrUnknownDataset, dataset)
 	}
 }
 

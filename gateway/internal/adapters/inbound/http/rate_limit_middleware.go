@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"overdrive/shared/apierror"
 )
 
 type clientBucket struct {
@@ -63,7 +65,7 @@ func RateLimit(rps float64, burst float64, next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !limiter.allow(getClientIP(r)) {
-			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+			apierror.Write(w, r.URL.Path, apierror.RateLimitExceeded("rate limit exceeded", nil))
 			return
 		}
 

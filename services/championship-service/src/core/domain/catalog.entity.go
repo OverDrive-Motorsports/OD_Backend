@@ -13,7 +13,6 @@ import "time"
 
 // NOTE: all response field names are camelCase — this is the public contract
 // consumed by the gateway's /v1/championship/* routes (AR/mobile clients).
-// See .story/endpoint.md, validated 2026-07-08.
 
 type ChampionshipSummary struct {
 	ID               string `json:"id"`

@@ -91,7 +91,10 @@ Supported session datasets:
 All responses below are **camelCase** JSON. List endpoints return **bare JSON
 arrays** (`[...]`), never a `{ "count", "data" }` envelope. `sessionId` is
 validated against `championship-service`; unknown sessions return `404
-{ "error": "session not found" }`.
+{ "error": { "code": "SESSION_NOT_FOUND", "status": 404, "message": "session
+not found" } }` — the standard `shared/apierror` envelope used across the
+gateway, championship-service, race-data-service, and ingestion-service (see
+`shared/apierror/http.go`).
 
 - `GET /sessions/{sessionId}/race/position` (query: `driverNumber`, `lapNumber`) — returns a single position object when `driverNumber` is given, otherwise a bare array of every driver's latest position
 - `GET /sessions/{sessionId}/race/laps` (query: `driverNumber`, `lapNumber`) — returns a single `{driverNumber, laps, bestLap, averageLap}` object when `driverNumber` is given, otherwise a bare array of that object per driver. `bestLap`/`averageLap` are always computed from ALL of that driver's laps, even when `lapNumber` narrows the returned `laps` list.

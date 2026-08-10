@@ -15,7 +15,7 @@ import "time"
 // GET /sessions/{sessionId}/race/replay's `telemetry` bulk dump. Unlike
 // GET /telemetry/speed, this is a single instantaneous sample: it has no
 // topSpeed/averageSpeed aggregate, since those are only meaningful over a
-// window, not for one row of a bulk dump. See .story/endpoint.md.
+// window.
 //
 // DriverNumber is kept here (unlike the trimmed RaceReplayTelemetrySample
 // below) because the repository/usecase need it to group samples by driver

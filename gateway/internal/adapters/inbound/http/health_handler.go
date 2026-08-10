@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"overdrive/gateway/internal/core/usecases"
 	"time"
+
+	"overdrive/shared/apierror"
 )
 
 type HealthHandler struct {
@@ -28,7 +30,7 @@ func NewHealthHandler(checkHealth usecases.CheckHealthUseCase) HealthHandler {
 
 func (h HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		apierror.Write(w, r.URL.Path, apierror.MethodNotAllowed("method not allowed", nil))
 		return
 	}
 
@@ -37,7 +39,7 @@ func (h HealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	status, ok := h.checkHealth.Execute(ctx)
 	if !ok {
-		writeJSON(w, http.StatusServiceUnavailable, status)
+		apierror.Write(w, r.URL.Path, apierror.ServiceUnavailable("service unavailable", nil))
 		return
 	}
 
