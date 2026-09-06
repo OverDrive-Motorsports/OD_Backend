@@ -11,8 +11,6 @@ package usecases
 
 import (
 	"context"
-	"errors"
-	"os"
 	"overdrive/services/auth-service/src/core/domain"
 	"overdrive/services/auth-service/src/core/ports"
 	"time"
@@ -23,11 +21,12 @@ import (
 
 type AuthQueryUseCase struct {
 	repository ports.SessionRepository
+	jwtSecret  string
 }
 
 // NewAuthQueryUseCase builds and returns a catalog query use case with its required dependencies.
-func NewAuthQueryUseCase(repository ports.SessionRepository) *AuthQueryUseCase {
-	return &AuthQueryUseCase{repository: repository}
+func NewAuthQueryUseCase(repository ports.SessionRepository, jwtSecret string) *AuthQueryUseCase {
+	return &AuthQueryUseCase{repository: repository, jwtSecret: jwtSecret}
 }
 
 func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {
@@ -37,13 +36,13 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 		return nil, err
 	}
 	if user == nil {
-		return nil, errors.New("invalid credentials")
+		return nil, domain.ErrInvalidCredentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return nil, errors.New("invalid credentials")
+		return nil, domain.ErrInvalidCredentials
 	}
-	token, err := generateJWT(user.ID, user.Email)
+	token, err := u.generateJWT(user.ID, user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +63,7 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 	if existingUser, err := u.repository.GetUserByEmail(ctx, email); err != nil {
 		return nil, err
 	} else if existingUser != nil {
-		return nil, errors.New("email already registered")
+		return nil, domain.ErrEmailAlreadyRegistered
 	}
 
 	passwordHash, err := hashPassword(password)
@@ -75,7 +74,7 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 	if err != nil {
 		return nil, err
 	}
-	token, err := generateJWT(user.ID, user.Email)
+	token, err := u.generateJWT(user.ID, user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +95,9 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 	existingSession, err := u.repository.GetSessionByID(ctx, sessionID)
 
 	if err != nil || existingSession == nil {
-		return nil, errors.New("invalid session")
+		return nil, domain.ErrInvalidSession
 	} else if err := bcrypt.CompareHashAndPassword([]byte(existingSession.RefreshToken), []byte(refreshToken)); err != nil {
-		return nil, errors.New("invalid token")
+		return nil, domain.ErrInvalidToken
 	}
 
 	session, err := u.repository.RefreshToken(ctx, sessionID)
@@ -111,10 +110,10 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 		return nil, err
 	}
 	if user == nil {
-		return nil, errors.New("invalid session")
+		return nil, domain.ErrInvalidSession
 	}
 
-	token, err := generateJWT(user.ID, user.Email)
+	token, err := u.generateJWT(user.ID, user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +134,7 @@ func hashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-func generateJWT(userID string, email string) (string, error) {
+func (u *AuthQueryUseCase) generateJWT(userID string, email string) (string, error) {
 	claims := jwt.MapClaims{
 		"sub":   userID,
 		"email": email,
@@ -144,21 +143,33 @@ func generateJWT(userID string, email string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	secret := os.Getenv("AUTH_JWT_SECRET")
-	if secret == "" {
-		secret = "dev-secret"
-	}
-
-	signedToken, err := token.SignedString([]byte(secret))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = jwt.Parse(signedToken, func(token *jwt.Token) (any, error) {
-		return []byte(secret), nil
-	})
+	signedToken, err := token.SignedString([]byte(u.jwtSecret))
 	if err != nil {
 		return "", err
 	}
 	return signedToken, nil
+}
+
+// VerifyToken parses and validates a bearer JWT issued by generateJWT, returning the
+// authenticated user ID (the "sub" claim). Used by the HTTP layer to enforce that a caller
+// can only act on their own userID-scoped resources (see requireOwnUser middleware).
+func (u *AuthQueryUseCase) VerifyToken(tokenString string) (string, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+		return []byte(u.jwtSecret), nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	if err != nil {
+		return "", domain.ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", domain.ErrInvalidToken
+	}
+
+	userID, ok := claims["sub"].(string)
+	if !ok || userID == "" {
+		return "", domain.ErrInvalidToken
+	}
+
+	return userID, nil
 }

@@ -18,4 +18,5 @@ type AuthQueryUseCase interface {
 	Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error)
 	Register(ctx context.Context, email string, password string, userName string) (*domain.LoginResponse, error)
 	Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error)
+	VerifyToken(tokenString string) (string, error)
 }
