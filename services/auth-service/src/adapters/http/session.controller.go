@@ -3,6 +3,7 @@ package httpadapter
 import (
 	"net/http"
 	"overdrive/services/auth-service/src/core/ports"
+	"overdrive/shared/apierror"
 )
 
 type SessionController struct {
@@ -19,7 +20,7 @@ func (c *SessionController) GetUserSessions(w http.ResponseWriter, r *http.Reque
 	userID := r.PathValue("userID")
 	sessions, err := c.usecase.GetUserSessions(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load user sessions", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"count": len(sessions), "sessions": sessions})
@@ -31,7 +32,11 @@ func (c *SessionController) GetUserSession(w http.ResponseWriter, r *http.Reques
 	userID := r.PathValue("userID")
 	session, err := c.usecase.GetUserSession(r.Context(), userID, sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load user session", err))
+		return
+	}
+	if session == nil {
+		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
@@ -41,7 +46,7 @@ func (c *SessionController) AddUserSession(w http.ResponseWriter, r *http.Reques
 	userID := r.PathValue("userID")
 	session, err := c.usecase.AddUserSession(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to create user session", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
@@ -52,7 +57,7 @@ func (c *SessionController) RemoveUserSession(w http.ResponseWriter, r *http.Req
 	sessionID := r.PathValue("sessionID")
 	err := c.usecase.RemoveUserSession(r.Context(), userID, sessionID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to remove user session", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
