@@ -13,10 +13,13 @@ package httpinbound
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync/atomic"
 	"time"
+
+	"overdrive/shared/apierror"
 )
 
 type ServiceHealthHandler struct {
@@ -38,7 +41,7 @@ func NewServiceHealthHandler(serviceName string, targets []*url.URL) *ServiceHea
 
 func (h *ServiceHealthHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		apierror.Write(w, r.URL.Path, apierror.MethodNotAllowed("method not allowed", nil))
 		return
 	}
 
@@ -52,13 +55,13 @@ func (h *ServiceHealthHandler) HandleHealth(w http.ResponseWriter, r *http.Reque
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		apierror.Write(w, r.URL.Path, apierror.Internal("internal error", err))
 		return
 	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "error", "service": h.serviceName})
+		apierror.Write(w, r.URL.Path, apierror.ServiceUnavailable(fmt.Sprintf("service unavailable: %s", h.serviceName), err))
 		return
 	}
 	defer resp.Body.Close()
@@ -68,11 +71,10 @@ func (h *ServiceHealthHandler) HandleHealth(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-		"status":          "error",
-		"service":         h.serviceName,
-		"upstream_status": resp.StatusCode,
-	})
+	apierror.Write(w, r.URL.Path, apierror.ServiceUnavailable(
+		fmt.Sprintf("service unavailable: %s (upstream status %d)", h.serviceName, resp.StatusCode),
+		nil,
+	))
 }
 
 func (h *ServiceHealthHandler) nextTarget() *url.URL {

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"overdrive/shared/apierror"
 )
 
 // parseOptionalPositiveInt reads an optional positive-integer query parameter.
@@ -25,7 +27,7 @@ func parseOptionalPositiveInt(w http.ResponseWriter, r *http.Request, name strin
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + name + " parameter"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid "+name+" parameter", err))
 		return nil, false
 	}
 	return &value, true
@@ -37,7 +39,7 @@ func parsePathPositiveInt(w http.ResponseWriter, r *http.Request, name string) (
 	raw := strings.TrimSpace(r.PathValue(name))
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + name + " parameter"})
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid "+name+" parameter", err))
 		return 0, false
 	}
 	return value, true

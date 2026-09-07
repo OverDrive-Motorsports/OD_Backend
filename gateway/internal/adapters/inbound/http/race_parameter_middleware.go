@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"overdrive/shared/apierror"
 )
 
 var allowedRaceSessionDatasets = map[string]struct{}{
@@ -94,49 +96,49 @@ func ValidateRaceParameters(next http.Handler) http.Handler {
 
 		if dataset, ok := extractRaceSessionDataset(parts); ok {
 			if _, allowed := allowedRaceSessionDatasets[dataset]; !allowed {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 				return
 			}
 		}
 
 		if action, ok := extractRaceLiveAction(parts); ok {
 			if _, allowed := allowedRaceLiveActions[action]; !allowed {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 				return
 			}
 		}
 
 		if action, ok := extractTelemetryAction(parts); ok {
 			if _, allowed := allowedTelemetryActions[action]; !allowed {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 				return
 			}
 		}
 
 		if segment, ok := extractRaceDriverSegment(parts); ok {
 			if !isAllowedRaceDriverSegment(segment) {
-				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+				apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 				return
 			}
 		}
 
 		if driverNumber, ok := extractRaceDriverNumber(parts); ok && !isPositiveInt(driverNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 
 		if lapNumber, ok := extractRaceLapNumber(parts); ok && !isPositiveInt(lapNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 
 		if driverNumber := r.URL.Query().Get("driverNumber"); driverNumber != "" && !isPositiveInt(driverNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 
 		if lapNumber := r.URL.Query().Get("lapNumber"); lapNumber != "" && !isPositiveInt(lapNumber) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid parameter"})
+			apierror.Write(w, r.URL.Path, apierror.Validation("invalid parameter", nil))
 			return
 		}
 

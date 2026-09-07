@@ -14,6 +14,8 @@ package httpinbound
 import (
 	"net/http"
 	"strings"
+
+	"overdrive/shared/apierror"
 )
 
 // RequireAuthorization rejects any request that does not carry a valid
@@ -26,12 +28,12 @@ func RequireAuthorization(authorize func(authHeader string) bool, next http.Hand
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 		if authHeader == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			apierror.Write(w, r.URL.Path, apierror.Unauthorized("unauthorized", nil))
 			return
 		}
 
 		if !authorize(authHeader) {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			apierror.Write(w, r.URL.Path, apierror.Unauthorized("unauthorized", nil))
 			return
 		}
 
