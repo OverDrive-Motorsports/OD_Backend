@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## client_test.go - Package championshipclient source file for services/race-data-service/src/adapters/downstream/championship.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## client_test.go - Package championshipclient source file for services/race-data-service/src/adapters/downstream/championship.
+##
 */
 
 package championshipclient

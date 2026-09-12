@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## session_controller_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## session_controller_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
+##
 */
 
 package httpadapter
@@ -29,7 +29,9 @@ type fakeSessionQueryUseCase struct {
 	datasetErr    error
 }
 
-func (f *fakeSessionQueryUseCase) ListChampionships(ctx context.Context) (any, error) { return nil, nil }
+func (f *fakeSessionQueryUseCase) ListChampionships(ctx context.Context) (any, error) {
+	return nil, nil
+}
 func (f *fakeSessionQueryUseCase) ListChampionshipEvents(ctx context.Context, code string) (any, error) {
 	return nil, nil
 }

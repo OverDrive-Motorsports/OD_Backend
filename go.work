@@ -9,4 +9,5 @@ use (
 	./services/user-data-service
 	./shared/apierror
 	./shared/bootstrap
+	./shared/contracts
 )

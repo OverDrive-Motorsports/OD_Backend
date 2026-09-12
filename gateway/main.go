@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## main.go - Gateway application entrypoint and HTTP server startup.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## main.go - Gateway application entrypoint and HTTP server startup.
+##
+*/
 
 // Package main boots the API gateway process and HTTP server.
 

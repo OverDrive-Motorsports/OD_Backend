@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## catalog.repository.go - Package ports source file for services/championship-service/src/core/ports.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## catalog.repository.go - Package ports source file for services/championship-service/src/core/ports.
+##
 */
 
 package ports

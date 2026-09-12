@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## auth_middleware.go - HTTP middleware enforcing mandatory bearer authorization.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## auth_middleware.go - HTTP middleware enforcing mandatory bearer authorization.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 

@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## championship_dataset_middleware.go - Validates championship dataset path parameter on public v1 routes.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## championship_dataset_middleware.go - Validates championship dataset path parameter on public v1 routes.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 
@@ -19,10 +19,10 @@ import (
 )
 
 var allowedChampionshipDatasets = map[string]struct{}{
-	"session_result":        {},
-	"starting_grid":         {},
-	"championship_drivers":  {},
-	"championship_teams":    {},
+	"session_result":       {},
+	"starting_grid":        {},
+	"championship_drivers": {},
+	"championship_teams":   {},
 }
 
 // ValidateChampionshipDataset rejects invalid dataset names and malformed

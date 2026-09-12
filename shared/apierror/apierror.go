@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## apierror.go - Package apierror source file for shared/apierror.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## apierror.go - Package apierror source file for shared/apierror.
+##
 */
 
 package apierror

@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## router.go - Builds HTTP routes, middleware chain, and service proxy handlers.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## router.go - Builds HTTP routes, middleware chain, and service proxy handlers.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 

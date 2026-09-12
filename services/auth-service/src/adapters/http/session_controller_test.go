@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## session_controller_test.go - Package httpadapter source file for services/auth-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## session_controller_test.go - Package httpadapter source file for services/auth-service/src/adapters/http.
+##
 */
 
 package httpadapter

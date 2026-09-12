@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## authorize_request_test.go - Unit tests for AuthorizeRequestUseCase.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## authorize_request_test.go - Unit tests for AuthorizeRequestUseCase.
+##
+*/
 
 package usecases
 
