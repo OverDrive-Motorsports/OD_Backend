@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## routes_user_data.go - Registers proxied and health routes for the user-data service.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## routes_user_data.go - Registers proxied and health routes for the user-data service.
+##
+*/
 
 // Package config loads environment configuration and route registries.
 

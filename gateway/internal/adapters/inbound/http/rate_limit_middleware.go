@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## rate_limit_middleware.go - Applies token-bucket rate limiting to HTTP requests.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## rate_limit_middleware.go - Applies token-bucket rate limiting to HTTP requests.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 

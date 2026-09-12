@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## service_health_handler.go - Probes upstream service health endpoints with load balancing.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## service_health_handler.go - Probes upstream service health endpoints with load balancing.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 

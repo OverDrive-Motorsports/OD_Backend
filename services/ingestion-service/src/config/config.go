@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## config.go - Package config source file for services/ingestion-service/src/config.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## config.go - Package config source file for services/ingestion-service/src/config.
+##
 */
 
 package config

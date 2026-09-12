@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## bootstrap.go - Builds gateway runtime dependencies and HTTP handler wiring.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## bootstrap.go - Builds gateway runtime dependencies and HTTP handler wiring.
+##
+*/
 
 // Package app wires gateway dependencies into a runnable runtime.
 

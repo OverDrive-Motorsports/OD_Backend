@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## routes_ingestion.go - Registers proxied and health routes for the ingestion service.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## routes_ingestion.go - Registers proxied and health routes for the ingestion service.
+##
+*/
 
 // Package config loads environment configuration and route registries.
 

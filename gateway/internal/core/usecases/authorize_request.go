@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## authorize_request.go - Use case validating authorization headers for requests.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## authorize_request.go - Use case validating authorization headers for requests.
+##
+*/
 
 // Package usecases contains gateway application use cases.
 

@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## rate_limit_middleware_test.go - Unit tests for the token-bucket rate limiter.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## rate_limit_middleware_test.go - Unit tests for the token-bucket rate limiter.
+##
+*/
 
 package httpinbound
 

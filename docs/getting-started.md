@@ -3,8 +3,8 @@
 This is a from-scratch walkthrough for someone who has never touched this repo: how
 to start the backend, load a real F1 race into it, and read that data back out.
 
-It assumes you have `git`, `docker`, `docker compose`, `go` (1.22+), and `node`/`npm`
-installed, and that you've cloned the repo and are running commands from its root.
+It assumes you have `git`, `docker`, `docker compose`, `go` (1.25+ — the Go workspace
+declares `go 1.25.0`), and `node`/`npm` installed, and that you've cloned the repo and are running commands from its root.
 
 ## 1. What you're starting
 
@@ -13,25 +13,34 @@ The backend is a set of small Go services plus a gateway that sits in front of t
 | Service | Port | What it does |
 | --- | ---: | --- |
 | `gateway` | `3000` | Single public entrypoint. Everything a client (mobile/AR app, or you) talks to goes through here. |
+| `auth-service` | `3001` | Registration, login, refresh, and session records. |
+| `user-data-service` | `3002` | User presets/providers/widgets. Still scaffolding — health check only for now. |
 | `championship-service` | `3003` | Championship metadata: championships, events, sessions, drivers, teams, standings. |
 | `race-data-service` | `3004` | Live race data and telemetry: laps, positions, stints, pit stops, weather, radio, race control, speed/engine/location samples. |
 | `ingestion-service` | `3005` | Pulls raw data from the OpenF1 public API and pushes it into the two services above. |
 | `postgres` | `5432` | One database per service (`overdrive_championship`, `overdrive_race_data`, ...). |
 
-`auth-service` and `user-data-service` exist as empty scaffolding in the repo but
-aren't started by Docker Compose yet — ignore them for now.
-
 ## 2. Start the stack
 
-From the repo root:
+First, create the root `.env` from the template:
+
+```bash
+cp .env.template .env
+```
+
+`AUTH_JWT_SECRET` must be set in there — `auth-service` refuses to start without it
+(there is deliberately no insecure default), so leaving it empty makes that container
+crash-loop.
+
+Then, from the repo root:
 
 ```bash
 docker compose up -d
 ```
 
-This starts Postgres, runs the Prisma schema sync jobs, then starts
-`championship-service`, `race-data-service`, `ingestion-service`, and `gateway` in
-the right order (each waits for its dependencies to be healthy).
+This starts Postgres, runs the four Prisma schema sync jobs, then starts all five
+services and `gateway` in the right order (each waits for its dependencies to be
+healthy).
 
 Check everything is up:
 
@@ -46,15 +55,15 @@ require authentication (every other route does, see below).
 ## 3. Get the gateway's auth token
 
 Every route under `/v1/...` requires a `Authorization: Bearer <token>` header. In
-this dev setup, the token is a fixed value defined directly in `docker-compose.yml`
-(`GATEWAY_AUTH_TOKEN: admin`):
+this dev setup, the token is a fixed value read from the root `.env`
+(`GATEWAY_AUTH_TOKEN`, `admin` in `.env.template`):
 
 ```bash
 TOKEN=admin
 ```
 
-If you ever change that value in `docker-compose.yml`, update this everywhere you
-see `$TOKEN` below.
+If you ever change that value in `.env`, update this everywhere you see `$TOKEN`
+below and restart the gateway.
 
 ## 4. Load a real race into the database
 
