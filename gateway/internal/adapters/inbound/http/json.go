@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## json.go - Provides JSON response helper utilities for HTTP handlers.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## json.go - Provides JSON response helper utilities for HTTP handlers.
+##
+*/
 
 // Package httpinbound contains inbound HTTP handlers, middleware, and proxy adapters.
 

@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## ingestion.service.go - Package ports source file for services/ingestion-service/src/core/ports.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## ingestion.service.go - Package ports source file for services/ingestion-service/src/core/ports.
+##
 */
 
 package ports

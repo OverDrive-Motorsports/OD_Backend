@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## session_query.usecase.go - Package usecases source file for services/race-data-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## session_query.usecase.go - Package usecases source file for services/race-data-service/src/core/usecases.
+##
 */
 
 package usecases

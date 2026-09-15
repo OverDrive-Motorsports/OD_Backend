@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## middleware_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## middleware_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
+##
 */
 
 package httpadapter
@@ -34,10 +34,10 @@ func TestWithSecurityHeaders(t *testing.T) {
 		t.Fatal("expected the wrapped handler to run")
 	}
 	headers := map[string]string{
-		"X-Content-Type-Options":   "nosniff",
-		"X-Frame-Options":          "DENY",
-		"Referrer-Policy":          "no-referrer",
-		"Content-Security-Policy":  "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+		"Referrer-Policy":         "no-referrer",
+		"Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
 	}
 	for name, want := range headers {
 		if got := rec.Header().Get(name); got != want {

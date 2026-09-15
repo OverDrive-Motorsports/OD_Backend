@@ -9,6 +9,7 @@
 
 datasource db {
   provider = "postgresql"
+  url      = env("USER_DATA_DATABASE_URL")
 }
 
 generator db {

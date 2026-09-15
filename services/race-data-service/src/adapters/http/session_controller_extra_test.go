@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## session_controller_extra_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## session_controller_extra_test.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
+##
 */
 
 package httpadapter
@@ -26,16 +26,16 @@ type configurableSessionQueryUseCase struct {
 	listChampionshipsResult any
 	err                     error
 
-	getSessionResult          map[string]any
-	listSessionDriversResult  map[string]any
-	listSessionTeamsResult    map[string]any
-	raceStandingsResult       any
-	broadcastResult           map[string]any
-	factsResult               map[string]any
-	driverProfileResult       map[string]any
-	driverBroadcastResult     map[string]any
-	driverDatasetResult       map[string]any
-	driverLapLocationResult   map[string]any
+	getSessionResult         map[string]any
+	listSessionDriversResult map[string]any
+	listSessionTeamsResult   map[string]any
+	raceStandingsResult      any
+	broadcastResult          map[string]any
+	factsResult              map[string]any
+	driverProfileResult      map[string]any
+	driverBroadcastResult    map[string]any
+	driverDatasetResult      map[string]any
+	driverLapLocationResult  map[string]any
 }
 
 func (f *configurableSessionQueryUseCase) ListChampionships(ctx context.Context) (any, error) {

@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## routes_auth.go - Registers proxied and health routes for the auth service.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## routes_auth.go - Registers proxied and health routes for the auth service.
+##
+*/
 
 // Package config loads environment configuration and route registries.
 

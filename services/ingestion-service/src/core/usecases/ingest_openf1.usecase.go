@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## ingest_openf1.usecase.go - Package usecases source file for services/ingestion-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## ingest_openf1.usecase.go - Package usecases source file for services/ingestion-service/src/core/usecases.
+##
 */
 
 package usecases

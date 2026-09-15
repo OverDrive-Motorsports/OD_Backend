@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## catalog_query.usecase.go - Package usecases source file for services/championship-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## catalog_query.usecase.go - Package usecases source file for services/championship-service/src/core/usecases.
+##
 */
 
 package usecases

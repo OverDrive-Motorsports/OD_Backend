@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## session_query_test.go - Package usecases source file for services/race-data-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## session_query_test.go - Package usecases source file for services/race-data-service/src/core/usecases.
+##
 */
 
 package usecases
@@ -20,28 +20,28 @@ import (
 // fakeChampionshipClientForSessionQuery implements ports.ChampionshipClient in full, since
 // SessionQueryUseCase is the one consumer that exercises nearly every method on the interface.
 type fakeChampionshipClientForSessionQuery struct {
-	championships       any
-	championshipsErr    error
-	events               any
-	eventsErr            error
-	eventPayload         any
-	eventPayloadErr      error
-	eventSessions        any
-	eventSessionsErr     error
-	session              *ports.ChampionshipSessionRef
-	sessionErr           error
-	event                *ports.ChampionshipEventRef
-	eventErr             error
-	drivers              []ports.ChampionshipDriverRef
-	driversErr           error
-	teams                []map[string]any
-	teamsErr             error
-	sessionDataset       map[string]any
-	sessionDatasetErr    error
-	raceStandings        any
-	raceStandingsErr     error
-	broadcast            map[string]any
-	broadcastErr         error
+	championships     any
+	championshipsErr  error
+	events            any
+	eventsErr         error
+	eventPayload      any
+	eventPayloadErr   error
+	eventSessions     any
+	eventSessionsErr  error
+	session           *ports.ChampionshipSessionRef
+	sessionErr        error
+	event             *ports.ChampionshipEventRef
+	eventErr          error
+	drivers           []ports.ChampionshipDriverRef
+	driversErr        error
+	teams             []map[string]any
+	teamsErr          error
+	sessionDataset    map[string]any
+	sessionDatasetErr error
+	raceStandings     any
+	raceStandingsErr  error
+	broadcast         map[string]any
+	broadcastErr      error
 }
 
 func (f *fakeChampionshipClientForSessionQuery) ListChampionships(ctx context.Context) (any, error) {
@@ -83,12 +83,12 @@ func (f *fakeChampionshipClientForSessionQuery) GetSessionBroadcast(ctx context.
 type fakeSessionQueryRepository struct {
 	datasetsBySessionDataset map[string][]map[string]any
 	datasetErr               error
-	driverDataset             []map[string]any
-	driverDatasetErr          error
-	lapLocation               map[string]any
-	lapLocationErr            error
-	broadcastURL              string
-	broadcastErr              error
+	driverDataset            []map[string]any
+	driverDatasetErr         error
+	lapLocation              map[string]any
+	lapLocationErr           error
+	broadcastURL             string
+	broadcastErr             error
 }
 
 func (f *fakeSessionQueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string) ([]map[string]any, error) {

@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## middleware.go - HTTP middleware shared by championship-service routes.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## middleware.go - HTTP middleware shared by championship-service routes.
+##
 */
 
 package httpadapter

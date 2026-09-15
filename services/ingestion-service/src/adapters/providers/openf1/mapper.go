@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## mapper.go - Package openf1 source file for services/ingestion-service/src/adapters/providers/openf1.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## mapper.go - Package openf1 source file for services/ingestion-service/src/adapters/providers/openf1.
+##
 */
 
 package openf1

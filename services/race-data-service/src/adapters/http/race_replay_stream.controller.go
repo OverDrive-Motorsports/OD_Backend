@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## race_replay_stream.controller.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## race_replay_stream.controller.go - Package httpadapter source file for services/race-data-service/src/adapters/http.
+##
 */
 
 package httpadapter

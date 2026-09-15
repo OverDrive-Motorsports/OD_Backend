@@ -72,17 +72,21 @@ Every service exposes:
 
 - `GET /health`
 
-The active Docker Compose stack currently runs:
+The active Docker Compose stack runs the full backend:
 
+- `auth-service`
+- `user-data-service`
 - `championship-service`
 - `race-data-service`
 - `ingestion-service`
 - `gateway`
 - PostgreSQL
 
-`auth-service` and `user-data-service` are scaffolded for later work and are not started by Docker Compose yet.
-`gateway` requires `championship-service`, `race-data-service`, and `ingestion-service` to be healthy before starting.
-Its proxied routes to `auth-service`/`user-data-service` will return `502` until those services are wired into Compose.
+`gateway` requires all five services to be healthy before starting, so every proxied
+prefix (`/auth`, `/presets`, `/providers`, `/users`, `/v1/championship`,
+`/v1/race-data`, `/v1/ingestion`) is reachable once the stack is up.
+`user-data-service` is still scaffolding at the code level (health check only), but it
+is started and health-checked like the rest.
 
 ## Default ports
 
@@ -95,6 +99,17 @@ Its proxied routes to `auth-service`/`user-data-service` will return `502` until
 
 Each service includes a scaffolded `.env.template`. Local `.env` files are ignored by git.
 
+## Root environment file
+
+Docker Compose reads the root `.env` (copy it from `.env.template`). Required keys:
+
+| Variable | Used by | Notes |
+| --- | --- | --- |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`, every service's database URL | dev credentials only |
+| `GATEWAY_AUTH_TOKEN` | `gateway` | bearer token required on every `/v1/...` route |
+| `GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST` | `gateway` | rate limiter tuning |
+| `AUTH_JWT_SECRET` | `auth-service` | **required** — `auth-service` exits at startup if it is unset (there is no insecure fallback), so the container will crash-loop without it |
+
 ## Database setup
 
 The backend uses one PostgreSQL database per service.
@@ -106,14 +121,16 @@ Start only PostgreSQL:
 docker compose up -d postgres
 ```
 
-Start the microservice stack with schema sync:
+Start the whole stack (schema sync jobs run first, then the services):
 
 ```bash
-docker compose up -d championship-dbsync race-data-dbsync championship-service race-data-service ingestion-service gateway
+docker compose up -d
 ```
 
 Useful endpoints once the stack is up:
 
+- `http://localhost:3001/health`
+- `http://localhost:3002/health`
 - `http://localhost:3003/health`
 - `http://localhost:3004/health`
 - `http://localhost:3005/health`
@@ -149,7 +166,10 @@ Validate the active Prisma schemas:
 npm run prisma:validate:active
 ```
 
-`auth-service` and `user-data-service` schemas are scaffolded and are not part of the active stack yet.
+All four schemas (`auth`, `user-data`, `championship`, `race-data`) are pushed by their
+own `*-dbsync` Compose job. `npm run prisma:validate:active` only covers the
+`championship` and `race-data` schemas; use `npm run prisma:validate:auth` /
+`npm run prisma:validate:user-data` for the other two.
 
 Open Prisma Studio for the active databases:
 
@@ -181,12 +201,39 @@ curl -X POST http://localhost:3005/providers/openf1/ingestions \
 
 Then ingest race-data resources in manageable batches. Large driver-scoped resources such as `car_data` and `location` should include `driver_number` when possible.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push (all branches) and on every pull request.
+Because there is no root Go module, every check runs **per module** across the nine
+modules (`gateway`, the five `services/*`, `shared/apierror`, `shared/bootstrap`,
+`shared/contracts`):
+
+| Check | What it runs |
+| --- | --- |
+| `lint` | `gofmt -l` must report nothing (excluding generated `resources/db`) and `go vet ./...` |
+| `test` | `go test ./... -race` |
+| `build` | `go build ./...` |
+
+Each check is a matrix of per-module jobs (`lint (gateway)`, `test (gateway)`, ...) plus
+an aggregate job with the stable name `lint`, `test`, or `build` — those three are the
+names to use as required status checks in branch protection.
+
+The Prisma Go clients under `services/*/resources/db` are generated artifacts and are
+gitignored, so CI regenerates them (`go run github.com/steebchen/prisma-client-go
+generate`) for `auth-service`, `championship-service`, and `race-data-service` before
+building or testing them. Generation needs no database connection.
+
+Reproduce a check locally, e.g.:
+
+```bash
+cd services/championship-service && gofmt -l . && go vet ./... && go test ./... -race && go build ./...
+```
+
 ## Security
 
 See `docs/security.md` for the current local security posture, known gaps, and deployment notes.
 
 ## Next steps
 
-- replace placeholder service info use cases with real domain use cases in `auth-service` and `user-data-service`
-- add service-specific controllers, routes, entities, and repositories for `auth-service` and `user-data-service`
-- wire `gateway`, `auth-service`, and `user-data-service` into Docker Compose once they carry real logic
+- replace placeholder service info use cases with real domain use cases in `user-data-service`
+- add service-specific controllers, routes, entities, and repositories for `user-data-service`

@@ -2,12 +2,23 @@
 
 This document describes the current backend security posture for the active local stack:
 
+- `gateway`
+- `auth-service`
+- `user-data-service`
 - `championship-service`
 - `race-data-service`
 - `ingestion-service`
 - PostgreSQL through Docker Compose
 
-`auth-service` and `user-data-service` are scaffolded services and are intentionally not part of the active Docker Compose runtime yet.
+All five services plus the gateway now run under Docker Compose. `user-data-service` is
+still scaffolding at the code level (health check only). `auth-service` requires
+`AUTH_JWT_SECRET` to be set in the root `.env`; it refuses to start otherwise, so no
+well-known signing secret can ship by accident.
+
+> Note: the sections below predate the gateway and describe the services as if they were
+> reached directly with no auth or rate limiting. The gateway now enforces mandatory
+> bearer-token auth and rate limiting on every proxied route — verify against
+> `gateway/internal` before relying on the details further down.
 
 ## HTTP Surface
 

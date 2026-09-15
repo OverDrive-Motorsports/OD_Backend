@@ -17,8 +17,42 @@ services:
       timeout: 3s
       retries: 10
 
+  auth-dbsync:
+    image: golang:1.25
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/services/auth-service
+    environment:
+      AUTH_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_auth?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run github.com/steebchen/prisma-client-go db push --schema resources/schema.prisma --skip-generate
+    volumes:
+      - .:/app
+    restart: "no"
+
+  user-data-dbsync:
+    image: golang:1.25
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app/services/user-data-service
+    environment:
+      USER_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_user_data?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run github.com/steebchen/prisma-client-go db push --schema resources/schema.prisma --skip-generate
+    volumes:
+      - .:/app
+    restart: "no"
+
   championship-dbsync:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +69,7 @@ services:
     restart: "no"
 
   race-data-dbsync:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,8 +85,65 @@ services:
       - .:/app
     restart: "no"
 
+  auth-service:
+    image: golang:1.25
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-dbsync:
+        condition: service_completed_successfully
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3001"
+      APP_VERSION: dev
+      AUTH_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_auth?schema=public
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./services/auth-service
+    volumes:
+      - .:/app
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
+  user-data-service:
+    image: golang:1.25
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-data-dbsync:
+        condition: service_completed_successfully
+    working_dir: /app
+    environment:
+      HTTP_PORT: "3002"
+      APP_VERSION: dev
+      USER_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_user_data?schema=public
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go run ./services/user-data-service
+    volumes:
+      - .:/app
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 60s
+
   championship-service:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +171,7 @@ services:
       start_period: 60s
 
   race-data-service:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,7 +202,7 @@ services:
       start_period: 60s
 
   ingestion-service:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
       championship-service:
         condition: service_healthy
@@ -145,8 +236,12 @@ services:
       start_period: 60s
 
   gateway:
-    image: golang:1.22
+    image: golang:1.25
     depends_on:
+      auth-service:
+        condition: service_healthy
+      user-data-service:
+        condition: service_healthy
       championship-service:
         condition: service_healthy
       race-data-service:

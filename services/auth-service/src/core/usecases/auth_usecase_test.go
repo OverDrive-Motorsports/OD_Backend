@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## auth_usecase_test.go - Package usecases source file for services/auth-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## auth_usecase_test.go - Package usecases source file for services/auth-service/src/core/usecases.
+##
 */
 
 package usecases

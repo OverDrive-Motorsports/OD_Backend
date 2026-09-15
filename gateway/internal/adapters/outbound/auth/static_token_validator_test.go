@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## static_token_validator_test.go - Unit tests for StaticTokenValidator.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## static_token_validator_test.go - Unit tests for StaticTokenValidator.
+##
+*/
 
 package auth
 

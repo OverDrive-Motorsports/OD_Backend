@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## race_live.service.go - Package ports source file for services/race-data-service/src/core/ports.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## race_live.service.go - Package ports source file for services/race-data-service/src/core/ports.
+##
 */
 
 package ports

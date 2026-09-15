@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## ingestion.entity.go - Package domain source file for services/championship-service/src/core/domain.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## ingestion.entity.go - Package domain source file for services/championship-service/src/core/domain.
+##
 */
 
 package domain

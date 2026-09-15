@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## telemetry.repository.go - Package prismaadapter source file for services/race-data-service/src/adapters/repository/prisma.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## telemetry.repository.go - Package prismaadapter source file for services/race-data-service/src/adapters/repository/prisma.
+##
 */
 
 package prismaadapter

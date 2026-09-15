@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## accept_ingestion_batch_test.go - Package usecases source file for services/race-data-service/src/core/usecases.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## accept_ingestion_batch_test.go - Package usecases source file for services/race-data-service/src/core/usecases.
+##
 */
 
 package usecases
@@ -21,7 +21,7 @@ import (
 
 // fakeRaceDataIngestionRepository implements ports.RaceDataIngestionRepository.
 type fakeRaceDataIngestionRepository struct {
-	err        error
+	err         error
 	storedBatch contracts.Batch
 	called      bool
 }
@@ -35,8 +35,8 @@ func (f *fakeRaceDataIngestionRepository) StoreBatch(ctx context.Context, batch 
 // fakeAcceptBatchBroadcaster implements ports.RaceControlBroadcaster, recording Publish calls.
 type fakeAcceptBatchBroadcaster struct {
 	publishedSessionID string
-	publishedEvents     []domain.RaceControlEvent
-	publishCount        int
+	publishedEvents    []domain.RaceControlEvent
+	publishCount       int
 }
 
 func (f *fakeAcceptBatchBroadcaster) Publish(sessionID string, events []domain.RaceControlEvent) {

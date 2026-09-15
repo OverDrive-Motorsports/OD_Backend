@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## errors.go - Package domain source file for services/auth-service/src/core/domain.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## errors.go - Package domain source file for services/auth-service/src/core/domain.
+##
 */
 
 package domain

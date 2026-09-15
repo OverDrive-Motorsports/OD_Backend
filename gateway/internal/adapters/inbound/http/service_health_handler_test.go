@@ -1,11 +1,11 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## service_health_handler_test.go - Unit tests for ServiceHealthHandler.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## service_health_handler_test.go - Unit tests for ServiceHealthHandler.
+##
+*/
 
 package httpinbound
 

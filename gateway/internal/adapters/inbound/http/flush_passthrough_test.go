@@ -1,13 +1,13 @@
 /**
- ##
- ## OverDrive 2026
- ## All Technical rights reserved
- ##
- ## sse_flush_test.go - Verifies SSE frames flow through the full gateway
- ## middleware chain (auth, rate limit, logging, reverse proxy) incrementally
- ## rather than being buffered until the upstream response completes.
- ##
- */
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## sse_flush_test.go - Verifies SSE frames flow through the full gateway
+## middleware chain (auth, rate limit, logging, reverse proxy) incrementally
+## rather than being buffered until the upstream response completes.
+##
+*/
 
 package httpinbound
 

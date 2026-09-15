@@ -1,10 +1,10 @@
 /**
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## catalog_controller_test.go - Package httpadapter source file for services/championship-service/src/adapters/http.
-	##
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## catalog_controller_test.go - Package httpadapter source file for services/championship-service/src/adapters/http.
+##
 */
 
 package httpadapter
@@ -39,10 +39,10 @@ type fakeCatalogUseCase struct {
 	getSessionErr    error
 	lastGetSessionID string
 
-	drivers          []domain.DriverSummary
-	driversErr       error
-	lastDriversTeam  string
-	lastDriversSess  string
+	drivers         []domain.DriverSummary
+	driversErr      error
+	lastDriversTeam string
+	lastDriversSess string
 
 	teams    []domain.TeamSummary
 	teamsErr error
