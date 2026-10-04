@@ -246,10 +246,10 @@ func TestClient_GetSessionBroadcast_PathBuilding(t *testing.T) {
 		if r.URL.Path != "/sessions/s1/broadcast" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"broadcastUrl": "https://x"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"sessionId": "s1", "feeds": []any{}})
 	})
 	got, err := client.GetSessionBroadcast(context.Background(), "s1")
-	if err != nil || got["broadcastUrl"] != "https://x" {
+	if err != nil || got["sessionId"] != "s1" {
 		t.Fatalf("unexpected result: %v %v", got, err)
 	}
 }

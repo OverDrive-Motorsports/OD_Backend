@@ -30,8 +30,8 @@ var allowedChampionshipDatasets = map[string]struct{}{
 // routes. All other paths are forwarded unchanged.
 func ValidateChampionshipDataset(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			next.ServeHTTP(w, r)
+		if !isAllowedChampionshipMethod(r.Method, r.URL.Path) {
+			apierror.Write(w, r.URL.Path, apierror.MethodNotAllowed("method not allowed", nil))
 			return
 		}
 
@@ -103,4 +103,32 @@ func extractChampionshipDataset(path string) (string, bool) {
 	}
 
 	return dataset, true
+}
+
+// isAllowedChampionshipMethod reports whether the method may be proxied on
+// this path: GET on every route, PUT only on the session broadcast route.
+func isAllowedChampionshipMethod(method string, path string) bool {
+	switch method {
+	case http.MethodGet:
+		return true
+	case http.MethodPut:
+		return isChampionshipSessionBroadcastPath(path)
+	default:
+		return false
+	}
+}
+
+// isChampionshipSessionBroadcastPath matches exactly
+// /v1/championship/sessions/{sessionId}/broadcast.
+func isChampionshipSessionBroadcastPath(path string) bool {
+	parts := splitPath(path)
+	if len(parts) != 5 {
+		return false
+	}
+
+	return parts[0] == "v1" &&
+		parts[1] == "championship" &&
+		parts[2] == "sessions" &&
+		strings.TrimSpace(parts[3]) != "" &&
+		parts[4] == "broadcast"
 }

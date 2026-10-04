@@ -14,6 +14,7 @@ import (
 	"errors"
 	"testing"
 
+	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
 )
 
@@ -87,7 +88,7 @@ type fakeSessionQueryRepository struct {
 	driverDatasetErr         error
 	lapLocation              map[string]any
 	lapLocationErr           error
-	broadcastURL             string
+	feeds                    []domain.Feed
 	broadcastErr             error
 }
 
@@ -103,8 +104,8 @@ func (f *fakeSessionQueryRepository) GetDriverDataset(ctx context.Context, sessi
 func (f *fakeSessionQueryRepository) GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error) {
 	return f.lapLocation, f.lapLocationErr
 }
-func (f *fakeSessionQueryRepository) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, error) {
-	return f.broadcastURL, f.broadcastErr
+func (f *fakeSessionQueryRepository) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) ([]domain.Feed, error) {
+	return f.feeds, f.broadcastErr
 }
 
 func sq(client *fakeChampionshipClientForSessionQuery, repo *fakeSessionQueryRepository) *SessionQueryUseCase {
@@ -121,7 +122,7 @@ func TestSessionQueryUseCase_ThinPassThroughs(t *testing.T) {
 		eventPayload:  map[string]any{"eventId": "e1"},
 		eventSessions: []map[string]any{{"sessionId": "s1"}},
 		raceStandings: map[string]any{"leader": "VER"},
-		broadcast:     map[string]any{"broadcastUrl": "https://x"},
+		broadcast:     map[string]any{"sessionId": "s1", "feeds": []any{}},
 	}
 	uc := sq(client, &fakeSessionQueryRepository{})
 
@@ -314,21 +315,23 @@ func TestSessionQueryUseCase_GetSessionDataset_UnknownSession(t *testing.T) {
 }
 
 // TestSessionQueryUseCase_GetDriverProfile proves it finds the driver by number in the
-// championship-service driver list and enriches it with a broadcast URL from the local repository,
+// championship-service driver list and enriches it with the feed list from the local repository,
 // or returns nil when the driver number is not present in the session, or the session itself
 // doesn't exist.
 func TestSessionQueryUseCase_GetDriverProfile(t *testing.T) {
 	client := &fakeChampionshipClientForSessionQuery{drivers: []ports.ChampionshipDriverRef{
 		{DriverNumber: 44, DriverName: "Lewis", TeamName: "Mercedes"},
 	}}
-	repo := &fakeSessionQueryRepository{broadcastURL: "https://stream/44"}
+	feeds := []domain.Feed{{Provider: domain.FeedProviderHLS, URL: "https://stream/44.m3u8"}}
+	repo := &fakeSessionQueryRepository{feeds: feeds}
 	uc := sq(client, repo)
 
 	got, err := uc.GetDriverProfile(context.Background(), "s1", 44)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got["driver_name"] != "Lewis" || got["broadcast_url"] != "https://stream/44" {
+	gotFeeds, _ := got["feeds"].([]domain.Feed)
+	if got["driver_name"] != "Lewis" || len(gotFeeds) != 1 || gotFeeds[0] != feeds[0] {
 		t.Fatalf("expected enriched driver profile, got %+v", got)
 	}
 
@@ -341,25 +344,6 @@ func TestSessionQueryUseCase_GetDriverProfile(t *testing.T) {
 	got3, err := uc2.GetDriverProfile(context.Background(), "missing", 44)
 	if err != nil || got3 != nil {
 		t.Fatalf("expected nil for unknown session, got %v %v", got3, err)
-	}
-}
-
-// TestSessionQueryUseCase_GetDriverBroadcast proves it loads session context, then the driver's
-// broadcast URL from the local repository, returning nil when the session doesn't exist.
-func TestSessionQueryUseCase_GetDriverBroadcast(t *testing.T) {
-	client := &fakeChampionshipClientForSessionQuery{session: &ports.ChampionshipSessionRef{ID: "s1", EventID: "e1"}}
-	repo := &fakeSessionQueryRepository{broadcastURL: "https://stream/1"}
-	uc := sq(client, repo)
-
-	got, err := uc.GetDriverBroadcast(context.Background(), "s1", 1)
-	if err != nil || got["broadcast_url"] != "https://stream/1" {
-		t.Fatalf("expected broadcast_url, got %+v err %v", got, err)
-	}
-
-	uc2 := sq(&fakeChampionshipClientForSessionQuery{session: nil}, &fakeSessionQueryRepository{})
-	got2, err := uc2.GetDriverBroadcast(context.Background(), "missing", 1)
-	if err != nil || got2 != nil {
-		t.Fatalf("expected nil for unknown session, got %v %v", got2, err)
 	}
 }
 

@@ -43,16 +43,21 @@ type EventSummary struct {
 }
 
 type SessionSummary struct {
-	ID           string     `json:"sessionId"`
-	EventID      string     `json:"eventId"`
-	Type         string     `json:"type"`
-	Status       string     `json:"status"`
-	Name         string     `json:"name,omitempty"`
-	Circuit      string     `json:"circuit,omitempty"`
-	ExternalKey  string     `json:"externalKey,omitempty"`
-	BroadcastURL string     `json:"broadcastUrl,omitempty"`
-	StartTime    time.Time  `json:"startTime"`
-	EndTime      *time.Time `json:"endTime,omitempty"`
+	ID          string     `json:"sessionId"`
+	EventID     string     `json:"eventId"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+	Name        string     `json:"name,omitempty"`
+	Circuit     string     `json:"circuit,omitempty"`
+	ExternalKey string     `json:"externalKey,omitempty"`
+	Feeds       []Feed     `json:"feeds"`
+	StartTime   time.Time  `json:"startTime"`
+	EndTime     *time.Time `json:"endTime,omitempty"`
+}
+
+type SessionBroadcast struct {
+	SessionID string `json:"sessionId"`
+	Feeds     []Feed `json:"feeds"`
 }
 
 type DriverSummary struct {

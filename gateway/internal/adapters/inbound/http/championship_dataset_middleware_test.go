@@ -12,6 +12,7 @@ package httpinbound
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -78,18 +79,39 @@ func TestValidateChampionshipDataset(t *testing.T) {
 	}
 }
 
-func TestValidateChampionshipDataset_IgnoresNonGet(t *testing.T) {
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// TestValidateChampionshipDataset_MethodGate proves the method allow-list: GET is proxied
+// everywhere, PUT only on the exact session broadcast route, and every other method/path
+// combination is rejected at the edge with a 405 METHOD_NOT_ALLOWED envelope.
+func TestValidateChampionshipDataset_MethodGate(t *testing.T) {
+	handler := ValidateChampionshipDataset(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	})
-	handler := ValidateChampionshipDataset(next)
+	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/championship/sessions/1/datasets/not-a-dataset", nil)
-	rec := httptest.NewRecorder()
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{"PUT on session broadcast is proxied", http.MethodPut, "/v1/championship/sessions/s1/broadcast", http.StatusOK},
+		{"PUT on session itself is 405", http.MethodPut, "/v1/championship/sessions/s1", http.StatusMethodNotAllowed},
+		{"PUT on a dataset is 405", http.MethodPut, "/v1/championship/sessions/s1/datasets/session_result", http.StatusMethodNotAllowed},
+		{"PUT on a deeper broadcast-suffixed path is 405", http.MethodPut, "/v1/championship/sessions/s1/standings/broadcast", http.StatusMethodNotAllowed},
+		{"PUT with empty sessionId is 405", http.MethodPut, "/v1/championship/sessions//broadcast", http.StatusMethodNotAllowed},
+		{"POST is 405", http.MethodPost, "/v1/championship/sessions/s1/datasets/not-a-dataset", http.StatusMethodNotAllowed},
+		{"DELETE is 405", http.MethodDelete, "/v1/championship/sessions/s1/broadcast", http.StatusMethodNotAllowed},
+	}
 
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d (non GET should bypass validation)", rec.Code, http.StatusOK)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, nil))
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.wantStatus == http.StatusMethodNotAllowed && !strings.Contains(rec.Body.String(), `"METHOD_NOT_ALLOWED"`) {
+				t.Fatalf("expected METHOD_NOT_ALLOWED envelope, got %s", rec.Body.String())
+			}
+		})
 	}
 }

@@ -210,7 +210,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `String` | Yes | Primary key, UUID, default generated | Unique identifier of the broadcast link row | `5f836e95-6620-4dab-b913-3f1e15f31b84` |
 | `sessionId` | `String` | Yes | Unique with `driverId`, indexed | Session identifier | `session_2026_miami_race` |
 | `driverId` | `String` | Yes | Unique with `sessionId`, indexed | Internal driver identifier used by the app | `driver_1` |
-| `broadcastUrl` | `String` | Yes | `varchar(255)` | Video or stream URL for the driver's onboard feed | `https://stream.example.com/onboard/1` |
+| `feeds` | `Json` | Yes | Default `[]` | Onboard camera feed descriptors (`Feed[]`), seeded empty by ingestion on creation and written only through `PUT /sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `[{"provider":"hls","url":"https://cdn.example.com/onboard/1.m3u8"}]` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T18:50:00Z` |
 | `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-05-03T18:55:00Z` |
 

@@ -42,14 +42,15 @@ Catalog routes are proxied to `championship-service`; race datasets are read loc
 - `GET /sessions/{sessionId}/teams`
 - `GET /sessions/{sessionId}/datasets/{dataset}`
 - `GET /sessions/{sessionId}/standings/race`
-- `GET /sessions/{sessionId}/broadcast`
+- `GET /sessions/{sessionId}/broadcast` — pass-through of championship-service's `{ "sessionId", "feeds" }` payload
 - `GET /sessions/{sessionId}/weather`
 - `GET /sessions/{sessionId}/facts`
 
 ### Driver routes
 
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/profile`
-- `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast`
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` — `{ "sessionId", "driverNumber", "feeds": Feed[] }` (see "Driver video feeds" below)
+- `PUT /sessions/{sessionId}/drivers/{driverNumber}/broadcast` — replaces the driver's onboard feed list (see "Driver video feeds" below)
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}`
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location`
 
@@ -85,6 +86,52 @@ Supported session datasets:
   - `starting_grid`
   - `championship_drivers`
   - `championship_teams`
+
+### Driver video feeds
+
+Each driver has one onboard camera feed list per session, stored in
+`SessionDriverBroadcast.feeds`. The `Feed` model and its validation rules are
+the same as `championship-service`'s (see the "Video feeds" section of
+`services/championship-service/doc/endpoint.md`): `provider` in `f1tv |
+youtube | hls`, `contentId` + `channelId` for `f1tv`, an absolute `https`
+`url` for `youtube` / `hls`, optional `label`, at most 20 entries, no
+duplicates. The backend never stores a playable F1 TV URL or a user token; a
+`url` on an `f1tv` feed is rejected with `400`.
+
+Both routes first check the session and the driver against
+`championship-service`'s session driver list: unknown session → `404`
+`SESSION_NOT_FOUND`, driver not in the session → `404` `DRIVER_NOT_FOUND`,
+championship-service unreachable → `502` `UPSTREAM_UNAVAILABLE`.
+
+`GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` — `feeds` is always
+an array (`[]` when nothing is registered, including when ingestion has not
+created the row yet), never `null`:
+
+```json
+{ "sessionId": "openf1:session:9998", "driverNumber": 44, "feeds": [] }
+```
+
+`PUT /sessions/{sessionId}/drivers/{driverNumber}/broadcast` — replaces the
+whole list, creating the row if needed. Body (at most 64 KiB):
+
+```json
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1044", "label": "Onboard" } ] }
+```
+
+- `200` — the updated payload, same shape as the `GET`
+- `400` `VALIDATION_ERROR` — malformed body, missing `feeds`, unknown field,
+  non-positive `driverNumber`, or a feed violating the rules (message names
+  `feeds[<index>].<field>`)
+- `404` `SESSION_NOT_FOUND` / `DRIVER_NOT_FOUND`
+
+Ingestion seeds the row with `feeds: []` on creation only and never overwrites
+it on re-ingestion. The legacy `GET /sessions/{sessionId}/drivers/{driverNumber}/profile`
+payload carries the same list under its `feeds` key.
+
+Frontend resolution: `youtube` / `hls` URLs are played directly; `f1tv` feeds
+are resolved on the device with the user's own F1 TV account (token never sent
+to OverDrive) using `contentId` + `channelId`; users without an account skip
+them.
 
 ### Live race routes (public contract, validated)
 

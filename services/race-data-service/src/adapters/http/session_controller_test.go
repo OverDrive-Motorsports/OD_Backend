@@ -65,9 +65,6 @@ func (f *fakeSessionQueryUseCase) GetSessionBroadcast(ctx context.Context, sessi
 func (f *fakeSessionQueryUseCase) GetDriverProfile(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
 	return nil, nil
 }
-func (f *fakeSessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
-	return nil, nil
-}
 func (f *fakeSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (map[string]any, error) {
 	return nil, nil
 }

@@ -229,25 +229,6 @@ func (c *SessionController) GetDriverProfile(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, payload)
 }
 
-// GetDriverBroadcast returns the requested driver broadcast payload for the supplied identifiers.
-func (c *SessionController) GetDriverBroadcast(w http.ResponseWriter, r *http.Request) {
-	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
-		return
-	}
-	payload, err := c.usecase.GetDriverBroadcast(r.Context(), r.PathValue("sessionId"), driverNumber)
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load driver broadcast", err))
-		return
-	}
-	if payload == nil {
-		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
-}
-
 // GetDriverDataset returns the requested driver dataset payload for the supplied identifiers.
 func (c *SessionController) GetDriverDataset(w http.ResponseWriter, r *http.Request) {
 	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))

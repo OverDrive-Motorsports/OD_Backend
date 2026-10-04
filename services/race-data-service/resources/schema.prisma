@@ -221,7 +221,7 @@ model SessionDriverBroadcast {
   id           String   @id @default(uuid())
   sessionId    String
   driverId     String
-  broadcastUrl String   @db.VarChar(255)
+  feeds        Json     @default("[]")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

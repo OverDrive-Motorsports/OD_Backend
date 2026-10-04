@@ -108,7 +108,7 @@ This database stores championship catalog data, competition structure, event sch
 | `status` | `SessionStatus` | Yes | Enum | Lifecycle status of the session | `scheduled` |
 | `name` | `String?` | No | `varchar(80)` | Optional display label of the session | `Grand Prix` |
 | `externalKey` | `String?` | No | `varchar(64)` | Optional provider-side identifier of the session | `race-main` |
-| `broadcastUrl` | `String?` | No | `varchar(255)` | Optional stream or broadcast link | `https://stream.example.com/f1/miami/race` |
+| `feeds` | `Json` | Yes | Default `[]` | Global video feed descriptors (`Feed[]`: `f1tv` contentId/channelId, `youtube`/`hls` URLs), written only through `PUT /sessions/{sessionId}/broadcast` | `[{"provider":"f1tv","contentId":"1000005432","channelId":"1017"}]` |
 | `startedAtUtc` | `DateTime` | Yes | None | Planned or actual start time in UTC | `2026-05-03T19:00:00Z` |
 | `endedAtUtc` | `DateTime?` | No | None | Planned or actual end time in UTC | `2026-05-03T21:00:00Z` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:15:00Z` |

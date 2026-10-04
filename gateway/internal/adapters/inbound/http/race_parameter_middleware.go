@@ -83,8 +83,8 @@ var allowedTelemetryActions = map[string]struct{}{
 // ValidateRaceParameters validates selected public /v1/race-data parameters at the gateway edge.
 func ValidateRaceParameters(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodPost {
-			next.ServeHTTP(w, r)
+		if !isAllowedRaceMethod(r.Method, r.URL.Path) {
+			apierror.Write(w, r.URL.Path, apierror.MethodNotAllowed("method not allowed", nil))
 			return
 		}
 
@@ -184,6 +184,26 @@ func extractTelemetryAction(parts []string) (string, bool) {
 	}
 
 	return strings.TrimSpace(parts[7]), true
+}
+
+// isAllowedRaceMethod reports whether the method may be proxied on this path:
+// GET and POST on every route, PUT only on the driver broadcast route.
+func isAllowedRaceMethod(method string, path string) bool {
+	switch method {
+	case http.MethodGet, http.MethodPost:
+		return true
+	case http.MethodPut:
+		return isRaceDriverBroadcastPath(splitPath(path))
+	default:
+		return false
+	}
+}
+
+// isRaceDriverBroadcastPath matches exactly
+// /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast.
+func isRaceDriverBroadcastPath(parts []string) bool {
+	segment, ok := extractRaceDriverSegment(parts)
+	return ok && segment == "broadcast"
 }
 
 func splitPath(path string) []string {

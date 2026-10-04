@@ -75,6 +75,10 @@ func main() {
 	raceReplayStreamUsecase := usecases.NewRaceReplayStreamUseCase(raceStreamRepository, championshipClient)
 	raceReplayStreamController := httpadapter.NewRaceReplayStreamController(raceReplayStreamUsecase)
 
+	driverFeedRepository := prismaadapter.NewDriverFeedRepository(client)
+	driverFeedUsecase := usecases.NewDriverFeedUseCase(driverFeedRepository, championshipClient)
+	driverFeedController := httpadapter.NewDriverFeedController(driverFeedUsecase)
+
 	server := &http.Server{
 		Addr: ":" + cfg.HTTPPort,
 		Handler: httpadapter.NewRouter(
@@ -84,6 +88,7 @@ func main() {
 			raceLiveController,
 			telemetryController,
 			raceReplayStreamController,
+			driverFeedController,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

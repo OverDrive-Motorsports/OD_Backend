@@ -19,6 +19,7 @@ func NewRouter(
 	raceLiveController *RaceLiveController,
 	telemetryController *TelemetryController,
 	raceReplayStreamController *RaceReplayStreamController,
+	driverFeedController *DriverFeedController,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthController.GetHealth)
@@ -30,5 +31,6 @@ func NewRouter(
 	registerRaceLiveRoutes(mux, raceLiveController)
 	registerTelemetryRoutes(mux, telemetryController)
 	registerRaceReplayStreamRoutes(mux, raceReplayStreamController)
+	registerDriverFeedRoutes(mux, driverFeedController)
 	return withSecurityHeaders(mux)
 }

@@ -24,7 +24,6 @@ type SessionQueryUseCase interface {
 	GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error)
 	GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error)
 	GetDriverProfile(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error)
-	GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error)
 	GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (map[string]any, error)
 	GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error)
 	GetSessionFacts(ctx context.Context, sessionID string) (map[string]any, error)

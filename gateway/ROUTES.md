@@ -82,7 +82,8 @@ Response bodies are camelCase JSON; list endpoints return bare arrays (`[...]`),
 | `GET /v1/championship/sessions/{sessionId}` | `GET /sessions/{sessionId}` |
 | `GET /v1/championship/sessions/{sessionId}/drivers` | `GET /sessions/{sessionId}/drivers` (query: `teamId`) |
 | `GET /v1/championship/sessions/{sessionId}/teams` | `GET /sessions/{sessionId}/teams` |
-| `GET /v1/championship/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` |
+| `GET /v1/championship/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` (`{ sessionId, feeds }`) |
+| `PUT /v1/championship/sessions/{sessionId}/broadcast` | `PUT /sessions/{sessionId}/broadcast` (body `{ "feeds": Feed[] }`, see "Video feed writes") |
 | `GET /v1/championship/sessions/{sessionId}/standings` | `GET /sessions/{sessionId}/standings` (query: `driverNumber`) |
 | `GET /v1/championship/sessions/{sessionId}/standings/race` | `GET /sessions/{sessionId}/standings/race` (deprecated alias) |
 | `GET /v1/championship/drivers/{driverNumber}/profile` | `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) |
@@ -162,7 +163,8 @@ Gateway validates `{dataset}` for this route against:
 | Gateway | Upstream |
 | --- | --- |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/profile` | `GET /sessions/{sessionId}/drivers/{driverNumber}/profile` |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
+| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` (`{ sessionId, driverNumber, feeds }`) |
+| `PUT /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `PUT /sessions/{sessionId}/drivers/{driverNumber}/broadcast` (body `{ "feeds": Feed[] }`, see "Video feed writes") |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{dataset}` | `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}` |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` |
 
@@ -265,6 +267,51 @@ the upstream introduced, rather than everything arriving at once at the end
 | --- | --- |
 | `WS /v1/race-data/live?sessionId={sessionId}` | `WS /live?sessionId={sessionId}` |
 
+### Video feed writes (the only `PUT` routes)
+
+The gateway gates HTTP methods at the edge, before proxying:
+
+| Prefix | Allowed methods |
+| --- | --- |
+| `/v1/championship/*` | `GET` everywhere; `PUT` **only** on `/v1/championship/sessions/{sessionId}/broadcast` |
+| `/v1/race-data/*` | `GET` and `POST` everywhere; `PUT` **only** on `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
+
+Every other method/path combination (any `PUT` elsewhere, `DELETE`, `PATCH`, ...)
+is answered by the gateway with `405`
+`{ "error": { "code": "METHOD_NOT_ALLOWED", "status": 405, "message": "method not allowed" } }`.
+The two `PUT` routes sit behind the same mandatory `Authorization: Bearer
+<GATEWAY_AUTH_TOKEN>` check and the rate limiter as every other `/v1/*` route;
+`driverNumber` is still validated as a positive integer on the race-data one.
+There is no role-based restriction on writes yet — the gateway token is the only
+auth layer.
+
+Both routes take `{ "feeds": Feed[] }` and replace the whole list. A `Feed` is a
+stable descriptor, never a playable DRM URL or a user token:
+
+```json
+{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard" }
+{ "provider": "youtube", "url": "https://www.youtube.com/watch?v=...", "label": "Highlights" }
+{ "provider": "hls",     "url": "https://cdn.example.com/demo/index.m3u8", "label": "Demo" }
+```
+
+Validation (enforced by the upstream services, answered as `400 VALIDATION_ERROR`
+naming `feeds[<index>].<field>`): `provider` in `f1tv | youtube | hls`;
+`contentId` + `channelId` required for `f1tv` (non-empty, at most 64 chars) and
+forbidden otherwise; `url` required for `youtube` / `hls` (absolute `https`, at
+most 2048 chars, YouTube host `youtube.com` / `www.youtube.com` /
+`m.youtube.com` / `youtu.be`, HLS path ending in `.m3u8`) and forbidden for
+`f1tv`; `label` optional, at most 80 chars; at most 20 feeds; no duplicates.
+Unknown session → `404 SESSION_NOT_FOUND`; driver not in the session (race-data
+route) → `404 DRIVER_NOT_FOUND`. The `GET` counterparts always return `feeds`
+as an array (`[]` when empty), never `null`. Full request/response details:
+`services/championship-service/doc/endpoint.md` and
+`services/race-data-service/doc/endpoint.md`.
+
+Frontend resolution, for reference: `youtube` / `hls` URLs are played directly;
+`f1tv` feeds are resolved on the device with the user's own F1 TV account
+(token never sent to OverDrive) from `contentId` + `channelId`; users without an
+account skip them.
+
 ### Parameter Validation
 
 Gateway returns `400` with `{ "error": "invalid parameter" }` when one of these values is invalid on `/v1/race-data/*`:
@@ -287,6 +334,7 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
   - `429` rate limit exceeded
   - `400` invalid championship dataset/driverNumber parameter on v1 championship routes
   - `400` invalid race v1 parameter (`dataset`, `action`, `driverNumber`, `lapNumber`)
+  - `405` method not allowed on `/v1/championship/*` (anything but `GET`, except `PUT` on the session broadcast route) and `/v1/race-data/*` (anything but `GET`/`POST`, except `PUT` on the driver broadcast route)
   - `502` upstream unavailable/proxy failure
 
 ## Notes

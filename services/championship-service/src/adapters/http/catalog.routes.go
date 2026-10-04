@@ -23,6 +23,5 @@ func registerCatalogRoutes(mux *http.ServeMux, catalogController *CatalogControl
 	mux.HandleFunc("GET /sessions/{sessionId}/datasets/{dataset}", catalogController.GetSessionDataset)
 	mux.HandleFunc("GET /sessions/{sessionId}/standings", catalogController.GetSessionStandings)
 	mux.HandleFunc("GET /sessions/{sessionId}/standings/race", catalogController.GetSessionRaceStandings)
-	mux.HandleFunc("GET /sessions/{sessionId}/broadcast", catalogController.GetSessionBroadcast)
 	mux.HandleFunc("GET /drivers/{driverNumber}/profile", catalogController.GetDriverProfile)
 }

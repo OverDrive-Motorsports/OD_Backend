@@ -229,23 +229,6 @@ func (c *CatalogController) GetDriverProfile(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, profile)
 }
 
-// GetSessionBroadcast returns the requested session broadcast payload for the supplied identifiers.
-func (c *CatalogController) GetSessionBroadcast(w http.ResponseWriter, r *http.Request) {
-	session, err := c.usecase.GetSession(r.Context(), r.PathValue("sessionId"))
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load session", err))
-		return
-	}
-	if session == nil {
-		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"sessionId":    session.ID,
-		"broadcastUrl": session.BroadcastURL,
-	})
-}
-
 // classifyDatasetErr maps a catalog repository error into the matching apierror. An unknown
 // dataset name is a client validation error (400) - aligned with the gateway's own dataset
 // allow-list validation in race_parameter_middleware.go, which already rejects an unrecognized

@@ -33,7 +33,8 @@ All responses are **camelCase** JSON. List endpoints return **bare JSON arrays**
 - `GET /sessions/{sessionId}/datasets/{dataset}`
 - `GET /sessions/{sessionId}/standings` (query: `driverNumber`) — generic standings (currently backed by session race results)
 - `GET /sessions/{sessionId}/standings/race` — deprecated alias of `/standings`, kept for backward compatibility with existing internal consumers
-- `GET /sessions/{sessionId}/broadcast`
+- `GET /sessions/{sessionId}/broadcast` — `{ "sessionId", "feeds": Feed[] }` (see "Video feeds" below)
+- `PUT /sessions/{sessionId}/broadcast` — replaces the session feed list (see "Video feeds" below)
 - `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) — global, session-independent driver profile
 
 Known gap: `GET /sessions/{sessionId}` does not populate `weatherAtStart` — this
@@ -52,6 +53,83 @@ Supported session datasets:
 - `championship_teams`
 
 `starting_grid` may be sourced from the relevant qualifying session when OpenF1 does not expose grid data directly on the Race session. It is still persisted against the requested Race session ID.
+
+## Video feeds (`Feed` model)
+
+Video for a session is described by **feed descriptors**, never by playable DRM
+URLs and never by a user token. The same `Feed` object is used by
+`championship-service` (global session feeds: main broadcast, pit lane, ...)
+and `race-data-service` (one onboard camera list per driver).
+
+```json
+{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard" }
+{ "provider": "youtube", "url": "https://www.youtube.com/watch?v=...", "label": "Highlights" }
+{ "provider": "hls",     "url": "https://cdn.example.com/demo/index.m3u8", "label": "Demo" }
+```
+
+| Field | Rule |
+| --- | --- |
+| `provider` | Required. One of `f1tv`, `youtube`, `hls` (exact, lower-case). |
+| `contentId`, `channelId` | Required for `f1tv` (non-empty, at most 64 characters each). Forbidden for `youtube` / `hls`. |
+| `url` | Required for `youtube` / `hls`, forbidden for `f1tv`. Absolute `https` URL, at most 2048 characters. `youtube`: host must be `youtube.com`, `www.youtube.com`, `m.youtube.com` or `youtu.be`. `hls`: path must end with `.m3u8`. |
+| `label` | Optional, at most 80 characters. |
+
+A list holds **at most 20 feeds** and **no duplicate** (same `provider` +
+`url`, or same `provider` + `contentId` + `channelId`). Unknown JSON fields are
+rejected. A violation is answered with `400`
+`{ "error": { "code": "VALIDATION_ERROR", "status": 400, "message": "invalid feed: feeds[<index>].<field> ..." } }`
+naming the failing entry and field. In particular a `url` on an `f1tv` feed is
+always rejected: the backend never accepts, stores or logs an F1 TV manifest,
+licence URL or token.
+
+Feed lists are only written through the `PUT` endpoints below. Ingestion
+creates rows with an empty list and **never overwrites** an existing list on
+re-ingestion.
+
+### How the frontend resolves each provider (reference)
+
+- `youtube` / `hls`: play the `url` directly (embed / native HLS player).
+- `f1tv`: the app logs the user into F1 TV on the device (token kept on the
+  device only, never sent to OverDrive), reads `contentId` + `channelId` from
+  the backend, then calls the F1 TV play endpoint with its own token to obtain
+  the signed DASH manifest and Widevine / FairPlay licence for a DRM-capable
+  player. Users without an F1 TV account simply skip `f1tv` feeds. DRM
+  playback renders in a protected surface: it can be shown in a native overlay
+  but not mapped as a texture on a 3D object.
+
+### `GET /sessions/{sessionId}/broadcast`
+
+Returns the session's global feed list. `feeds` is always a JSON array (`[]`
+when nothing is registered), never `null`. Unknown session: `404`
+`SESSION_NOT_FOUND`.
+
+```json
+{ "sessionId": "openf1:session:9998", "feeds": [] }
+```
+
+`feeds` is also present on every session summary (`GET /sessions/{sessionId}`,
+`GET /events/{eventId}/sessions`).
+
+### `PUT /sessions/{sessionId}/broadcast`
+
+Replaces the **whole** feed list of the session. Body (at most 64 KiB):
+
+```json
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1017", "label": "World feed" } ] }
+```
+
+`{ "feeds": [] }` clears the list. Responses:
+
+- `200` — the updated payload, same shape as the `GET`
+- `400` `VALIDATION_ERROR` — malformed body, missing `feeds`, unknown field, or a
+  feed violating the rules above (message names `feeds[<index>].<field>`)
+- `404` `SESSION_NOT_FOUND` — unknown session
+
+```bash
+curl -X PUT http://localhost:3003/sessions/<SESSION_ID>/broadcast \
+  -H 'Content-Type: application/json' \
+  -d '{"feeds":[{"provider":"youtube","url":"https://www.youtube.com/watch?v=abc","label":"Highlights"}]}'
+```
 
 ### Example
 

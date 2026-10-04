@@ -13,6 +13,10 @@ import "net/http"
 
 const internalIngestionBodyLimitBytes int64 = 256 << 20
 
+// feedListBodyLimitBytes caps a PUT .../broadcast body: 20 feeds of at most ~2.2 KiB each is far
+// below 64 KiB, so anything larger is rejected before decoding.
+const feedListBodyLimitBytes int64 = 64 << 10
+
 // withSecurityHeaders applies baseline HTTP hardening headers to every response.
 func withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

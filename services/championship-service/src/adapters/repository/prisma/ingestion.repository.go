@@ -200,12 +200,14 @@ func (r *IngestionRepository) storeSessions(ctx context.Context, providerCode st
 
 		sessionID := contracts.SessionID(providerCode, intValue(row["session_key"]))
 
+		// feeds is seeded to [] on CREATE only: the update branch deliberately omits
+		// it so a re-ingestion never wipes feeds registered through PUT /broadcast.
 		_, err = r.client.Session.UpsertOne(
 			db.Session.EventIDExternalKey(
 				db.Session.EventID.Equals(event.ID),
 				db.Session.ExternalKey.Equals(extKey),
 			),
-		).CreateOrUpdate(
+		).Create(
 			db.Session.Type.Set(sessionType),
 			db.Session.Status.Set(inferSessionStatus(startedAt, endedAt, r.now())),
 			db.Session.StartedAtUtc.Set(startedAt),
@@ -213,7 +215,16 @@ func (r *IngestionRepository) storeSessions(ctx context.Context, providerCode st
 			db.Session.ID.Set(sessionID),
 			db.Session.Name.SetIfPresent(stringPtr(row["session_name"])),
 			db.Session.ExternalKey.Set(extKey),
-			db.Session.BroadcastURL.Set(sessionBroadcastURL(extKey)),
+			db.Session.Feeds.Set(emptyFeedsJSON),
+			db.Session.EndedAtUtc.SetIfPresent(timePtr(endedAt)),
+		).Update(
+			db.Session.Type.Set(sessionType),
+			db.Session.Status.Set(inferSessionStatus(startedAt, endedAt, r.now())),
+			db.Session.StartedAtUtc.Set(startedAt),
+			db.Session.Event.Link(db.Event.ID.Equals(event.ID)),
+			db.Session.ID.Set(sessionID),
+			db.Session.Name.SetIfPresent(stringPtr(row["session_name"])),
+			db.Session.ExternalKey.Set(extKey),
 			db.Session.EndedAtUtc.SetIfPresent(timePtr(endedAt)),
 		).Exec(ctx)
 		if err != nil {
@@ -647,14 +658,6 @@ func colorPtr(value any) *string {
 		text = "#" + text
 	}
 	return &text
-}
-
-// sessionBroadcastURL builds the placeholder broadcast URL exposed for a session.
-func sessionBroadcastURL(sessionKey string) string {
-	if strings.TrimSpace(sessionKey) == "" {
-		return ""
-	}
-	return "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=" + strings.TrimSpace(sessionKey)
 }
 
 // teamExternalKey derives the stable external key used to upsert a team record.

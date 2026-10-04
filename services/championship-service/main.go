@@ -50,10 +50,13 @@ func main() {
 	catalogRepository := prismaadapter.NewCatalogRepository(client)
 	catalogUsecase := usecases.NewCatalogQueryUseCase(catalogRepository)
 	catalogController := httpadapter.NewCatalogController(catalogUsecase)
+	sessionFeedRepository := prismaadapter.NewSessionFeedRepository(client)
+	sessionFeedUsecase := usecases.NewSessionFeedUseCase(sessionFeedRepository)
+	sessionFeedController := httpadapter.NewSessionFeedController(sessionFeedUsecase)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, ingestionController, catalogController),
+		Handler:           httpadapter.NewRouter(healthController, ingestionController, catalogController, sessionFeedController),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
