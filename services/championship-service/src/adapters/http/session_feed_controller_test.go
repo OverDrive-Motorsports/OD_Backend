@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"overdrive/services/championship-service/src/core/domain"
 	"overdrive/services/championship-service/src/core/ports"
@@ -159,6 +160,7 @@ func TestSessionFeedController_PutSessionBroadcast_InvalidBody(t *testing.T) {
 		"empty body":          ``,
 		"unknown feed field":  `{"feeds": [{"provider":"hls","url":"https://a.b/c.m3u8","token":"x"}]}`,
 		"wrong provider type": `{"feeds": [{"provider": 1}]}`,
+		"malformed startedAt": `{"feeds": [{"provider":"hls","url":"https://a.b/c.m3u8","startedAtUtc":"yesterday"}]}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			usecase := &fakeSessionFeedUseCase{result: &domain.SessionBroadcast{SessionID: "s1"}}
@@ -265,6 +267,7 @@ func TestNewRouter_SessionBroadcastRoutes(t *testing.T) {
 // was reached, for tests driving the real usecase through the controller.
 type recordingSessionFeedRepository struct {
 	called bool
+	window *domain.SessionWindow
 }
 
 var _ ports.SessionFeedRepository = (*recordingSessionFeedRepository)(nil)
@@ -277,4 +280,51 @@ func (r *recordingSessionFeedRepository) GetSessionFeeds(context.Context, string
 func (r *recordingSessionFeedRepository) ReplaceSessionFeeds(_ context.Context, sessionID string, feeds []domain.Feed) (*domain.SessionBroadcast, error) {
 	r.called = true
 	return &domain.SessionBroadcast{SessionID: sessionID, Feeds: feeds}, nil
+}
+
+func (r *recordingSessionFeedRepository) GetSessionWindow(context.Context, string) (*domain.SessionWindow, error) {
+	return r.window, nil
+}
+
+// TestSessionFeedController_PutSessionBroadcast_StartedAtUtc drives the real usecase through the
+// controller: a start time sent with a non-UTC offset is accepted and echoed back in UTC, a
+// start time outside the session window is a 400 naming feeds[i].startedAtUtc, and a start time
+// on an unknown session is a 404 (the window lookup is what detects it).
+func TestSessionFeedController_PutSessionBroadcast_StartedAtUtc(t *testing.T) {
+	window := &domain.SessionWindow{Start: time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC)}
+
+	t.Run("offset normalised to UTC", func(t *testing.T) {
+		repo := &recordingSessionFeedRepository{window: window}
+		controller := NewSessionFeedController(usecases.NewSessionFeedUseCase(repo))
+		rec := putBroadcast(t, controller, "s1", `{"feeds":[{"provider":"youtube","url":"https://youtu.be/a","startedAtUtc":"2026-07-06T15:58:30.5+02:00"}]}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), `"startedAtUtc":"2026-07-06T13:58:30.5Z"`) {
+			t.Fatalf("expected UTC start time in response, got %s", rec.Body.String())
+		}
+	})
+
+	t.Run("outside the session window", func(t *testing.T) {
+		repo := &recordingSessionFeedRepository{window: window}
+		controller := NewSessionFeedController(usecases.NewSessionFeedUseCase(repo))
+		rec := putBroadcast(t, controller, "s1", `{"feeds":[{"provider":"youtube","url":"https://youtu.be/a","startedAtUtc":"2025-07-06T14:00:00Z"}]}`)
+		var env feedErrorEnvelope
+		_ = json.Unmarshal(rec.Body.Bytes(), &env)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(env.Error.Message, "feeds[0].startedAtUtc") {
+			t.Fatalf("status = %d, want 400 naming feeds[0].startedAtUtc (body: %s)", rec.Code, rec.Body.String())
+		}
+		if repo.called {
+			t.Fatal("repository must not be written when a start time is out of window")
+		}
+	})
+
+	t.Run("unknown session", func(t *testing.T) {
+		repo := &recordingSessionFeedRepository{}
+		controller := NewSessionFeedController(usecases.NewSessionFeedUseCase(repo))
+		rec := putBroadcast(t, controller, "missing", `{"feeds":[{"provider":"youtube","url":"https://youtu.be/a","startedAtUtc":"2026-07-06T14:00:00Z"}]}`)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
+		}
+	})
 }

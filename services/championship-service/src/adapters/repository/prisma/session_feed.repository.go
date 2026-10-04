@@ -11,6 +11,7 @@ package prismaadapter
 
 import (
 	"context"
+	"time"
 
 	db "overdrive/services/championship-service/resources/db"
 	"overdrive/services/championship-service/src/core/domain"
@@ -60,4 +61,25 @@ func (r *SessionFeedRepository) ReplaceSessionFeeds(ctx context.Context, session
 		return nil, nil
 	}
 	return &domain.SessionBroadcast{SessionID: row.ID, Feeds: decodeFeeds(row.Feeds)}, nil
+}
+
+// GetSessionWindow loads the start/end bounds of one session, used to check feed start times;
+// (nil, nil) when the session is unknown.
+func (r *SessionFeedRepository) GetSessionWindow(ctx context.Context, sessionID string) (*domain.SessionWindow, error) {
+	row, err := r.client.Session.FindUnique(db.Session.ID.Equals(sessionID)).Exec(ctx)
+	if err != nil {
+		if isNotFoundErr(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+	window := &domain.SessionWindow{Start: time.Time(row.StartedAtUtc)}
+	if endedAt, ok := row.EndedAtUtc(); ok {
+		end := time.Time(endedAt)
+		window.End = &end
+	}
+	return window, nil
 }

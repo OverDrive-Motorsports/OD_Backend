@@ -62,7 +62,7 @@ URLs and never by a user token. The same `Feed` object is used by
 and `race-data-service` (one onboard camera list per driver).
 
 ```json
-{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard" }
+{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard", "startedAtUtc": "2026-07-06T14:02:51Z" }
 { "provider": "youtube", "url": "https://www.youtube.com/watch?v=...", "label": "Highlights" }
 { "provider": "hls",     "url": "https://cdn.example.com/demo/index.m3u8", "label": "Demo" }
 ```
@@ -73,6 +73,7 @@ and `race-data-service` (one onboard camera list per driver).
 | `contentId`, `channelId` | Required for `f1tv` (non-empty, at most 64 characters each). Forbidden for `youtube` / `hls`. |
 | `url` | Required for `youtube` / `hls`, forbidden for `f1tv`. Absolute `https` URL, at most 2048 characters. `youtube`: host must be `youtube.com`, `www.youtube.com`, `m.youtube.com` or `youtu.be`. `hls`: path must end with `.m3u8`. |
 | `label` | Optional, at most 80 characters. |
+| `startedAtUtc` | Optional. RFC 3339 timestamp of the video's **first frame** (any offset is accepted and stored/returned in UTC, sub-second precision kept). Must fall within the session window widened by 6 h on each side — or within 24 h after the start when the session has no end time yet. See "Synchronising video and race data" below. |
 
 A list holds **at most 20 feeds** and **no duplicate** (same `provider` +
 `url`, or same `provider` + `contentId` + `channelId`). Unknown JSON fields are
@@ -97,6 +98,29 @@ re-ingestion.
   playback renders in a protected surface: it can be shown in a native overlay
   but not mapped as a texture on a 3D object.
 
+### Synchronising video and race data
+
+Every race-data sample (`/race/replay`, `/race/*`, `/telemetry/*`) is stamped in
+UTC. `startedAtUtc` ties a video to that timeline:
+
+```
+dataTimeUtc = startedAtUtc + playbackPosition
+```
+
+Example: a feed with `"startedAtUtc": "2026-07-06T14:02:51Z"` played at
+`00:12:30` shows the track at `2026-07-06T14:15:21Z`; the client displays the
+replay samples whose `timestamp` is the latest one ≤ that instant.
+
+- **Playing**: advance `dataTimeUtc` with the player clock; do not re-query the
+  backend per frame — load `/race/replay` once and index it by timestamp.
+- **Scrubbing / seeking**: recompute `dataTimeUtc` from the new playback
+  position and jump to the matching sample (binary search on the sorted
+  timestamps); samples are not interpolated server-side.
+- **No `startedAtUtc`**: play the video without overlay.
+- **Live streams**: the value is the wall-clock time of the stream's first
+  frame; broadcast latency is not compensated server-side — the player should
+  expose a user-adjustable offset.
+
 ### `GET /sessions/{sessionId}/broadcast`
 
 Returns the session's global feed list. `feeds` is always a JSON array (`[]`
@@ -115,14 +139,16 @@ when nothing is registered), never `null`. Unknown session: `404`
 Replaces the **whole** feed list of the session. Body (at most 64 KiB):
 
 ```json
-{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1017", "label": "World feed" } ] }
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1017", "label": "World feed", "startedAtUtc": "2026-07-06T14:02:51Z" } ] }
 ```
 
 `{ "feeds": [] }` clears the list. Responses:
 
 - `200` — the updated payload, same shape as the `GET`
-- `400` `VALIDATION_ERROR` — malformed body, missing `feeds`, unknown field, or a
-  feed violating the rules above (message names `feeds[<index>].<field>`)
+- `400` `VALIDATION_ERROR` — malformed body (including a `startedAtUtc` that is
+  not RFC 3339), missing `feeds`, unknown field, or a feed violating the rules
+  above (message names `feeds[<index>].<field>`, e.g. `feeds[0].startedAtUtc
+  must be between ... and ...`)
 - `404` `SESSION_NOT_FOUND` — unknown session
 
 ```bash

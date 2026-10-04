@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"overdrive/services/championship-service/src/core/domain"
 )
@@ -24,6 +25,15 @@ type fakeSessionFeedRepository struct {
 	replaceCalled bool
 	gotSessionID  string
 	gotFeeds      []domain.Feed
+	window        *domain.SessionWindow
+	windowErr     error
+	windowCalled  bool
+}
+
+func (f *fakeSessionFeedRepository) GetSessionWindow(_ context.Context, sessionID string) (*domain.SessionWindow, error) {
+	f.windowCalled = true
+	f.gotSessionID = sessionID
+	return f.window, f.windowErr
 }
 
 func (f *fakeSessionFeedRepository) GetSessionFeeds(_ context.Context, sessionID string) (*domain.SessionBroadcast, error) {
@@ -118,4 +128,72 @@ func TestSessionFeedUseCase_ReplaceSessionFeeds_UnknownSessionAndRepositoryError
 	if _, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "s1", []domain.Feed{}); !errors.Is(err, boom) {
 		t.Fatalf("expected repository error to propagate, got %v", err)
 	}
+}
+
+// TestSessionFeedUseCase_ReplaceSessionFeeds_StartTimes covers the start-time path: the session
+// window is only loaded when a feed carries startedAtUtc; an in-window time reaches the
+// repository converted to UTC; an out-of-window time is ErrInvalidFeed; an unknown session is
+// (nil, nil); a window lookup error propagates. The repository is never written on failure.
+func TestSessionFeedUseCase_ReplaceSessionFeeds_StartTimes(t *testing.T) {
+	window := &domain.SessionWindow{Start: time.Date(2026, 7, 6, 14, 0, 0, 0, time.UTC)}
+	paris := time.FixedZone("CEST", 2*3600)
+	inWindow := time.Date(2026, 7, 6, 15, 58, 0, 0, paris)
+	tooEarly := time.Date(2026, 7, 6, 7, 0, 0, 0, time.UTC)
+	withStart := func(at time.Time) []domain.Feed {
+		return []domain.Feed{{Provider: domain.FeedProviderYouTube, URL: "https://youtu.be/a", StartedAtUTC: &at}}
+	}
+
+	t.Run("no start time skips the window lookup", func(t *testing.T) {
+		repo := &fakeSessionFeedRepository{result: &domain.SessionBroadcast{SessionID: "s1"}}
+		feeds := []domain.Feed{{Provider: domain.FeedProviderYouTube, URL: "https://youtu.be/a"}}
+		if _, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "s1", feeds); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if repo.windowCalled {
+			t.Fatal("window must not be loaded when no feed has a start time")
+		}
+	})
+
+	t.Run("in window, stored in UTC", func(t *testing.T) {
+		repo := &fakeSessionFeedRepository{window: window, result: &domain.SessionBroadcast{SessionID: "s1"}}
+		input := withStart(inWindow)
+		if _, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "s1", input); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !repo.windowCalled || !repo.replaceCalled {
+			t.Fatalf("expected window lookup then replace, got window=%v replace=%v", repo.windowCalled, repo.replaceCalled)
+		}
+		stored := repo.gotFeeds[0].StartedAtUTC
+		if stored == nil || stored.Location() != time.UTC || !stored.Equal(inWindow) {
+			t.Fatalf("expected the same instant in UTC, got %v", stored)
+		}
+		if input[0].StartedAtUTC.Location() != paris {
+			t.Fatal("the caller's slice must not be mutated")
+		}
+	})
+
+	t.Run("out of window", func(t *testing.T) {
+		repo := &fakeSessionFeedRepository{window: window}
+		_, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "s1", withStart(tooEarly))
+		if !errors.Is(err, domain.ErrInvalidFeed) || repo.replaceCalled {
+			t.Fatalf("expected ErrInvalidFeed without write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
+
+	t.Run("unknown session", func(t *testing.T) {
+		repo := &fakeSessionFeedRepository{}
+		got, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "missing", withStart(inWindow))
+		if err != nil || got != nil || repo.replaceCalled {
+			t.Fatalf("expected (nil, nil) without write, got %+v err=%v replace=%v", got, err, repo.replaceCalled)
+		}
+	})
+
+	t.Run("window lookup error", func(t *testing.T) {
+		boom := errors.New("db down")
+		repo := &fakeSessionFeedRepository{windowErr: boom}
+		_, err := NewSessionFeedUseCase(repo).ReplaceSessionFeeds(context.Background(), "s1", withStart(inWindow))
+		if !errors.Is(err, boom) || repo.replaceCalled {
+			t.Fatalf("expected lookup error without write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
 }

@@ -11,6 +11,7 @@ package prismaadapter
 
 import (
 	"testing"
+	"time"
 
 	db "overdrive/services/championship-service/resources/db"
 	"overdrive/services/championship-service/src/core/domain"
@@ -51,5 +52,25 @@ func TestEncodeFeeds(t *testing.T) {
 	}
 	if got := decodeFeeds(raw); len(got) != 1 || got[0] != feeds[0] {
 		t.Fatalf("round-trip mismatch: %+v", got)
+	}
+}
+
+// TestFeedsCodec_StartedAtUtcRoundTrip proves a feed's startedAtUtc survives encode → decode with
+// the same instant and sub-second precision, and stays absent when it was not set.
+func TestFeedsCodec_StartedAtUtcRoundTrip(t *testing.T) {
+	at := time.Date(2026, 7, 6, 14, 2, 51, 500_000_000, time.UTC)
+	raw, err := encodeFeeds([]domain.Feed{
+		{Provider: domain.FeedProviderYouTube, URL: "https://youtu.be/a", StartedAtUTC: &at},
+		{Provider: domain.FeedProviderHLS, URL: "https://a.b/x.m3u8"},
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	got := decodeFeeds(raw)
+	if len(got) != 2 || got[0].StartedAtUTC == nil || !got[0].StartedAtUTC.Equal(at) {
+		t.Fatalf("expected startedAtUtc %v preserved, got %+v", at, got)
+	}
+	if got[1].StartedAtUTC != nil {
+		t.Fatalf("expected no start time on the second feed, got %v", got[1].StartedAtUTC)
 	}
 }

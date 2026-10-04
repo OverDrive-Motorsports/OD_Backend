@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Feed providers accepted by ValidateFeeds. Anything else is rejected.
@@ -35,7 +36,16 @@ const (
 	feedFieldChannelID  = "channelId"
 	feedFieldURL        = "url"
 	feedFieldLabel      = "label"
+	feedFieldStartedAt  = "startedAtUtc"
 	feedFieldWholeEntry = ""
+)
+
+// Plausibility window for Feed.StartedAtUTC, relative to the session bounds. The tolerance
+// accepts pre-show / post-race coverage while catching wrong-day or wrong-year typos; the
+// open-session horizon is the upper bound used when the session has no end time yet.
+const (
+	FeedStartTolerance     = 6 * time.Hour
+	FeedOpenSessionHorizon = 24 * time.Hour
 )
 
 // youtubeHosts lists the hostnames a youtube feed URL may point to.
@@ -53,12 +63,24 @@ var youtubeHosts = map[string]struct{}{
 // are plain public URLs. This struct is the same in championship-service
 // (global session feeds) and race-data-service (per-driver onboard feeds) —
 // keep both copies identical.
+//
+// StartedAtUTC is the wall-clock time of the video's first frame. It is what lets a client
+// overlay race data on the picture: the data instant shown at playback position p is
+// StartedAtUTC + p. Absent means the client plays the video without overlay.
 type Feed struct {
-	Provider  string `json:"provider"`
-	ContentID string `json:"contentId,omitempty"`
-	ChannelID string `json:"channelId,omitempty"`
-	URL       string `json:"url,omitempty"`
-	Label     string `json:"label,omitempty"`
+	Provider     string     `json:"provider"`
+	ContentID    string     `json:"contentId,omitempty"`
+	ChannelID    string     `json:"channelId,omitempty"`
+	URL          string     `json:"url,omitempty"`
+	Label        string     `json:"label,omitempty"`
+	StartedAtUTC *time.Time `json:"startedAtUtc,omitempty"`
+}
+
+// SessionWindow is the time span a feed's StartedAtUTC is checked against. End is nil while
+// the session has no known end time.
+type SessionWindow struct {
+	Start time.Time
+	End   *time.Time
 }
 
 // ValidateFeeds enforces the feed list contract: known provider, per-provider
@@ -82,6 +104,56 @@ func ValidateFeeds(feeds []Feed) error {
 		seen[key] = index
 	}
 	return nil
+}
+
+// HasFeedStartTimes reports whether at least one feed carries a StartedAtUTC, i.e. whether
+// the caller needs to load the session window before calling ValidateFeedStartTimes.
+func HasFeedStartTimes(feeds []Feed) bool {
+	for _, feed := range feeds {
+		if feed.StartedAtUTC != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateFeedStartTimes checks every StartedAtUTC against the session window widened by
+// FeedStartTolerance on both sides (FeedOpenSessionHorizon past the start when the session
+// has no end yet). A zero window Start disables the check — the session bounds are unknown.
+// Failures are ErrInvalidFeed wrapped with the index/field, like ValidateFeeds.
+func ValidateFeedStartTimes(feeds []Feed, window SessionWindow) error {
+	if window.Start.IsZero() {
+		return nil
+	}
+	lower := window.Start.Add(-FeedStartTolerance)
+	upper := window.Start.Add(FeedOpenSessionHorizon)
+	if window.End != nil {
+		upper = window.End.Add(FeedStartTolerance)
+	}
+	for index, feed := range feeds {
+		if feed.StartedAtUTC == nil {
+			continue
+		}
+		if feed.StartedAtUTC.Before(lower) || feed.StartedAtUTC.After(upper) {
+			return feedError(index, feedFieldStartedAt, fmt.Sprintf("must be between %s and %s", lower.UTC().Format(time.RFC3339), upper.UTC().Format(time.RFC3339)))
+		}
+	}
+	return nil
+}
+
+// NormalizeFeeds returns a copy of feeds with every StartedAtUTC converted to UTC (a client may
+// send any RFC 3339 offset) and a nil list turned into an empty one, so the stored column is
+// always a JSON array of UTC instants. The input slice is not modified.
+func NormalizeFeeds(feeds []Feed) []Feed {
+	normalized := make([]Feed, len(feeds))
+	for index, feed := range feeds {
+		if feed.StartedAtUTC != nil {
+			utc := feed.StartedAtUTC.UTC()
+			feed.StartedAtUTC = &utc
+		}
+		normalized[index] = feed
+	}
+	return normalized
 }
 
 // validateFeed checks one entry against the provider-specific rules.

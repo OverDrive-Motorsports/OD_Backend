@@ -94,9 +94,20 @@ Each driver has one onboard camera feed list per session, stored in
 the same as `championship-service`'s (see the "Video feeds" section of
 `services/championship-service/doc/endpoint.md`): `provider` in `f1tv |
 youtube | hls`, `contentId` + `channelId` for `f1tv`, an absolute `https`
-`url` for `youtube` / `hls`, optional `label`, at most 20 entries, no
-duplicates. The backend never stores a playable F1 TV URL or a user token; a
-`url` on an `f1tv` feed is rejected with `400`.
+`url` for `youtube` / `hls`, optional `label`, optional `startedAtUtc`, at
+most 20 entries, no duplicates. The backend never stores a playable F1 TV URL
+or a user token; a `url` on an `f1tv` feed is rejected with `400`.
+
+`startedAtUtc` is the RFC 3339 wall-clock time of the video's first frame
+(stored and returned in UTC). It is what lets a client overlay this service's
+data on the onboard video: `dataTimeUtc = startedAtUtc + playbackPosition`,
+then show the latest `/race/replay` / `/telemetry/*` sample whose `timestamp`
+is ≤ `dataTimeUtc` (see "Synchronising video and race data" in the
+championship-service doc for playback and seeking). On `PUT`, it must fall
+within the session window (bounds read from championship-service) widened by
+6 h on each side, or within 24 h after the start while the session has no
+end; the session is only fetched from championship-service when at least one
+feed carries a `startedAtUtc`.
 
 Both routes first check the session and the driver against
 `championship-service`'s session driver list: unknown session → `404`
@@ -115,13 +126,13 @@ created the row yet), never `null`:
 whole list, creating the row if needed. Body (at most 64 KiB):
 
 ```json
-{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1044", "label": "Onboard" } ] }
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1044", "label": "Onboard", "startedAtUtc": "2026-07-06T14:02:51Z" } ] }
 ```
 
 - `200` — the updated payload, same shape as the `GET`
-- `400` `VALIDATION_ERROR` — malformed body, missing `feeds`, unknown field,
-  non-positive `driverNumber`, or a feed violating the rules (message names
-  `feeds[<index>].<field>`)
+- `400` `VALIDATION_ERROR` — malformed body (including a `startedAtUtc` that is
+  not RFC 3339), missing `feeds`, unknown field, non-positive `driverNumber`,
+  or a feed violating the rules (message names `feeds[<index>].<field>`)
 - `404` `SESSION_NOT_FOUND` / `DRIVER_NOT_FOUND`
 
 Ingestion seeds the row with `feeds: []` on creation only and never overwrites

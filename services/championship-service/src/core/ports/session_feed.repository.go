@@ -16,8 +16,9 @@ import (
 )
 
 // SessionFeedRepository reads and replaces the feed list stored on a Session row.
-// Both methods return (nil, nil) when the session does not exist.
+// Every method returns (nil, nil) when the session does not exist.
 type SessionFeedRepository interface {
 	GetSessionFeeds(ctx context.Context, sessionID string) (*domain.SessionBroadcast, error)
 	ReplaceSessionFeeds(ctx context.Context, sessionID string, feeds []domain.Feed) (*domain.SessionBroadcast, error)
+	GetSessionWindow(ctx context.Context, sessionID string) (*domain.SessionWindow, error)
 }

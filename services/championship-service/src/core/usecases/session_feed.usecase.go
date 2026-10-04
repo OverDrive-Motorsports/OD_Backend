@@ -31,14 +31,25 @@ func (u *SessionFeedUseCase) GetSessionFeeds(ctx context.Context, sessionID stri
 }
 
 // ReplaceSessionFeeds validates the supplied list with domain.ValidateFeeds and, only when it
-// passes, replaces the whole stored list. A nil list is normalised to an empty one so the
-// column always holds a JSON array.
+// passes, replaces the whole stored list. When at least one feed carries a startedAtUtc, the
+// session window is loaded first (unknown session → (nil, nil), i.e. 404) and every start time
+// is checked against it. Start times are stored in UTC and a nil list becomes an empty one,
+// so the column always holds a JSON array.
 func (u *SessionFeedUseCase) ReplaceSessionFeeds(ctx context.Context, sessionID string, feeds []domain.Feed) (*domain.SessionBroadcast, error) {
 	if err := domain.ValidateFeeds(feeds); err != nil {
 		return nil, err
 	}
-	if feeds == nil {
-		feeds = []domain.Feed{}
+	if domain.HasFeedStartTimes(feeds) {
+		window, err := u.repository.GetSessionWindow(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if window == nil {
+			return nil, nil
+		}
+		if err := domain.ValidateFeedStartTimes(feeds, *window); err != nil {
+			return nil, err
+		}
 	}
-	return u.repository.ReplaceSessionFeeds(ctx, sessionID, feeds)
+	return u.repository.ReplaceSessionFeeds(ctx, sessionID, domain.NormalizeFeeds(feeds))
 }
