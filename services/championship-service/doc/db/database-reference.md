@@ -138,6 +138,7 @@ This database stores championship catalog data, competition structure, event sch
 | `code` | `String?` | No | `varchar(20)` | Optional short driver code | `VER` |
 | `number` | `Int` | Yes | None | Racing number of the driver | `1` |
 | `countryCode` | `String?` | No | `varchar(3)` | Driver nationality code | `NLD` |
+| `headshotUrl` | `String?` | No | `varchar(500)` | Driver headshot URL from OpenF1 `headshot_url` (absolute http(s) only); exposed as `driverPicture` | `https://media.formula1.com/.../MAXVER01.png` |
 | `externalKey` | `String?` | No | `varchar(64)` | Optional provider-side identifier | `driver-1` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:20:00Z` |
 | `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-04-14T08:50:00Z` |
@@ -151,7 +152,7 @@ This database stores championship catalog data, competition structure, event sch
 | `driverNumber` | `Int` | Yes | Unique with `sessionId` | Driver race number | `1` |
 | `position` | `Int?` | No | Indexed with `sessionId` | Final or current position in the session | `1` |
 | `points` | `Float?` | No | None | Points awarded for the session result | `25.0` |
-| `status` | `String?` | No | `varchar(40)` | Classification status or finish reason | `Finished` |
+| `status` | `String?` | No | `varchar(40)` | Finishing status derived from OpenF1 `dsq` / `dns` / `dnf` flags: `finished`, `dnf`, `dns` or `dsq` | `dnf` |
 | `raw` | `Json` | Yes | None | Raw provider payload kept for traceability | `{"classified":true,"laps":57}` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T21:05:00Z` |
 

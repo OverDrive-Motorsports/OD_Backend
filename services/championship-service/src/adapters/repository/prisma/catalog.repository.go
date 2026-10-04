@@ -180,18 +180,20 @@ func (r *CatalogRepository) ListSessionDrivers(ctx context.Context, sessionID st
 		lastName, _ := driver.LastName()
 		code, _ := driver.Code()
 		countryCode, _ := driver.CountryCode()
+		picture, _ := driver.HeadshotURL()
 		color, _ := team.ColorHex()
 		items = append(items, domain.DriverSummary{
-			ID:           driver.ID,
-			DriverNumber: driver.Number,
-			FullName:     driver.DisplayName,
-			FirstName:    firstName,
-			LastName:     lastName,
-			Code:         code,
-			CountryCode:  countryCode,
-			TeamID:       team.ID,
-			TeamName:     team.Name,
-			TeamColor:    color,
+			ID:            driver.ID,
+			DriverNumber:  driver.Number,
+			FullName:      driver.DisplayName,
+			FirstName:     firstName,
+			LastName:      lastName,
+			Code:          code,
+			CountryCode:   countryCode,
+			TeamID:        team.ID,
+			TeamName:      team.Name,
+			TeamColor:     color,
+			DriverPicture: picture,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].DriverNumber < items[j].DriverNumber })
@@ -250,20 +252,10 @@ func (r *CatalogRepository) GetSessionStandings(ctx context.Context, sessionID s
 		return nil, err
 	}
 	items := make([]domain.StandingRow, 0, len(rows))
-	for _, row := range rows {
-		position, _ := row.Position()
-		points, _ := row.Points()
-		raw := rawMap(row.Raw)
-		gapToLeader := stringifyAny(raw["gap_to_leader"])
-		items = append(items, domain.StandingRow{
-			Position:     position,
-			DriverNumber: row.DriverNumber,
-			TeamID:       teamLookup[row.DriverNumber],
-			GapToLeader:  gapToLeader,
-			Points:       points,
-		})
+	for index := range rows {
+		items = append(items, mapStandingRow(&rows[index], teamLookup[rows[index].DriverNumber]))
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Position < items[j].Position })
+	sortStandings(items)
 	return items, nil
 }
 
@@ -300,13 +292,14 @@ func (r *CatalogRepository) GetDriverProfile(ctx context.Context, driverNumber i
 		code = championship.Code
 	}
 	countryCode, _ := driver.CountryCode()
+	picture, _ := driver.HeadshotURL()
 	return &domain.DriverProfile{
 		DriverNumber:     driver.Number,
 		FullName:         driver.DisplayName,
 		Nationality:      countryCode,
 		CurrentTeamID:    driver.TeamID,
 		ChampionshipCode: code,
-		// driverPicture: no data source available yet (see doc/endpoint.md gap note).
+		DriverPicture:    picture,
 	}, nil
 }
 

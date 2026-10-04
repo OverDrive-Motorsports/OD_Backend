@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -311,6 +312,7 @@ func (r *IngestionRepository) storeDrivers(ctx context.Context, providerCode str
 			db.Driver.LastName.SetIfPresent(stringPtr(row["last_name"])),
 			db.Driver.Code.SetIfPresent(stringPtr(row["driver_code"])),
 			db.Driver.CountryCode.SetIfPresent(stringPtr(row["country_code"])),
+			db.Driver.HeadshotURL.SetIfPresent(headshotURLPtr(row["headshot_url"])),
 			db.Driver.ExternalKey.Set(extKey),
 		).Exec(ctx)
 		if err != nil {
@@ -345,7 +347,7 @@ func (r *IngestionRepository) storeSessionResults(ctx context.Context, providerC
 			db.SessionResultRow.Session.Link(db.Session.ID.Equals(session.ID)),
 			db.SessionResultRow.Position.SetIfPresent(intPtr(row["position"])),
 			db.SessionResultRow.Points.SetIfPresent(floatPtr(row["points"])),
-			db.SessionResultRow.Status.SetIfPresent(stringPtr(row["status"])),
+			db.SessionResultRow.Status.SetIfPresent(stringPtr(resultStatus(row))),
 		).Exec(ctx)
 		if err != nil {
 			return err
@@ -599,6 +601,24 @@ func fallbackString(value any, fallback string) string {
 func stringPtr(value any) *string {
 	text := stringify(value)
 	if text == "" {
+		return nil
+	}
+	return &text
+}
+
+// maxHeadshotURLLength mirrors the Driver.headshotUrl column size.
+const maxHeadshotURLLength = 500
+
+// headshotURLPtr keeps a provider headshot URL only when it is an absolute http(s) URL that
+// fits the column; anything else is dropped (nil) so a bad value never fails the ingestion and
+// never overwrites a previously stored picture (the upsert uses SetIfPresent).
+func headshotURLPtr(value any) *string {
+	text := strings.TrimSpace(stringify(value))
+	if text == "" || len(text) > maxHeadshotURLLength {
+		return nil
+	}
+	parsed, err := url.Parse(text)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return nil
 	}
 	return &text

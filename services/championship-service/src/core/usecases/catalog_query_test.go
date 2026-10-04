@@ -84,6 +84,7 @@ func (f *fakeCatalogRepository) GetDriverProfile(ctx context.Context, driverNumb
 // TestCatalogQueryUseCase_NormalCase proves every method is an unmodified pass-through to the
 // repository for the successful/normal case.
 func TestCatalogQueryUseCase_NormalCase(t *testing.T) {
+	first := 1
 	repo := &fakeCatalogRepository{
 		championships: []domain.ChampionshipSummary{{ID: "c1", ChampionshipCode: "f1-2026"}},
 		events:        []domain.EventSummary{{ID: "e1"}},
@@ -93,7 +94,7 @@ func TestCatalogQueryUseCase_NormalCase(t *testing.T) {
 		drivers:       []domain.DriverSummary{{DriverNumber: 44}},
 		teams:         []domain.TeamSummary{{ID: "t1"}},
 		dataset:       domain.SessionDatasetResponse{SessionID: "s1", Dataset: "laps", Count: 1},
-		standings:     []domain.StandingRow{{Position: 1, DriverNumber: 1}},
+		standings:     []domain.StandingRow{{Position: &first, DriverNumber: 1}},
 		driverProfile: &domain.DriverProfile{DriverNumber: 44},
 	}
 	uc := NewCatalogQueryUseCase(repo)

@@ -61,16 +61,17 @@ type SessionBroadcast struct {
 }
 
 type DriverSummary struct {
-	ID           string `json:"id,omitempty"`
-	DriverNumber int    `json:"driverNumber"`
-	FullName     string `json:"fullName"`
-	FirstName    string `json:"firstName,omitempty"`
-	LastName     string `json:"lastName,omitempty"`
-	Code         string `json:"code,omitempty"`
-	CountryCode  string `json:"countryCode,omitempty"`
-	TeamID       string `json:"teamId,omitempty"`
-	TeamName     string `json:"teamName,omitempty"`
-	TeamColor    string `json:"teamColor,omitempty"`
+	ID            string `json:"id,omitempty"`
+	DriverNumber  int    `json:"driverNumber"`
+	FullName      string `json:"fullName"`
+	FirstName     string `json:"firstName,omitempty"`
+	LastName      string `json:"lastName,omitempty"`
+	Code          string `json:"code,omitempty"`
+	CountryCode   string `json:"countryCode,omitempty"`
+	TeamID        string `json:"teamId,omitempty"`
+	TeamName      string `json:"teamName,omitempty"`
+	TeamColor     string `json:"teamColor,omitempty"`
+	DriverPicture string `json:"driverPicture,omitempty"`
 }
 
 type TeamSummary struct {
@@ -80,13 +81,27 @@ type TeamSummary struct {
 	ColorHex string `json:"color,omitempty"`
 }
 
+// Finishing statuses exposed on StandingRow.Status.
+const (
+	ResultStatusFinished = "finished"
+	ResultStatusDNF      = "dnf"
+	ResultStatusDNS      = "dns"
+	ResultStatusDSQ      = "dsq"
+)
+
 // StandingRow represents a single row of a session's generic standings
 // (race result, starting grid, or championship standings), generalized
 // under GET /sessions/{sessionId}/standings.
+//
+// Position is nil for a driver the provider did not classify (typically a
+// DNS / DSQ, or a DNF that did not complete enough distance) — never 0.
+// Status is one of the ResultStatus* values, omitted when the provider gave
+// no information.
 type StandingRow struct {
-	Position     int     `json:"position"`
+	Position     *int    `json:"position"`
 	DriverNumber int     `json:"driverNumber"`
 	TeamID       string  `json:"teamId,omitempty"`
+	Status       string  `json:"status,omitempty"`
 	GapToLeader  string  `json:"gapToLeader,omitempty"`
 	Points       float64 `json:"points,omitempty"`
 }

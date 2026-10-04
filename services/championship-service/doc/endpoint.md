@@ -28,22 +28,38 @@ All responses are **camelCase** JSON. List endpoints return **bare JSON arrays**
 - `GET /events/{eventId}`
 - `GET /events/{eventId}/sessions` (query: `type`)
 - `GET /sessions/{sessionId}`
-- `GET /sessions/{sessionId}/drivers` (query: `teamId`)
+- `GET /sessions/{sessionId}/drivers` (query: `teamId`) — each driver carries `driverPicture` (headshot URL from OpenF1 `headshot_url`) when the provider supplied one
 - `GET /sessions/{sessionId}/teams`
 - `GET /sessions/{sessionId}/datasets/{dataset}`
 - `GET /sessions/{sessionId}/standings` (query: `driverNumber`) — generic standings (currently backed by session race results)
 - `GET /sessions/{sessionId}/standings/race` — deprecated alias of `/standings`, kept for backward compatibility with existing internal consumers
 - `GET /sessions/{sessionId}/broadcast` — `{ "sessionId", "feeds": Feed[] }` (see "Video feeds" below)
 - `PUT /sessions/{sessionId}/broadcast` — replaces the session feed list (see "Video feeds" below)
-- `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) — global, session-independent driver profile
+- `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) — global, session-independent driver profile, including `driverPicture` when available
 
-Known gap: `GET /sessions/{sessionId}` does not populate `weatherAtStart` — this
-service has no weather data source (weather samples are owned by
-`race-data-service`). The field is simply omitted from the response today; wiring
-cross-service enrichment is left for a follow-up.
+### Standings rows
 
-Known gap: `driverPicture` on `GET /drivers/{driverNumber}/profile` is always
-empty — no data source is currently ingested for driver headshots.
+```json
+[
+  { "position": 1,    "driverNumber": 63, "teamId": "openf1:f1:team:mercedes", "status": "finished", "gapToLeader": "0", "points": 25 },
+  { "position": null, "driverNumber": 16, "teamId": "openf1:f1:team:ferrari",  "status": "dnf" }
+]
+```
+
+- `position` is `null` for a driver the provider did not classify (typically
+  DNS / DSQ, or a DNF short of the classification distance) — never `0`. A DNF
+  that is still classified keeps its position and has `status: "dnf"`.
+- `status` is `finished`, `dnf`, `dns` or `dsq`, derived from OpenF1's
+  `dsq` / `dns` / `dnf` flags (most severe first); omitted when the provider
+  gave neither a flag nor a position.
+- Order: classified drivers by position, then non-classified drivers by driver
+  number.
+
+### Weather
+
+This service owns no weather data, so session payloads carry no weather field.
+The weather at the start of a session is the first sample of
+`GET /v1/race-data/sessions/{sessionId}/race/weather` (bare array, oldest first).
 
 Supported session datasets:
 

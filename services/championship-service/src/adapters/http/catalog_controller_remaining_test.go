@@ -14,6 +14,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"overdrive/services/championship-service/src/core/domain"
@@ -237,11 +238,37 @@ func TestCatalogController_GetSessionRaceStandings(t *testing.T) {
 	})
 }
 
+// TestCatalogController_GetSessionStandings_WireFormat pins the standings JSON contract: a
+// classified row carries its position and status, a non-classified row serialises
+// `"position": null` (never 0) with its dnf/dns/dsq status.
+func TestCatalogController_GetSessionStandings_WireFormat(t *testing.T) {
+	first := 1
+	usecase := &fakeCatalogUseCase{standings: []domain.StandingRow{
+		{Position: &first, DriverNumber: 44, Status: domain.ResultStatusFinished},
+		{Position: nil, DriverNumber: 16, Status: domain.ResultStatusDNF},
+	}}
+	req := httptest.NewRequest(http.MethodGet, "/sessions/s1/standings", nil)
+	req.SetPathValue("sessionId", "s1")
+	rec := httptest.NewRecorder()
+	NewCatalogController(usecase).GetSessionStandings(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, body)
+	}
+	for _, want := range []string{`"position":1,"driverNumber":44`, `"status":"finished"`, `"position":null,"driverNumber":16`, `"status":"dnf"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in body %s", want, body)
+		}
+	}
+}
+
 // TestCatalogController_GetSessionStandings covers the normal case, the ?driverNumber= filter
 // being parsed and forwarded, an invalid driverNumber being a 400, and the not-found case.
 func TestCatalogController_GetSessionStandings(t *testing.T) {
+	first := 1
 	t.Run("normal case with no driverNumber filter", func(t *testing.T) {
-		usecase := &fakeCatalogUseCase{standings: []domain.StandingRow{{Position: 1, DriverNumber: 44}}}
+		usecase := &fakeCatalogUseCase{standings: []domain.StandingRow{{Position: &first, DriverNumber: 44}}}
 		controller := NewCatalogController(usecase)
 
 		req := httptest.NewRequest(http.MethodGet, "/sessions/s1/standings", nil)
@@ -258,7 +285,7 @@ func TestCatalogController_GetSessionStandings(t *testing.T) {
 	})
 
 	t.Run("driverNumber filter is parsed and forwarded", func(t *testing.T) {
-		usecase := &fakeCatalogUseCase{standings: []domain.StandingRow{{Position: 1, DriverNumber: 44}}}
+		usecase := &fakeCatalogUseCase{standings: []domain.StandingRow{{Position: &first, DriverNumber: 44}}}
 		controller := NewCatalogController(usecase)
 
 		req := httptest.NewRequest(http.MethodGet, "/sessions/s1/standings?driverNumber=44", nil)
