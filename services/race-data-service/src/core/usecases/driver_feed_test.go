@@ -13,18 +13,27 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
 )
 
-// fakeChampionshipClientForDriverFeed only implements ListSessionDrivers; every other method
-// of ports.ChampionshipClient panics via the embedded nil interface if reached.
+// fakeChampionshipClientForDriverFeed only implements ListSessionDrivers and GetSession; every
+// other method of ports.ChampionshipClient panics via the embedded nil interface if reached.
 type fakeChampionshipClientForDriverFeed struct {
 	ports.ChampionshipClient
-	drivers []ports.ChampionshipDriverRef
-	err     error
-	gotID   string
+	drivers          []ports.ChampionshipDriverRef
+	err              error
+	gotID            string
+	session          *ports.ChampionshipSessionRef
+	sessionErr       error
+	getSessionCalled bool
+}
+
+func (f *fakeChampionshipClientForDriverFeed) GetSession(_ context.Context, _ string) (*ports.ChampionshipSessionRef, error) {
+	f.getSessionCalled = true
+	return f.session, f.sessionErr
 }
 
 func (f *fakeChampionshipClientForDriverFeed) ListSessionDrivers(_ context.Context, sessionID string) ([]ports.ChampionshipDriverRef, error) {
@@ -169,4 +178,71 @@ func TestDriverFeedUseCase_ReplaceDriverFeeds_NilBecomesEmptyAndErrorsPropagate(
 	if _, err := NewDriverFeedUseCase(&fakeDriverFeedRepository{err: boom}, client).ReplaceDriverFeeds(context.Background(), "s1", 1, []domain.Feed{}); !errors.Is(err, boom) {
 		t.Fatalf("expected repository error to propagate, got %v", err)
 	}
+}
+
+// TestDriverFeedUseCase_ReplaceDriverFeeds_StartTimes covers the start-time path: the session is
+// only fetched from championship-service when a feed carries startedAtUtc; an in-window time is
+// stored in UTC; an out-of-window time is ErrInvalidFeed; unparseable upstream bounds disable
+// the check; a nil session is ErrSessionNotFound and an upstream error ErrChampionshipUnavailable.
+// The repository is never written on failure.
+func TestDriverFeedUseCase_ReplaceDriverFeeds_StartTimes(t *testing.T) {
+	session := &ports.ChampionshipSessionRef{ID: "s1", StartedAtUTC: "2026-07-06T13:00:00.123Z", EndedAtUTC: "2026-07-06T15:00:00Z"}
+	inWindow := time.Date(2026, 7, 6, 15, 2, 0, 0, time.FixedZone("CEST", 2*3600))
+	tooLate := time.Date(2026, 7, 7, 13, 0, 0, 0, time.UTC)
+	withStart := func(at time.Time) []domain.Feed {
+		return []domain.Feed{{Provider: domain.FeedProviderF1TV, ContentID: "1", ChannelID: "2", StartedAtUTC: &at}}
+	}
+	run := func(client *fakeChampionshipClientForDriverFeed, feeds []domain.Feed) (*fakeDriverFeedRepository, error) {
+		repo := &fakeDriverFeedRepository{}
+		_, err := NewDriverFeedUseCase(repo, client).ReplaceDriverFeeds(context.Background(), "s1", 44, feeds)
+		return repo, err
+	}
+
+	t.Run("no start time skips the session lookup", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers()}
+		if _, err := run(client, []domain.Feed{{Provider: domain.FeedProviderF1TV, ContentID: "1", ChannelID: "2"}}); err != nil || client.getSessionCalled {
+			t.Fatalf("expected no session lookup, got err=%v called=%v", err, client.getSessionCalled)
+		}
+	})
+
+	t.Run("in window, stored in UTC", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers(), session: session}
+		repo, err := run(client, withStart(inWindow))
+		if err != nil || !repo.replaceCalled {
+			t.Fatalf("expected a write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+		stored := repo.gotFeeds[0].StartedAtUTC
+		if stored == nil || stored.Location() != time.UTC || !stored.Equal(inWindow) {
+			t.Fatalf("expected the same instant in UTC, got %v", stored)
+		}
+	})
+
+	t.Run("out of window", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers(), session: session}
+		repo, err := run(client, withStart(tooLate))
+		if !errors.Is(err, domain.ErrInvalidFeed) || repo.replaceCalled {
+			t.Fatalf("expected ErrInvalidFeed without write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
+
+	t.Run("unparseable upstream bounds disable the check", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers(), session: &ports.ChampionshipSessionRef{ID: "s1", StartedAtUTC: "not-a-date"}}
+		if repo, err := run(client, withStart(tooLate)); err != nil || !repo.replaceCalled {
+			t.Fatalf("expected the write to go through, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
+
+	t.Run("session vanished upstream", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers()}
+		if repo, err := run(client, withStart(inWindow)); !errors.Is(err, domain.ErrSessionNotFound) || repo.replaceCalled {
+			t.Fatalf("expected ErrSessionNotFound without write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
+
+	t.Run("championship unavailable", func(t *testing.T) {
+		client := &fakeChampionshipClientForDriverFeed{drivers: knownDrivers(), sessionErr: errors.New("timeout")}
+		if repo, err := run(client, withStart(inWindow)); !errors.Is(err, domain.ErrChampionshipUnavailable) || repo.replaceCalled {
+			t.Fatalf("expected ErrChampionshipUnavailable without write, got err=%v replace=%v", err, repo.replaceCalled)
+		}
+	})
 }

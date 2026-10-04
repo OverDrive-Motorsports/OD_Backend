@@ -12,6 +12,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
@@ -41,7 +42,9 @@ func (u *DriverFeedUseCase) GetDriverFeeds(ctx context.Context, sessionID string
 }
 
 // ReplaceDriverFeeds validates the list with domain.ValidateFeeds, confirms the session/driver
-// exist, then replaces the whole stored list. A nil list is normalised to an empty one.
+// exist, checks any startedAtUtc against the session window (loaded from championship-service
+// only when needed), then replaces the whole stored list with start times in UTC. A nil list
+// is normalised to an empty one.
 func (u *DriverFeedUseCase) ReplaceDriverFeeds(ctx context.Context, sessionID string, driverNumber int, feeds []domain.Feed) (*domain.DriverBroadcast, error) {
 	if err := domain.ValidateFeeds(feeds); err != nil {
 		return nil, err
@@ -49,10 +52,16 @@ func (u *DriverFeedUseCase) ReplaceDriverFeeds(ctx context.Context, sessionID st
 	if err := u.ensureDriver(ctx, sessionID, driverNumber); err != nil {
 		return nil, err
 	}
-	if feeds == nil {
-		feeds = []domain.Feed{}
+	if domain.HasFeedStartTimes(feeds) {
+		window, err := u.sessionWindow(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if err := domain.ValidateFeedStartTimes(feeds, window); err != nil {
+			return nil, err
+		}
 	}
-	stored, err := u.repository.ReplaceDriverFeeds(ctx, sessionID, driverNumber, feeds)
+	stored, err := u.repository.ReplaceDriverFeeds(ctx, sessionID, driverNumber, domain.NormalizeFeeds(feeds))
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +84,27 @@ func (u *DriverFeedUseCase) ensureDriver(ctx context.Context, sessionID string, 
 		}
 	}
 	return domain.ErrDriverNotFound
+}
+
+// sessionWindow loads the session bounds from championship-service. A bound that is missing or
+// not RFC 3339 is left zero/nil: a zero Start disables the window check rather than rejecting
+// a valid feed because of an upstream formatting issue.
+func (u *DriverFeedUseCase) sessionWindow(ctx context.Context, sessionID string) (domain.SessionWindow, error) {
+	session, err := u.client.GetSession(ctx, sessionID)
+	if err != nil {
+		return domain.SessionWindow{}, fmt.Errorf("%w: %w", domain.ErrChampionshipUnavailable, err)
+	}
+	if session == nil {
+		return domain.SessionWindow{}, domain.ErrSessionNotFound
+	}
+	var window domain.SessionWindow
+	if start, err := time.Parse(time.RFC3339, session.StartedAtUTC); err == nil {
+		window.Start = start
+	}
+	if end, err := time.Parse(time.RFC3339, session.EndedAtUTC); err == nil {
+		window.End = &end
+	}
+	return window, nil
 }
 
 // newDriverBroadcast builds the response payload, guaranteeing a non-nil feed list.
