@@ -66,8 +66,11 @@ func run() error {
 	catalogRepository := prismaadapter.NewCatalogRepository(client)
 	catalogUsecase := usecases.NewCatalogQueryUseCase(catalogRepository)
 	catalogController := httpadapter.NewCatalogController(catalogUsecase)
+	sessionFeedRepository := prismaadapter.NewSessionFeedRepository(client)
+	sessionFeedUsecase := usecases.NewSessionFeedUseCase(sessionFeedRepository)
+	sessionFeedController := httpadapter.NewSessionFeedController(sessionFeedUsecase)
 
-	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(healthController, ingestionController, catalogController, internalToken), bootstrap.DefaultServerLimits())
+	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(healthController, ingestionController, catalogController, sessionFeedController, internalToken), bootstrap.DefaultServerLimits())
 
 	log.Printf("%s listening on :%s", cfg.ServiceName, cfg.HTTPPort)
 

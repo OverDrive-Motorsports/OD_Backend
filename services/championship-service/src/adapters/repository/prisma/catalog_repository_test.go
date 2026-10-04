@@ -195,7 +195,7 @@ func TestMapEventSummary_MissingRoundNumber(t *testing.T) {
 func TestMapSessionSummary(t *testing.T) {
 	name := "Race"
 	externalKey := "9998"
-	broadcastURL := "https://example.com/watch"
+	feeds := db.JSON(`[{"provider":"youtube","url":"https://www.youtube.com/watch?v=abc","label":"Highlights"}]`)
 	start := time.Date(2026, 8, 10, 14, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 8, 10, 16, 0, 0, 0, time.UTC)
 
@@ -208,7 +208,7 @@ func TestMapSessionSummary(t *testing.T) {
 				Status:       db.SessionStatusFinished,
 				Name:         &name,
 				ExternalKey:  &externalKey,
-				BroadcastURL: &broadcastURL,
+				Feeds:        feeds,
 				StartedAtUtc: start,
 				EndedAtUtc:   &end,
 			},
@@ -217,8 +217,11 @@ func TestMapSessionSummary(t *testing.T) {
 		if got.ID != "s1" || got.EventID != "e1" || got.Type != "race" || got.Status != "finished" {
 			t.Fatalf("unexpected identity/status fields: %+v", got)
 		}
-		if got.Name != name || got.Circuit != "Test Circuit" || got.ExternalKey != externalKey || got.BroadcastURL != broadcastURL {
+		if got.Name != name || got.Circuit != "Test Circuit" || got.ExternalKey != externalKey {
 			t.Fatalf("unexpected optional fields: %+v", got)
+		}
+		if len(got.Feeds) != 1 || got.Feeds[0].Provider != "youtube" || got.Feeds[0].URL != "https://www.youtube.com/watch?v=abc" || got.Feeds[0].Label != "Highlights" {
+			t.Fatalf("expected the feeds Json column to be decoded, got %+v", got.Feeds)
 		}
 		if !got.StartTime.Equal(start) {
 			t.Fatalf("unexpected StartTime: %v", got.StartTime)

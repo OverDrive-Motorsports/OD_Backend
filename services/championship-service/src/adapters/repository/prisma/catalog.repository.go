@@ -598,7 +598,6 @@ func mapChampionshipSession(row *db.SessionModel, event *db.EventModel) domain.C
 func mapSessionSummary(row *db.SessionModel, circuit string) domain.SessionSummary {
 	name, _ := row.Name()
 	externalKey, _ := row.ExternalKey()
-	broadcastURL, _ := row.BroadcastURL()
 	endedAt, ok := row.EndedAtUtc()
 	var endedAtPtr *time.Time
 	if ok {
@@ -606,16 +605,16 @@ func mapSessionSummary(row *db.SessionModel, circuit string) domain.SessionSumma
 		endedAtPtr = &value
 	}
 	return domain.SessionSummary{
-		ID:           row.ID,
-		EventID:      row.EventID,
-		Type:         string(row.Type),
-		Status:       string(row.Status),
-		Name:         name,
-		Circuit:      circuit,
-		ExternalKey:  externalKey,
-		BroadcastURL: broadcastURL,
-		StartTime:    timeValue(row.StartedAtUtc),
-		EndTime:      endedAtPtr,
+		ID:          row.ID,
+		EventID:     row.EventID,
+		Type:        string(row.Type),
+		Status:      string(row.Status),
+		Name:        name,
+		Circuit:     circuit,
+		ExternalKey: externalKey,
+		Feeds:       decodeFeeds(row.Feeds),
+		StartTime:   timeValue(row.StartedAtUtc),
+		EndTime:     endedAtPtr,
 	}
 }
 

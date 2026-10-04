@@ -16,3 +16,9 @@ import "errors"
 // sentinel (rather than a raw string-matched error) so adapters/http can classify it with
 // errors.Is instead of parsing the error message.
 var ErrUnknownDataset = errors.New("unknown dataset")
+
+// ErrInvalidFeed is returned by ValidateFeeds when a feed list violates the
+// contract (unknown provider, missing/forbidden field, bad URL, too many
+// entries, duplicate). The wrapped message names the failing index and field;
+// adapters/http classifies it with errors.Is and answers 400.
+var ErrInvalidFeed = errors.New("invalid feed")

@@ -9,7 +9,11 @@
 
 package ports
 
-import "context"
+import (
+	"context"
+
+	"overdrive/services/race-data-service/src/core/domain"
+)
 
 // ChampionshipDriverRef, ChampionshipSessionRef, and ChampionshipEventRef mirror
 // championship-service's camelCase public contract.
@@ -22,15 +26,15 @@ type ChampionshipDriverRef struct {
 }
 
 type ChampionshipSessionRef struct {
-	ID           string `json:"sessionId"`
-	EventID      string `json:"eventId"`
-	Type         string `json:"type"`
-	Status       string `json:"status"`
-	Name         string `json:"name"`
-	ExternalKey  string `json:"externalKey"`
-	BroadcastURL string `json:"broadcastUrl"`
-	StartedAtUTC string `json:"startTime"`
-	EndedAtUTC   string `json:"endTime"`
+	ID           string        `json:"sessionId"`
+	EventID      string        `json:"eventId"`
+	Type         string        `json:"type"`
+	Status       string        `json:"status"`
+	Name         string        `json:"name"`
+	ExternalKey  string        `json:"externalKey"`
+	Feeds        []domain.Feed `json:"feeds"`
+	StartedAtUTC string        `json:"startTime"`
+	EndedAtUTC   string        `json:"endTime"`
 }
 
 type ChampionshipEventRef struct {

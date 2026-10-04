@@ -115,7 +115,7 @@ model Session {
   status       SessionStatus
   name         String?       @db.VarChar(80)
   externalKey  String?       @db.VarChar(64)
-  broadcastUrl String?       @db.VarChar(255)
+  feeds        Json          @default("[]")
   startedAtUtc DateTime
   endedAtUtc   DateTime?
   createdAt    DateTime      @default(now())

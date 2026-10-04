@@ -129,7 +129,7 @@ func (r *IngestionRepository) StoreBatch(ctx context.Context, batch contracts.Ba
 		default:
 			return fmt.Errorf("unsupported race dataset %q", dataset.Name)
 		}
-		if err := r.ensureDriverBroadcasts(ctx, sessionID, batch.Provider, batch.Context.SessionKey, dataset.Rows); err != nil {
+		if err := r.ensureDriverBroadcasts(ctx, sessionID, batch.Provider, dataset.Rows); err != nil {
 			return fmt.Errorf("ensure driver broadcasts: %w", err)
 		}
 	}
@@ -138,7 +138,7 @@ func (r *IngestionRepository) StoreBatch(ctx context.Context, batch contracts.Ba
 }
 
 // ensureDriverBroadcasts finds or creates the related database record needed by ingestion.
-func (r *IngestionRepository) ensureDriverBroadcasts(ctx context.Context, sessionID string, provider string, sessionKey int, rows []map[string]any) error {
+func (r *IngestionRepository) ensureDriverBroadcasts(ctx context.Context, sessionID string, provider string, rows []map[string]any) error {
 	seen := map[int]struct{}{}
 	for _, row := range rows {
 		driverNumber := intValue(row["driver_number"])
@@ -150,17 +150,19 @@ func (r *IngestionRepository) ensureDriverBroadcasts(ctx context.Context, sessio
 		}
 		seen[driverNumber] = struct{}{}
 		driverID := contracts.DriverID(provider, "f1", fmt.Sprintf("%d", driverNumber))
-		url := fmt.Sprintf("https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=%d&driver=%d", sessionKey, driverNumber)
+		// feeds is seeded to [] on CREATE only: the update branch is intentionally
+		// empty so a re-ingestion never wipes feeds registered through
+		// PUT /sessions/{sessionId}/drivers/{driverNumber}/broadcast.
 		_, err := r.client.SessionDriverBroadcast.UpsertOne(
 			db.SessionDriverBroadcast.SessionIDDriverID(
 				db.SessionDriverBroadcast.SessionID.Equals(sessionID),
 				db.SessionDriverBroadcast.DriverID.Equals(driverID),
 			),
-		).CreateOrUpdate(
+		).Create(
 			db.SessionDriverBroadcast.SessionID.Set(sessionID),
 			db.SessionDriverBroadcast.DriverID.Set(driverID),
-			db.SessionDriverBroadcast.BroadcastURL.Set(url),
-		).Exec(ctx)
+			db.SessionDriverBroadcast.Feeds.Set(emptyFeedsJSON),
+		).Update().Exec(ctx)
 		if err != nil {
 			return err
 		}

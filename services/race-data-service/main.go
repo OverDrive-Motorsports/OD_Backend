@@ -109,6 +109,10 @@ func run() error {
 	replayCatalogUsecase := usecases.NewReplayCatalogUseCase(championshipClient, replayCatalogRepository)
 	replayCatalogController := httpadapter.NewReplayCatalogController(replayCatalogUsecase)
 
+	driverFeedRepository := prismaadapter.NewDriverFeedRepository(client)
+	driverFeedUsecase := usecases.NewDriverFeedUseCase(driverFeedRepository, championshipClient)
+	driverFeedController := httpadapter.NewDriverFeedController(driverFeedUsecase)
+
 	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(
 		healthController,
 		ingestionController,
@@ -117,6 +121,7 @@ func run() error {
 		telemetryController,
 		raceReplayStreamController,
 		replayCatalogController,
+		driverFeedController,
 		internalToken,
 	), bootstrap.DefaultServerLimits())
 	// Long polls end at once on shutdown instead of holding it for up to 30 s.

@@ -25,6 +25,7 @@ func NewRouter(
 	telemetryController *TelemetryController,
 	raceReplayStreamController *RaceReplayStreamController,
 	replayCatalogController *ReplayCatalogController,
+	driverFeedController *DriverFeedController,
 	internalToken string,
 ) http.Handler {
 	mux := http.NewServeMux()
@@ -39,5 +40,6 @@ func NewRouter(
 	registerTelemetryRoutes(mux, telemetryController)
 	registerRaceReplayStreamRoutes(mux, raceReplayStreamController)
 	registerReplayCatalogRoutes(mux, replayCatalogController)
+	registerDriverFeedRoutes(mux, driverFeedController)
 	return withSecurityHeaders(mux)
 }
