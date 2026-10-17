@@ -3,7 +3,7 @@
 ## OverDrive 2026
 ## All Technical rights reserved
 ##
-## session.service.go - Package ports source file for services/auth-service/src/core/ports.
+## auth.service.go - Package ports source file for services/auth-service/src/core/ports.
 ##
 */
 

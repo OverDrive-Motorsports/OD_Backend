@@ -1,6 +1,7 @@
 .git
 bin
 dist
+node_modules
 coverage.out
 *.log
 
