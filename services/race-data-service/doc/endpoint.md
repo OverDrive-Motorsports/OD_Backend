@@ -34,6 +34,40 @@ Catalog routes are proxied to `championship-service`; race datasets are read loc
 - `GET /events/{eventId}`
 - `GET /events/{eventId}/sessions`
 
+### Replay catalog
+
+`GET /championships/{code}/replays` — the championship's **playable** replays,
+as a bare JSON array, newest first. Built for the VR replay page: each
+`sessionId` is then opened with `GET /sessions/{sessionId}/race/replay`.
+
+```json
+[
+  {
+    "sessionId": "openf1:session:9472",
+    "name": "Race",
+    "type": "race",
+    "startTime": "2024-03-02T15:00:00Z",
+    "seasonYear": 2024,
+    "eventName": "Bahrain Grand Prix",
+    "circuit": "Bahrain International Circuit"
+  }
+]
+```
+
+- A session is listed only when this service holds at least one telemetry
+  sample **and** one location sample for it — what the replay needs to animate
+  cars (without location every frame sits at `x = y = z = 0`). Sessions whose
+  data was never ingested, or only partially (e.g. laps without `car_data` /
+  `location`), are left out. Every session type qualifies (practice,
+  qualifying, sprint, race); `name` / `type` tell them apart.
+- `[]` when the championship has no playable replay.
+- `404` `CHAMPIONSHIP_NOT_FOUND` for an unknown championship code; `502`
+  `UPSTREAM_UNAVAILABLE` when championship-service is unreachable.
+- Sessions and their event context come from championship-service
+  (`GET /championships/{code}/sessions`, one call); the replay check is a
+  single indexed `EXISTS` query on the local sample tables, so the cost does not
+  depend on how many samples a session holds.
+
 ### Session routes
 
 - `GET /sessions/{sessionId}`
@@ -220,7 +254,7 @@ The Prisma schema also contains archive and highlight-oriented tables:
 - `RaceDatasetChunk`
 - `RaceHighlight`
 
-These are reserved for future precomputed archive/highlight workflows. They are not populated by the current OpenF1 ingestion endpoint.
+These are reserved for future precomputed archive/highlight workflows. They are not populated by the current OpenF1 ingestion endpoint — in particular the replay catalog does **not** rely on `RaceArchive`, it checks the sample tables the replay actually reads.
 
 ### Example
 

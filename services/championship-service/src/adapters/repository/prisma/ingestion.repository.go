@@ -224,15 +224,15 @@ func (r *IngestionRepository) storeSessions(ctx context.Context, providerCode st
 	return nil
 }
 
-// ensureEventForSession finds or creates the related database record needed by ingestion.
+// ensureEventForSession links a session to its event, creating a placeholder event from the
+// session row when the meeting was never ingested. The upsert is CREATE-ONLY: an existing event
+// is left untouched, because a session row carries no meeting name or season — overwriting
+// would replace the real event (stored by storeEvents earlier in the same batch) with the
+// session name ("Race") and a wrong season.
 func (r *IngestionRepository) ensureEventForSession(ctx context.Context, providerCode string, championshipID string, row map[string]any) (*db.EventModel, error) {
 	extKey := stringify(row["meeting_key"])
 	if extKey == "" {
 		return nil, fmt.Errorf("meeting_key is required to persist sessions")
-	}
-	seasonYear := intValue(row["season_year"])
-	if seasonYear == 0 {
-		seasonYear = r.now().Year()
 	}
 	name := fallbackString(row["meeting_name"], fallbackString(row["session_name"], "Unnamed event"))
 	location := fallbackString(row["location"], fallbackString(row["country_name"], "unknown"))
@@ -244,6 +244,7 @@ func (r *IngestionRepository) ensureEventForSession(ctx context.Context, provide
 	if err != nil {
 		return nil, err
 	}
+	seasonYear := sessionSeasonYear(row, startTime, r.now())
 
 	eventID := contracts.EventID(providerCode, intValue(row["meeting_key"]))
 
@@ -252,7 +253,7 @@ func (r *IngestionRepository) ensureEventForSession(ctx context.Context, provide
 			db.Event.ChampionshipID.Equals(championshipID),
 			db.Event.ExternalKey.Equals(extKey),
 		),
-	).CreateOrUpdate(
+	).Create(
 		db.Event.SeasonYear.Set(seasonYear),
 		db.Event.Name.Set(name),
 		db.Event.Location.Set(location),
@@ -265,7 +266,18 @@ func (r *IngestionRepository) ensureEventForSession(ctx context.Context, provide
 		db.Event.CountryCode.SetIfPresent(stringPtr(row["country_code"])),
 		db.Event.CircuitName.SetIfPresent(stringPtr(row["circuit_name"])),
 		db.Event.ExternalKey.Set(extKey),
-	).Exec(ctx)
+	).Update().Exec(ctx)
+}
+
+// sessionSeasonYear picks the season of a placeholder event built from a session row
+func sessionSeasonYear(row map[string]any, startTime time.Time, now time.Time) int {
+	if year := intValue(row["season_year"]); year != 0 {
+		return year
+	}
+	if !startTime.IsZero() {
+		return startTime.UTC().Year()
+	}
+	return now.Year()
 }
 
 // storeDrivers persists mapped drivers rows into the service database.

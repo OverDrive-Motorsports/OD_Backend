@@ -288,3 +288,26 @@ func TestRawMap_RoundTripsRealJSON(t *testing.T) {
 		t.Fatalf("unexpected round-tripped payload: %+v", got)
 	}
 }
+
+// TestMapChampionshipSession proves a session is flattened with its event's name, season and
+// circuit, and that a missing event only leaves those event fields empty.
+func TestMapChampionshipSession(t *testing.T) {
+	name := "Race"
+	circuit := "Bahrain International Circuit"
+	start := time.Date(2024, 3, 2, 15, 0, 0, 0, time.UTC)
+	session := &db.SessionModel{InnerSession: db.InnerSession{
+		ID: "s1", EventID: "e1", Type: db.SessionTypeRace, Status: db.SessionStatusFinished, Name: &name, StartedAtUtc: start,
+	}}
+	event := &db.EventModel{InnerEvent: db.InnerEvent{ID: "e1", Name: "Bahrain Grand Prix", SeasonYear: 2024, CircuitName: &circuit}}
+
+	got := mapChampionshipSession(session, event)
+	if got.SessionID != "s1" || got.Name != "Race" || got.Type != "race" || got.Status != "finished" || !got.StartTime.Equal(start) ||
+		got.EventID != "e1" || got.EventName != "Bahrain Grand Prix" || got.SeasonYear != 2024 || got.Circuit != circuit {
+		t.Fatalf("unexpected mapping: %+v", got)
+	}
+
+	orphan := mapChampionshipSession(session, nil)
+	if orphan.SessionID != "s1" || orphan.EventID != "e1" || orphan.EventName != "" || orphan.SeasonYear != 0 || orphan.Circuit != "" {
+		t.Fatalf("expected empty event fields without an event, got %+v", orphan)
+	}
+}
