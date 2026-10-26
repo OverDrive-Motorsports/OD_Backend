@@ -76,7 +76,7 @@ func TestReplayCatalogUseCase_ListReplays_NormalCase(t *testing.T) {
 }
 
 // TestReplayCatalogUseCase_ListReplays_Empty proves `[]` (non-nil) both when no session is
-// playable and when the championship has no session at all — the latter without a DB query.
+// playable and when the championship has no session at all, the latter without a DB query.
 func TestReplayCatalogUseCase_ListReplays_Empty(t *testing.T) {
 	repo := &fakeReplayCatalogRepository{playable: map[string]struct{}{}}
 	got, err := NewReplayCatalogUseCase(&fakeChampionshipSessionCatalog{sessions: championshipSessions()}, repo).ListReplays(context.Background(), "f1")

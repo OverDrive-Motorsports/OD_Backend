@@ -36,7 +36,7 @@ Catalog routes are proxied to `championship-service`; race datasets are read loc
 
 ### Replay catalog
 
-`GET /championships/{code}/replays` — the championship's **playable** replays,
+`GET /championships/{code}/replays`, the championship's **playable** replays,
 as a bare JSON array, newest first. Built for the VR replay page: each
 `sessionId` is then opened with `GET /sessions/{sessionId}/race/replay`.
 
@@ -55,7 +55,7 @@ as a bare JSON array, newest first. Built for the VR replay page: each
 ```
 
 - A session is listed only when this service holds at least one telemetry
-  sample **and** one location sample for it — what the replay needs to animate
+  sample **and** one location sample for it, what the replay needs to animate
   cars (without location every frame sits at `x = y = z = 0`). Sessions whose
   data was never ingested, or only partially (e.g. laps without `car_data` /
   `location`), are left out. Every session type qualifies (practice,

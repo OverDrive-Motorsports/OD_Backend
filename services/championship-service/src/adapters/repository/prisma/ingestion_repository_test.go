@@ -317,8 +317,8 @@ func TestDriverExternalKey(t *testing.T) {
 }
 
 // TestSessionSeasonYear proves a placeholder event built from a session row takes the row's
-// season_year when present, otherwise the year of the session start — never the ingestion
-// year for a past session — and only falls back to now without a start time.
+// season_year when present, otherwise the year of the session start, never the ingestion
+// year for a past session, and only falls back to now without a start time.
 func TestSessionSeasonYear(t *testing.T) {
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	start := time.Date(2025, 3, 23, 7, 0, 0, 0, time.UTC)

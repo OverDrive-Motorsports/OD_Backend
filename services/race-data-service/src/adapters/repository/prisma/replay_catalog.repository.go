@@ -31,7 +31,7 @@ func NewReplayCatalogRepository(client *db.PrismaClient) *ReplayCatalogRepositor
 }
 
 // SessionsWithReplay returns the subset of sessionIDs that have at least one telemetry sample
-// AND one location sample — what GET /sessions/{sessionId}/race/replay needs to animate cars
+// AND one location sample, what GET /sessions/{sessionId}/race/replay needs to animate cars
 // (without location every frame sits at x=y=z=0). The check is a raw EXISTS query because
 // prisma-client-go has no DISTINCT/EXISTS and both sample tables hold millions of rows; each
 // EXISTS is served by the (sessionId, dateUtc) index and stops at the first row.

@@ -116,7 +116,7 @@ All routes below are exposed by gateway under `/v1/race-data/*` and proxied to `
 | --- | --- |
 | `GET /v1/race-data/championships` | `GET /championships` |
 | `GET /v1/race-data/championships/{code}/events` | `GET /championships/{code}/events` |
-| `GET /v1/race-data/championships/{code}/replays` | `GET /championships/{code}/replays` (playable replays, newest first — see race-data `doc/endpoint.md`) |
+| `GET /v1/race-data/championships/{code}/replays` | `GET /championships/{code}/replays` (playable replays, newest first, see race-data `doc/endpoint.md`) |
 | `GET /v1/race-data/events/{eventId}` | `GET /events/{eventId}` |
 | `GET /v1/race-data/events/{eventId}/sessions` | `GET /events/{eventId}/sessions` |
 

@@ -226,7 +226,7 @@ func (r *IngestionRepository) storeSessions(ctx context.Context, providerCode st
 
 // ensureEventForSession links a session to its event, creating a placeholder event from the
 // session row when the meeting was never ingested. The upsert is CREATE-ONLY: an existing event
-// is left untouched, because a session row carries no meeting name or season — overwriting
+// is left untouched, because a session row carries no meeting name or season, overwriting
 // would replace the real event (stored by storeEvents earlier in the same batch) with the
 // session name ("Race") and a wrong season.
 func (r *IngestionRepository) ensureEventForSession(ctx context.Context, providerCode string, championshipID string, row map[string]any) (*db.EventModel, error) {
