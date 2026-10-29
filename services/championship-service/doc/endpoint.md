@@ -25,6 +25,7 @@ All responses are **camelCase** JSON. List endpoints return **bare JSON arrays**
 
 - `GET /championships`
 - `GET /championships/{code}/events` (query: `season`)
+- `GET /championships/{code}/sessions` every session of the championship flattened with its event context, oldest first: `[{ "sessionId", "name", "type", "status", "startTime", "endTime", "eventId", "eventName", "seasonYear", "circuit" }]`. `[]` when the championship has no session, `404` `CHAMPIONSHIP_NOT_FOUND` for an unknown code. Used by race-data-service's replay catalog.
 - `GET /events/{eventId}`
 - `GET /events/{eventId}/sessions` (query: `type`)
 - `GET /sessions/{sessionId}`

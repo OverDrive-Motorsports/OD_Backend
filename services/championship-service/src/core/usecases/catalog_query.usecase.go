@@ -35,6 +35,12 @@ func (u *CatalogQueryUseCase) ListEventsByChampionship(ctx context.Context, code
 	return u.repository.ListEventsByChampionship(ctx, code)
 }
 
+// ListSessionsByChampionship returns every session of a championship with its event context,
+// or nil when the championship code is unknown.
+func (u *CatalogQueryUseCase) ListSessionsByChampionship(ctx context.Context, code string) ([]domain.ChampionshipSession, error) {
+	return u.repository.ListSessionsByChampionship(ctx, code)
+}
+
 // GetEvent returns the requested event payload for the supplied identifiers.
 func (u *CatalogQueryUseCase) GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error) {
 	return u.repository.GetEvent(ctx, eventID)

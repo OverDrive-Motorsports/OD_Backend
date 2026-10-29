@@ -18,6 +18,7 @@ import (
 type CatalogRepository interface {
 	ListChampionships(ctx context.Context) ([]domain.ChampionshipSummary, error)
 	ListEventsByChampionship(ctx context.Context, code string) ([]domain.EventSummary, error)
+	ListSessionsByChampionship(ctx context.Context, code string) ([]domain.ChampionshipSession, error)
 	GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error)
 	ListSessionsByEvent(ctx context.Context, eventID string) ([]domain.SessionSummary, error)
 	GetSession(ctx context.Context, sessionID string) (*domain.SessionSummary, error)

@@ -85,6 +85,41 @@ func (r *CatalogRepository) ListEventsByChampionship(ctx context.Context, code s
 	return items, nil
 }
 
+// ListSessionsByChampionship returns every session of the championship flattened with its
+// event's name, season and circuit, oldest first; nil when the championship code is unknown.
+func (r *CatalogRepository) ListSessionsByChampionship(ctx context.Context, code string) ([]domain.ChampionshipSession, error) {
+	championship, err := r.findChampionshipByCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if championship == nil {
+		return nil, nil
+	}
+	events, err := r.client.Event.FindMany(db.Event.ChampionshipID.Equals(championship.ID)).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := []domain.ChampionshipSession{}
+	if len(events) == 0 {
+		return items, nil
+	}
+	eventByID := make(map[string]*db.EventModel, len(events))
+	eventIDs := make([]string, 0, len(events))
+	for index := range events {
+		eventByID[events[index].ID] = &events[index]
+		eventIDs = append(eventIDs, events[index].ID)
+	}
+	sessions, err := r.client.Session.FindMany(db.Session.EventID.In(eventIDs)).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for index := range sessions {
+		items = append(items, mapChampionshipSession(&sessions[index], eventByID[sessions[index].EventID]))
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].StartTime.Before(items[j].StartTime) })
+	return items, nil
+}
+
 // GetEvent returns the requested event payload for the supplied identifiers.
 func (r *CatalogRepository) GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error) {
 	row, err := r.client.Event.FindUnique(db.Event.ID.Equals(eventID)).Exec(ctx)
@@ -535,6 +570,28 @@ func mapEventSummary(row *db.EventModel, championshipCode string) domain.EventSu
 		StartDate:        timeValue(row.StartTimeUtc),
 		EndDate:          timeValue(row.EndTimeUtc),
 	}
+}
+
+// mapChampionshipSession flattens a session row with its event context. A nil event (orphan
+// session, not expected given the cascade relation) only leaves the event fields empty.
+func mapChampionshipSession(row *db.SessionModel, event *db.EventModel) domain.ChampionshipSession {
+	summary := mapSessionSummary(row, "")
+	item := domain.ChampionshipSession{
+		SessionID: summary.ID,
+		Name:      summary.Name,
+		Type:      summary.Type,
+		Status:    summary.Status,
+		StartTime: summary.StartTime,
+		EndTime:   summary.EndTime,
+		EventID:   row.EventID,
+	}
+	if event != nil {
+		circuit, _ := event.CircuitName()
+		item.EventName = event.Name
+		item.SeasonYear = event.SeasonYear
+		item.Circuit = circuit
+	}
+	return item
 }
 
 // mapSessionSummary maps OpenF1 session summary rows into an internal ingestion dataset.

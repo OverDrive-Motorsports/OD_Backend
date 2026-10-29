@@ -69,6 +69,21 @@ func (c *CatalogController) ListChampionshipEvents(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, items)
 }
 
+// ListChampionshipSessions returns every session of a championship with its event context;
+// 404 when the championship code is unknown, `[]` when it has no session yet.
+func (c *CatalogController) ListChampionshipSessions(w http.ResponseWriter, r *http.Request) {
+	items, err := c.usecase.ListSessionsByChampionship(r.Context(), r.PathValue("code"))
+	if err != nil {
+		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load championship sessions", err))
+		return
+	}
+	if items == nil {
+		apierror.Write(w, r.URL.Path, apierror.NotFound("CHAMPIONSHIP", "championship not found", nil))
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 // GetEvent returns the requested event payload for the supplied identifiers.
 func (c *CatalogController) GetEvent(w http.ResponseWriter, r *http.Request) {
 	event, err := c.usecase.GetEvent(r.Context(), r.PathValue("eventId"))

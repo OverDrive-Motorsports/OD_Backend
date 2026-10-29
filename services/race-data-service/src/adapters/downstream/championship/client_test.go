@@ -262,3 +262,36 @@ func TestNew_TrimsTrailingSlash(t *testing.T) {
 		t.Fatalf("expected trailing slash to be trimmed, got %q", client.baseURL)
 	}
 }
+
+// TestClient_ListChampionshipSessions proves the call hits /championships/{code}/sessions with
+// the code path-escaped, decodes the typed rows, maps 404 to (nil, nil), an empty body array
+// to a non-nil empty slice, and any other error status to an error.
+func TestClient_ListChampionshipSessions(t *testing.T) {
+	var gotPath string
+	client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_, _ = w.Write([]byte(`[{"sessionId":"s1","name":"Race","type":"race","startTime":"2024-03-02T15:00:00Z","eventName":"Bahrain Grand Prix","seasonYear":2024,"circuit":"Bahrain International Circuit"}]`))
+	})
+	got, err := client.ListChampionshipSessions(context.Background(), "f1/../x")
+	if err != nil || len(got) != 1 || got[0].SessionID != "s1" || got[0].SeasonYear != 2024 || got[0].EventName != "Bahrain Grand Prix" || !got[0].StartTime.Equal(time.Date(2024, 3, 2, 15, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected result: %+v err=%v", got, err)
+	}
+	if gotPath != "/championships/f1%2F..%2Fx/sessions" {
+		t.Fatalf("expected the code path-escaped, got %q", gotPath)
+	}
+
+	notFound := testServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
+	if got, err := notFound.ListChampionshipSessions(context.Background(), "nope"); err != nil || got != nil {
+		t.Fatalf("expected (nil, nil) on 404, got %+v err=%v", got, err)
+	}
+
+	empty := testServer(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`[]`)) })
+	if got, err := empty.ListChampionshipSessions(context.Background(), "f1"); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("expected an empty non-nil slice, got %#v err=%v", got, err)
+	}
+
+	failing := testServer(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
+	if _, err := failing.ListChampionshipSessions(context.Background(), "f1"); err == nil {
+		t.Fatal("expected an error on a 500 response")
+	}
+}
