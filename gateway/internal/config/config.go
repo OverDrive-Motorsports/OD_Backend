@@ -25,6 +25,7 @@ import (
 type Config struct {
 	HTTPPort            string
 	AuthToken           string
+	UserJWTSecret       string
 	RateLimitRPS        float64
 	RateLimitBurst      float64
 	Routes              map[string][]*url.URL
@@ -54,6 +55,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	userJWTSecret, err := getRequiredEnv("AUTH_JWT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
 	rps, err := parsePositiveFloat("GATEWAY_RATE_LIMIT_RPS")
 	if err != nil {
 		return Config{}, err
@@ -72,6 +78,7 @@ func Load() (Config, error) {
 	return Config{
 		HTTPPort:            httpPort,
 		AuthToken:           authToken,
+		UserJWTSecret:       userJWTSecret,
 		RateLimitRPS:        rps,
 		RateLimitBurst:      burst,
 		Routes:              buildRoutes(targets),

@@ -18,6 +18,14 @@ import (
 	"strings"
 )
 
+// userTokenRoutePrefixes are the per-user routes: the client authenticates with its own
+// access token (JWT issued by auth-service) instead of the shared gateway token, because the
+// upstream service needs the caller's identity and both cannot travel in one Authorization
+// header. Every other proxied prefix keeps the shared gateway token.
+var userTokenRoutePrefixes = map[string]struct{}{
+	"/presets": {},
+}
+
 func NewHandler(
 	routes map[string][]*url.URL,
 	serviceHealthRoutes map[string][]*url.URL,
@@ -25,12 +33,14 @@ func NewHandler(
 	rateLimitBurst float64,
 	healthUseCase usecases.CheckHealthUseCase,
 	authorizeUseCase usecases.AuthorizeRequestUseCase,
+	userAuthorizeUseCase usecases.AuthorizeRequestUseCase,
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// /health and /health/{service} are intentionally left open (no auth
 	// required) so infra/orchestrator liveness probes keep working. Every
-	// other /v1/* route below requires a valid Authorization header.
+	// other route below requires a valid Authorization header: the shared
+	// gateway token, or a user JWT on userTokenRoutePrefixes.
 	healthHandler := NewHealthHandler(healthUseCase)
 	mux.Handle("/health", http.HandlerFunc(healthHandler.HandleHealth))
 
@@ -57,7 +67,11 @@ func NewHandler(
 			serviceHandler = ValidateRaceParameters(serviceHandler)
 		}
 
-		protected := RequireAuthorization(authorizeUseCase.Execute, serviceHandler)
+		authorize := authorizeUseCase.Execute
+		if _, perUser := userTokenRoutePrefixes[prefix]; perUser {
+			authorize = userAuthorizeUseCase.Execute
+		}
+		protected := RequireAuthorization(authorize, serviceHandler)
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)
 	}

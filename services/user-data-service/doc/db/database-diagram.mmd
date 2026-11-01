@@ -13,24 +13,7 @@ erDiagram
         string userId
         string name
         boolean isDefault
+        json data
         datetime createdAt
         datetime updatedAt
     }
-
-    PRESET_WIDGET {
-        string id PK
-        string presetId FK
-        string type
-        json settings
-        float posX
-        float posY
-        float posZ
-        float rotX
-        float rotY
-        float rotZ
-        float width
-        float height
-        int orderIndex
-    }
-
-    USER_PRESET ||--o{ PRESET_WIDGET : contains

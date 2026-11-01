@@ -4,15 +4,23 @@ This file lists routes exposed by the gateway and their upstream service mapping
 
 ## Auth Behavior
 
-Bearer auth is **mandatory** on every proxied `/v1/*` route (`/health` and
-`/health/{service}` stay open for infra probes):
+Bearer auth is **mandatory** on every proxied route (`/health` and
+`/health/{service}` stay open for infra probes). Which bearer is expected depends on the prefix:
+
+| Prefix | Expected `Authorization` |
+| --- | --- |
+| `/presets` | `Bearer <user access token>`, the JWT returned by `POST /auth/login`, verified with `AUTH_JWT_SECRET`. The gateway token is **refused** here. |
+| every other proxied prefix | `Bearer <GATEWAY_AUTH_TOKEN>` |
 
 - no `Authorization` header: `401 Unauthorized`
-- `Authorization` header provided but invalid/mismatched: `401 Unauthorized`
-- `Authorization: Bearer <GATEWAY_AUTH_TOKEN>` matching the configured token: allowed
+- `Authorization` header provided but invalid/mismatched (or the wrong kind of token for the prefix): `401 Unauthorized`
+
+`/presets` needs the caller's identity, and the gateway token and the user JWT cannot travel
+in the same header, hence the per-prefix rule. The `Authorization` header is forwarded
+unchanged and `user-data-service` re-verifies the JWT itself.
 
 Previously, requests with no `Authorization` header at all were let through
-unauthenticated — this was a known bypass for a public-facing API and has been fixed.
+unauthenticated, this was a known bypass for a public-facing API and has been fixed.
 
 Gateway returns:
 
@@ -26,7 +34,7 @@ Gateway returns:
 
 Client headers accepted by gateway:
 
-- `Authorization` (optional): `Bearer <GATEWAY_AUTH_TOKEN>`
+- `Authorization` (required): `Bearer <GATEWAY_AUTH_TOKEN>`, or `Bearer <user access token>` on `/presets`
 - `Content-Type`: forwarded as received
 - `Accept`: forwarded as received
 
@@ -52,7 +60,7 @@ Forwarded/proxy headers added by gateway:
 | Domain | Gateway Prefix | Service env target | Path rewrite |
 | --- | --- | --- | --- |
 | Auth | `/auth` | `AUTH_SERVICE_URLS` | prefix stripped |
-| User data | `/presets` | `USER_DATA_SERVICE_URLS` | prefix stripped |
+| User data | `/presets` | `USER_DATA_SERVICE_URLS` | prefix stripped (user JWT auth, see above) |
 | User data | `/providers` | `USER_DATA_SERVICE_URLS` | prefix stripped |
 | User data | `/users` | `USER_DATA_SERVICE_URLS` | prefix stripped |
 | Championship v1 facade | `/v1/championship` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped |
@@ -185,7 +193,7 @@ Supported driver datasets on `/drivers/{driverNumber}/{dataset}`:
 All routes below are camelCase, bare-array-or-object JSON
 (no `{ "count", "data" }` envelope). `POST /race/control` is a long-poll: the request
 blocks until a new race control event batch is available (bounded server-side
-timeout), then closes — the client must re-POST to keep receiving events.
+timeout), then closes, the client must re-POST to keep receiving events.
 
 | Gateway | Upstream |
 | --- | --- |
@@ -201,8 +209,8 @@ timeout), then closes — the client must re-POST to keep receiving events.
 #### `GET /sessions/{sessionId}/race/replay` (plain JSON bulk dump)
 
 A plain JSON bulk dump of every stored sample for a session across eight
-datasets — `telemetry`, `position`, `raceControl`, `weather`, `radio`,
-`pitStop`, `stint`, `lap` — returned as one response body. Additive, not a
+datasets, `telemetry`, `position`, `raceControl`, `weather`, `radio`,
+`pitStop`, `stint`, `lap`, returned as one response body. Additive, not a
 replacement for the routes above. It replays already-ingested historical
 data for a finished/stored session; there is no pacing/streaming, it's one
 `GET` returning the whole history at once. Driver-scoped datasets
@@ -210,15 +218,15 @@ data for a finished/stored session; there is no pacing/streaming, it's one
 keyed by driver number (string); `weather`/`raceControl` are always
 track-wide flat arrays (never filtered by `driverNumber`). `stint` entries
 are sorted by an **approximated** timestamp (anchored to the `lapStart`
-lap's recorded start time — `RaceStint` has no timestamp column at all) and
+lap's recorded start time, `RaceStint` has no timestamp column at all) and
 `lap` entries are ordered by lap **completion**
-(`dateStartUtc + lapDurationSec`), not lap start — see
+(`dateStartUtc + lapDurationSec`), not lap start, see
 `services/race-data-service/doc/endpoint.md` for the full per-dataset
 breakdown and payload shapes.
 
 Note: this route used to be a Server-Sent Events stream
 (`/race/replay/stream`, paced by a `speed` query param). It was replaced by
-this plain-JSON bulk dump — no more streaming, pacing, or `speed` param. The
+this plain-JSON bulk dump, no more streaming, pacing, or `speed` param. The
 gateway's SSE flush-passthrough fix on `statusRecorder`
 (`logging_middleware.go`'s explicit `Flush()` forwarding, see below) and its
 regression test (`flush_passthrough_test.go`) were left in place even though no
@@ -229,11 +237,11 @@ streaming endpoint is added again in the future.
 
 Go's `httputil.ReverseProxy` auto-detects `Content-Type: text/event-stream`
 (and any response with unknown `Content-Length`) and flushes immediately
-regardless of `FlushInterval` — no gateway config change is needed for that
+regardless of `FlushInterval`, no gateway config change is needed for that
 part. However, `RequestLogger`'s `statusRecorder` (`logging_middleware.go`)
 wraps the response writer to capture the status code, and embedding the
 `http.ResponseWriter` **interface** only promotes the methods declared on
-that interface (`Header`/`Write`/`WriteHeader`) — it does **not** promote
+that interface (`Header`/`Write`/`WriteHeader`), it does **not** promote
 `Flush()`, which belongs to the separate `http.Flusher` interface, even
 though the concrete writer underneath implements it. Left unfixed, this
 silently breaks SSE through the gateway: frames buffer until the whole
@@ -242,13 +250,12 @@ the upstream service directly works fine. `statusRecorder` has an explicit
 `Flush()` that type-asserts and forwards to the underlying writer. **Any
 future ResponseWriter wrapper added to this package's middleware chain needs
 the same explicit forwarding** (`Flush`, and `Hijack`/`Push`/etc. if ever
-needed) — this is not automatic from Go's embedding rules. Verified with
+needed), this is not automatic from Go's embedding rules. Verified with
 `gateway/internal/adapters/inbound/http/flush_passthrough_test.go`, which proxies a
 paced fake SSE upstream through the full real middleware chain
 (`RequestLogger` → `RateLimit` → auth → `ValidateRaceParameters` →
 `ReverseProxy`) and asserts the client observes the same inter-frame delay
-the upstream introduced, rather than everything arriving at once at the end
-— useful as a template if a streaming route is added again.
+the upstream introduced, rather than everything arriving at once at the end, useful as a template if a streaming route is added again.
 
 ### Live Telemetry (public contract, camelCase, validated)
 
@@ -296,3 +303,15 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
 - Gateway target URLs are read from `gateway/.env` (or process env vars), not from hardcoded defaults.
 - Multiple URLs in one `*_SERVICE_URLS` variable are load-balanced with round-robin.
 - Rate limiting is currently in-memory; counters reset when gateway restarts.
+
+## User presets (`/presets`, user JWT)
+
+| Gateway route | Upstream route (`user-data-service`) |
+| --- | --- |
+| `GET /presets` | `GET /` |
+| `POST /presets` | `POST /` |
+| `GET /presets/{presetId}` | `GET /{presetId}` |
+| `PATCH /presets/{presetId}` | `PATCH /{presetId}` |
+| `DELETE /presets/{presetId}` | `DELETE /{presetId}` |
+
+Payloads and rules: `services/user-data-service/doc/endpoint.md`.

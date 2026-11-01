@@ -10,14 +10,28 @@ This document describes the current backend security posture for the active loca
 - `ingestion-service`
 - PostgreSQL through Docker Compose
 
-All five services plus the gateway now run under Docker Compose. `user-data-service` is
-still scaffolding at the code level (health check only). `auth-service` requires
-`AUTH_JWT_SECRET` to be set in the root `.env`; it refuses to start otherwise, so no
-well-known signing secret can ship by accident.
+All five services plus the gateway now run under Docker Compose. `auth-service`,
+`user-data-service` and the gateway all require `AUTH_JWT_SECRET` in the root `.env` and
+refuse to start without it, so no well-known signing secret can ship by accident.
+
+## User authentication (access tokens)
+
+Access tokens are HS256 JWTs issued by `auth-service` (`sub` = user ID, 15 min expiry). They are
+verified by a single shared implementation, `shared/authjwt` (HS256 pinned, `none` and other
+algorithms rejected, expiry required, non-empty `sub`), used by `auth-service`, the gateway
+and `user-data-service`.
+
+- `/presets` (gateway) requires a valid **user** access token instead of the shared gateway
+  token; the gateway token is refused there.
+- `user-data-service` re-verifies the token and takes the user ID **only** from `sub`; no
+  route accepts a user ID from the client. Every preset query is scoped to that user, and
+  another user's preset answers `404` (not `403`) so IDs cannot be probed.
+- The shared `GATEWAY_AUTH_TOKEN` still protects every other prefix. It identifies the client
+  application, not a user, and must not be relied on for per-user data.
 
 > Note: the sections below predate the gateway and describe the services as if they were
 > reached directly with no auth or rate limiting. The gateway now enforces mandatory
-> bearer-token auth and rate limiting on every proxied route — verify against
+> bearer-token auth and rate limiting on every proxied route, verify against
 > `gateway/internal` before relying on the details further down.
 
 ## HTTP Surface
@@ -26,6 +40,7 @@ The active services expose HTTP endpoints directly on local development ports:
 
 | Service | Port | Public local endpoints | Internal endpoints |
 | --- | ---: | --- | --- |
+| `user-data-service` | `3002` | `/presets` (user JWT required), health | none |
 | `championship-service` | `3003` | catalog and health endpoints | `POST /internal/ingestion/batches` |
 | `race-data-service` | `3004` | read facade and health endpoints | `POST /internal/ingestion/batches` |
 | `ingestion-service` | `3005` | `POST /providers/openf1/ingestions`, health | none |
@@ -76,7 +91,7 @@ Local `.env` files are ignored by git. Templates should contain only non-secret 
 `docker-compose.yml` reads Postgres and gateway credentials (`POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, `GATEWAY_AUTH_TOKEN`, ...) from a root `.env`
 file via variable interpolation, with no hardcoded values or fallback defaults in
-the compose file itself — see `.env.template` for the expected keys. This keeps
+the compose file itself, see `.env.template` for the expected keys. This keeps
 actual values out of version control, even for local development ones.
 
 These are development-grade values only. Production should source database and
@@ -85,8 +100,8 @@ gateway credentials from the deployment secret manager, not from a checked-in
 
 ## Known Gaps
 
-- This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces mandatory Bearer auth (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`) on every proxied `/v1/*` route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/README.md` for current behavior — don't trust the bullet points below at face value.
-- Individual services behind the gateway (`championship-service`, `race-data-service`, etc.) still have no authentication of their own — they rely entirely on the gateway/network topology for access control. Internal ingestion endpoints rely on deployment topology rather than request signing.
+- This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces mandatory Bearer auth (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`) on every proxied `/v1/*` route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/README.md` for current behavior, don't trust the bullet points below at face value.
+- Individual services behind the gateway (`championship-service`, `race-data-service`, etc.) still have no authentication of their own, they rely entirely on the gateway/network topology for access control. Internal ingestion endpoints rely on deployment topology rather than request signing.
 - No rate limiting is implemented inside the individual Go services themselves (only at the gateway edge).
 - CORS is not configured anywhere in the repo. This is consistent with native mobile/AR clients talking to the gateway, but should be revisited if a browser-based client is ever introduced.
 

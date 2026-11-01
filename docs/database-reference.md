@@ -42,10 +42,10 @@ Each service must also keep an isolated physical database connection in deployme
 | Item | Value |
 | --- | --- |
 | Main purpose | Store user-scoped provider connections and saved layouts |
-| Core entities | `ProviderConnection`, `UserPreset`, `PresetWidget` |
-| Strong relationship | `UserPreset 1 -> N PresetWidget` |
+| Core entities | `ProviderConnection`, `UserPreset` |
+| Strong relationship | none (a preset holds its layout as a JSON document) |
 | Main business identifiers | `userId`, `providerId`, `UserPreset.id` |
-| Main technical pattern | User configuration schema with JSON settings and layout coordinates |
+| Main technical pattern | User configuration schema with client-owned JSON documents |
 
 ### `championship-service` database
 
