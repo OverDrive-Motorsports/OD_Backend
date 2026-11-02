@@ -16,10 +16,6 @@ generator db {
   provider = "go run github.com/steebchen/prisma-client-go"
 }
 
-enum WidgetType {
-  video
-}
-
 //-------------------------
 // External Provider Links
 //-------------------------
@@ -39,38 +35,17 @@ model ProviderConnection {
 //-------------------------
 // User Layout Presets
 //-------------------------
+// A preset is one saved AR/VR layout. `data` is the layout document produced by the client
+// (widgets, positions, sizes, settings...) stored as-is: the backend only checks it is a
+// bounded JSON object and never interprets its content.
 model UserPreset {
   id        String   @id @default(uuid())
   userId    String
   name      String   @db.VarChar(50)
-  isDefault Boolean
+  isDefault Boolean  @default(false)
+  data      Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  widgets PresetWidget[]
-
   @@index([userId])
-}
-
-//-------------------------
-// Preset Widgets
-//-------------------------
-model PresetWidget {
-  id        String   @id @default(uuid())
-  presetId  String
-  type      WidgetType
-  settings  Json
-  posX      Float
-  posY      Float
-  posZ      Float
-  rotX      Float
-  rotY      Float
-  rotZ      Float
-  width     Float
-  height    Float
-  orderIndex Int     @default(0)
-
-  preset UserPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
-
-  @@index([presetId])
 }

@@ -13,6 +13,7 @@ import (
 	"context"
 	"overdrive/services/auth-service/src/core/domain"
 	"overdrive/services/auth-service/src/core/ports"
+	"overdrive/shared/authjwt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -153,23 +154,16 @@ func (u *AuthQueryUseCase) generateJWT(userID string, email string) (string, err
 // VerifyToken parses and validates a bearer JWT issued by generateJWT, returning the
 // authenticated user ID (the "sub" claim). Used by the HTTP layer to enforce that a caller
 // can only act on their own userID-scoped resources (see requireOwnUser middleware).
+// Verification is delegated to shared/authjwt, the single implementation also used by the
+// gateway and user-data-service; every failure (expiry included) maps to ErrInvalidToken.
 func (u *AuthQueryUseCase) VerifyToken(tokenString string) (string, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
-		return []byte(u.jwtSecret), nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	verifier, err := authjwt.NewVerifier(u.jwtSecret)
 	if err != nil {
 		return "", domain.ErrInvalidToken
 	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
+	userID, err := verifier.Verify(tokenString)
+	if err != nil {
 		return "", domain.ErrInvalidToken
 	}
-
-	userID, ok := claims["sub"].(string)
-	if !ok || userID == "" {
-		return "", domain.ErrInvalidToken
-	}
-
 	return userID, nil
 }

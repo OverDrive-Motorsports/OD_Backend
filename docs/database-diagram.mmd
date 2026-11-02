@@ -19,12 +19,9 @@ configJson"]
         UDS_PRESET["UserPreset
 id
 userId
-name"]
-        UDS_WIDGET["PresetWidget
-presetId
-type
-settings"]
-        UDS_PRESET --> UDS_WIDGET
+name
+isDefault
+data (JSON layout)"]
     end
 
     subgraph CHAMPIONSHIP_DB["championship-service database"]
