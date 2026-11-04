@@ -72,6 +72,40 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
+	var body registerBody
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		return
+	}
+
+	session, err := c.usecase.OAuthLogin(r.Context()) //TODO: Fields to be updated here
+	if err != nil {
+		apierror.Write(w, r.URL.Path, classifyRegisterErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (c *AuthController) OAuthRegister(w http.ResponseWriter, r *http.Request) {
+	var body registerBody
+
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		return
+	}
+
+	session, err := c.usecase.OAuthRegister(r.Context()) //TODO: Fields to be updated here
+	if err != nil {
+		apierror.Write(w, r.URL.Path, classifyRegisterErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
 type refreshBody struct {
 	SessionID    string `json:"sessionId"`
 	RefreshToken string `json:"refreshToken"`

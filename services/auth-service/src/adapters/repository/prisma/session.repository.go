@@ -225,9 +225,13 @@ func mapAuthSessionMin(row *db.AuthSessionModel) domain.AuthSession {
 // mapUser maps db user rows into an internal user dataset.
 func mapUser(row *db.UserModel) domain.User {
 	var passwordHash string
+	var usesOAuth = false
 
 	if v, ok := row.PasswordHash(); ok {
 		passwordHash = v
+	} else {
+		//TODO: add check for user if using oauth
+		usesOAuth = true
 	}
 	//TODO: REMOVE AFTER TESTING
 	println("DEBUG: passwordHash='", passwordHash, "'")
@@ -237,6 +241,7 @@ func mapUser(row *db.UserModel) domain.User {
 		Email:        row.Email,
 		DisplayName:  row.DisplayName,
 		PasswordHash: passwordHash,
+		UsesOAuth:    usesOAuth,
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}

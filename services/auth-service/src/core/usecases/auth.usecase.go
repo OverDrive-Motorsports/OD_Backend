@@ -125,6 +125,14 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 	}, nil
 }
 
+func (u *AuthQueryUseCase) OAuthLogin(ctx context.Context) (*domain.LoginResponse, error) {
+	return nil, nil
+}
+
+func (u *AuthQueryUseCase) OAuthRegister(ctx context.Context) (*domain.LoginResponse, error) {
+	return nil, nil
+}
+
 func hashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
