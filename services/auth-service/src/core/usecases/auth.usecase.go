@@ -126,10 +126,12 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 }
 
 func (u *AuthQueryUseCase) OAuthLogin(ctx context.Context) (*domain.LoginResponse, error) {
+	//TODO: Function to be implemented
 	return nil, nil
 }
 
 func (u *AuthQueryUseCase) OAuthRegister(ctx context.Context) (*domain.LoginResponse, error) {
+	//TODO: Function to be implemented
 	return nil, nil
 }
 

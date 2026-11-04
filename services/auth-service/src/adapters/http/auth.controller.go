@@ -12,6 +12,7 @@ package httpadapter
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"overdrive/services/auth-service/src/core/domain"
 	"overdrive/services/auth-service/src/core/ports"
@@ -72,14 +73,22 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+type oauthLoginBody struct {
+	Test string `json:"test"`
+}
+
 func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
-	var body registerBody
+	var body oauthLoginBody
+	providerID := r.PathValue("providerId")
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
 		return
 	}
+
+	fmt.Println("oauthLoginBody: ", body.Test)
+	fmt.Println("providerID: ", providerID)
 
 	session, err := c.usecase.OAuthLogin(r.Context()) //TODO: Fields to be updated here
 	if err != nil {
@@ -89,8 +98,12 @@ func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
+type oauthRegisterBody struct {
+	Test string `json:"test"`
+}
+
 func (c *AuthController) OAuthRegister(w http.ResponseWriter, r *http.Request) {
-	var body registerBody
+	var body oauthRegisterBody
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
