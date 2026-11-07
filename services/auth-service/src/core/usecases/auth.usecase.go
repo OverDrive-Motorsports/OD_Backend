@@ -20,13 +20,29 @@ import (
 )
 
 type AuthQueryUseCase struct {
-	repository ports.SessionRepository
-	jwtSecret  string
+	repository     ports.SessionRepository
+	jwtSecret      string
+	oauthProviders map[string]ports.OAuthProvider
+	// oauthProviderOrder keeps ListOAuthProviders deterministic.
+	oauthProviderOrder []string
 }
 
-// NewAuthQueryUseCase builds and returns a catalog query use case with its required dependencies.
-func NewAuthQueryUseCase(repository ports.SessionRepository, jwtSecret string) *AuthQueryUseCase {
-	return &AuthQueryUseCase{repository: repository, jwtSecret: jwtSecret}
+// NewAuthQueryUseCase builds and returns an auth use case with its required dependencies.
+// oauthProviders are the enabled OAuth providers, addressed by their ID() in routes.
+func NewAuthQueryUseCase(repository ports.SessionRepository, jwtSecret string, oauthProviders ...ports.OAuthProvider) *AuthQueryUseCase {
+	u := &AuthQueryUseCase{
+		repository:     repository,
+		jwtSecret:      jwtSecret,
+		oauthProviders: make(map[string]ports.OAuthProvider, len(oauthProviders)),
+	}
+	for _, provider := range oauthProviders {
+		if _, exists := u.oauthProviders[provider.ID()]; exists {
+			panic("duplicate oauth provider id: " + provider.ID())
+		}
+		u.oauthProviders[provider.ID()] = provider
+		u.oauthProviderOrder = append(u.oauthProviderOrder, provider.ID())
+	}
+	return u
 }
 
 func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {
@@ -42,21 +58,7 @@ func (u *AuthQueryUseCase) Login(ctx context.Context, email string, password str
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, domain.ErrInvalidCredentials
 	}
-	token, err := u.generateJWT(user.ID, user.Email)
-	if err != nil {
-		return nil, err
-	}
-	session, err := u.repository.AddUserSession(ctx, user.ID)
-
-	if err != nil {
-		return nil, err
-	}
-	return &domain.LoginResponse{
-		Token:        token,
-		SessionID:    session.ID,
-		RefreshToken: session.RefreshToken,
-		ExpiresAt:    session.ExpiresAt,
-	}, nil
+	return u.startSession(ctx, user)
 }
 
 func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password string, username string) (*domain.LoginResponse, error) {
@@ -74,21 +76,7 @@ func (u *AuthQueryUseCase) Register(ctx context.Context, email string, password 
 	if err != nil {
 		return nil, err
 	}
-	token, err := u.generateJWT(user.ID, user.Email)
-	if err != nil {
-		return nil, err
-	}
-	session, err := u.repository.AddUserSession(ctx, user.ID)
-
-	if err != nil {
-		return nil, err
-	}
-	return &domain.LoginResponse{
-		Token:        token,
-		SessionID:    session.ID,
-		RefreshToken: session.RefreshToken,
-		ExpiresAt:    session.ExpiresAt,
-	}, nil
+	return u.startSession(ctx, user)
 }
 
 func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
@@ -125,14 +113,22 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 	}, nil
 }
 
-func (u *AuthQueryUseCase) OAuthLogin(ctx context.Context) (*domain.LoginResponse, error) {
-	//TODO: Function to be implemented
-	return nil, nil
-}
-
-func (u *AuthQueryUseCase) OAuthRegister(ctx context.Context) (*domain.LoginResponse, error) {
-	//TODO: Function to be implemented
-	return nil, nil
+// startSession issues an access token and persists a new refresh session for user.
+func (u *AuthQueryUseCase) startSession(ctx context.Context, user *domain.User) (*domain.LoginResponse, error) {
+	token, err := u.generateJWT(user.ID, user.Email)
+	if err != nil {
+		return nil, err
+	}
+	session, err := u.repository.AddUserSession(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.LoginResponse{
+		Token:        token,
+		SessionID:    session.ID,
+		RefreshToken: session.RefreshToken,
+		ExpiresAt:    session.ExpiresAt,
+	}, nil
 }
 
 func hashPassword(password string) (string, error) {

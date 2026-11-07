@@ -12,7 +12,6 @@ package httpadapter
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"overdrive/services/auth-service/src/core/domain"
 	"overdrive/services/auth-service/src/core/ports"
@@ -73,47 +72,65 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, session)
 }
 
-type oauthLoginBody struct {
-	Test string `json:"test"`
+// ListOAuthProviders returns the OAuth providers enabled on this instance.
+func (c *AuthController) ListOAuthProviders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, c.usecase.ListOAuthProviders())
 }
 
-func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
-	var body oauthLoginBody
-	providerID := r.PathValue("providerId")
-
-	err := json.NewDecoder(r.Body).Decode(&body)
+// OAuthAuthorize starts an OAuth flow and returns the consent URL, state and PKCE verifier.
+func (c *AuthController) OAuthAuthorize(w http.ResponseWriter, r *http.Request) {
+	authorization, err := c.usecase.OAuthAuthorize(r.PathValue("providerId"))
 	if err != nil {
+		apierror.Write(w, r.URL.Path, classifyOAuthErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, authorization)
+}
+
+type oauthCallbackBody struct {
+	Code         string `json:"code"`
+	State        string `json:"state"`
+	CodeVerifier string `json:"codeVerifier"`
+}
+
+func (b oauthCallbackBody) toDomain() domain.OAuthCallback {
+	return domain.OAuthCallback{Code: b.Code, State: b.State, CodeVerifier: b.CodeVerifier}
+}
+
+// OAuthLogin signs in with the authorization code returned by the provider redirect.
+func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
+	var body oauthCallbackBody
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
 		return
 	}
 
-	fmt.Println("oauthLoginBody: ", body.Test)
-	fmt.Println("providerID: ", providerID)
-
-	session, err := c.usecase.OAuthLogin(r.Context()) //TODO: Fields to be updated here
+	session, err := c.usecase.OAuthLogin(r.Context(), r.PathValue("providerId"), body.toDomain())
 	if err != nil {
-		apierror.Write(w, r.URL.Path, classifyRegisterErr(err))
+		apierror.Write(w, r.URL.Path, classifyOAuthErr(err))
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
 }
 
 type oauthRegisterBody struct {
-	Test string `json:"test"`
+	oauthCallbackBody
+	Username string `json:"username"`
 }
 
+// OAuthRegister creates an account from the provider identity and signs it in.
 func (c *AuthController) OAuthRegister(w http.ResponseWriter, r *http.Request) {
 	var body oauthRegisterBody
 
-	err := json.NewDecoder(r.Body).Decode(&body)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
 		return
 	}
 
-	session, err := c.usecase.OAuthRegister(r.Context()) //TODO: Fields to be updated here
+	session, err := c.usecase.OAuthRegister(r.Context(), r.PathValue("providerId"), body.toDomain(), body.Username)
 	if err != nil {
-		apierror.Write(w, r.URL.Path, classifyRegisterErr(err))
+		apierror.Write(w, r.URL.Path, classifyOAuthErr(err))
 		return
 	}
 	writeJSON(w, http.StatusOK, session)
@@ -167,4 +184,25 @@ func classifyRefreshErr(err error) *apierror.Error {
 		return apierror.Unauthorized("invalid token", nil)
 	}
 	return apierror.Internal("failed to process refresh", err)
+}
+
+// classifyOAuthErr maps an AuthQueryUseCase OAuth error into the matching apierror.
+func classifyOAuthErr(err error) *apierror.Error {
+	switch {
+	case errors.Is(err, domain.ErrUnknownOAuthProvider):
+		return apierror.NotFound("OAUTH_PROVIDER", "unknown oauth provider", nil)
+	case errors.Is(err, domain.ErrInvalidOAuthState):
+		return apierror.Unauthorized("invalid or expired oauth state", nil)
+	case errors.Is(err, domain.ErrOAuthExchangeFailed):
+		return apierror.Unauthorized("oauth authentication failed", err)
+	case errors.Is(err, domain.ErrOAuthEmailNotVerified):
+		return apierror.Forbidden("oauth provider email is not verified", nil)
+	case errors.Is(err, domain.ErrOAuthAccountNotLinked):
+		return apierror.NotFound("OAUTH_ACCOUNT", "no account linked to this oauth identity", nil)
+	case errors.Is(err, domain.ErrOAuthAccountAlreadyLinked):
+		return apierror.AlreadyExists("OAUTH_ACCOUNT", "oauth identity already linked to an account", nil)
+	case errors.Is(err, domain.ErrEmailAlreadyRegistered):
+		return apierror.AlreadyExists("EMAIL", "email already registered", nil)
+	}
+	return apierror.Internal("failed to process oauth authentication", err)
 }

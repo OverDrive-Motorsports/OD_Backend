@@ -18,8 +18,10 @@ type AuthQueryUseCase interface {
 	Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error)
 	Register(ctx context.Context, email string, password string, userName string) (*domain.LoginResponse, error)
 
-	OAuthLogin(ctx context.Context) (*domain.LoginResponse, error)    //TODO: Add func params and update return LoginResponse fields
-	OAuthRegister(ctx context.Context) (*domain.LoginResponse, error) //TODO: Add func params and update return LoginResponse fields
+	ListOAuthProviders() []domain.OAuthProviderInfo
+	OAuthAuthorize(providerID string) (*domain.OAuthAuthorization, error)
+	OAuthLogin(ctx context.Context, providerID string, callback domain.OAuthCallback) (*domain.LoginResponse, error)
+	OAuthRegister(ctx context.Context, providerID string, callback domain.OAuthCallback, username string) (*domain.LoginResponse, error)
 
 	Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error)
 	VerifyToken(tokenString string) (string, error)
