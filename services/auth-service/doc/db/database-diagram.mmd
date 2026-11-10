@@ -16,4 +16,20 @@ erDiagram
         datetime createdAt
     }
 
+    OAUTH_ACCOUNT {
+        string id PK
+        string userID FK
+        ProviderType provider
+        string providerSubject
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    PROVIDER_TYPE {
+        enum GOOGLE "Google"
+        enum F1TV "F1TV"
+    }
+
     USER ||--o{ AUTH_SESSION : owns
+    USER ||--o{ OAUTH_ACCOUNT : owns
+    OAUTH_ACCOUNT }o--|| PROVIDER_TYPE : provider

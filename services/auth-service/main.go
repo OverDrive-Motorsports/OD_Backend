@@ -16,6 +16,7 @@ import (
 	"os"
 	db "overdrive/services/auth-service/resources/db"
 	httpadapter "overdrive/services/auth-service/src/adapters/http"
+	oauthadapter "overdrive/services/auth-service/src/adapters/oauth"
 	prismaadapter "overdrive/services/auth-service/src/adapters/repository/prisma"
 	"overdrive/services/auth-service/src/core/usecases"
 	"overdrive/shared/bootstrap"
@@ -53,7 +54,8 @@ func main() {
 	sessionRepository := prismaadapter.NewSessionRepository(client)
 	sessionUseCase := usecases.NewSessionQueryUseCase(sessionRepository)
 	sessionController := httpadapter.NewSessionController(sessionUseCase)
-	authUseCase := usecases.NewAuthQueryUseCase(sessionRepository, jwtSecret)
+	oauthProviders := oauthadapter.LoadProviders(os.Getenv)
+	authUseCase := usecases.NewAuthQueryUseCase(sessionRepository, jwtSecret, oauthProviders...)
 	authController := httpadapter.NewAuthController(authUseCase)
 
 	server := &http.Server{
@@ -62,7 +64,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("%s listening on :%s", cfg.ServiceName, cfg.HTTPPort)
+	log.Printf("%s listening on: %s", cfg.ServiceName, cfg.HTTPPort)
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
