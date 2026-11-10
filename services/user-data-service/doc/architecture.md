@@ -2,9 +2,7 @@
 
 ## Service purpose
 
-`user-data-service` is intended to manage user profiles, preferences, and saved user data.
-
-The current implementation only exposes a health endpoint, but the structure is already ready for future user-related features.
+`user-data-service` stores the personalised user experience: today, the AR/VR layout presets of each user (`/presets`). `ProviderConnection` exists in the schema but has no endpoint yet.
 
 ## Current architecture
 
@@ -15,11 +13,46 @@ This service follows a simple layered architecture with clear responsibilities:
 - `src/core/usecases`: contains application logic. A use case receives data from the controller and returns a domain result.
 - `src/core/ports`: contains interfaces used to decouple the controller layer from the application logic.
 - `src/core/domain`: contains business entities and response models used by the service.
+- `src/adapters/repository/prisma`: Prisma-backed storage (`PresetRepository`).
 - `shared/bootstrap`: shared module used to load environment variables and common runtime configuration.
+- `shared/authjwt`: shared verifier of the access tokens issued by `auth-service` (also used by `auth-service` and the gateway).
+
+## Authentication
+
+Presets are private per-user data. `src/adapters/http/middleware.go` (`requireUser`) verifies
+the `Authorization: Bearer <access token>` header with `shared/authjwt` (HS256 only, expiry
+required, secret `AUTH_JWT_SECRET`) and puts the token's `sub` in the request context. It is
+the **only** source of the user ID; every repository query is scoped by it, so another user's
+preset behaves like a missing one (`404`). The service refuses to start without
+`AUTH_JWT_SECRET`. The gateway checks the same token on `/presets` before proxying (defence in
+depth), but the service never trusts the gateway alone since its port is also reachable
+directly in local Docker.
+
+## Presets
+
+A preset is `{ name, isDefault, data }`, where `data` is the client's layout document stored
+as-is (a JSON object, at most 256 KiB).
+
+Two rules depend on the user's *other* presets: at most 20 presets, and exactly one default.
+Checking them and then writing is a race (two concurrent requests both pass the check), so
+every write that depends on them runs in one transaction that starts with a per-user advisory
+lock (`pg_advisory_xact_lock`): concurrent requests of one user are serialised, other users
+are not affected.
+
+- **Create**: lock → `INSERT ... SELECT ... WHERE (count of the user's presets) < 20`, the new
+  preset being the default when requested or when it is the user's first → clear the user's
+  other defaults if the new one is the default. No inserted row = limit reached (`409`). These
+  statements are raw SQL (`preset.repository.go`) because Prisma's Go client cannot express a
+  conditional insert; the ID is generated in Go since `@default(uuid())` is applied by the
+  Prisma engine, not by Postgres.
+- **Set default** (`PATCH isDefault: true`): lock → clear the user's other defaults → update.
+- A transaction alone is not enough: under Postgres' `READ COMMITTED`, each request would only
+  see the rows committed when its statement starts. Prisma cannot express the alternative for
+  the default rule, a partial unique index (`UNIQUE ("userId") WHERE "isDefault"`).
 
 ## Request flow
 
-For the current endpoint, the request flow is:
+For `GET /health`, the request flow is:
 
 1. `main.go` loads the config and wires the dependencies.
 2. `src/adapters/http/health.routes.go` registers `GET /health`.

@@ -8,6 +8,7 @@ use (
 	./services/race-data-service
 	./services/user-data-service
 	./shared/apierror
+	./shared/authjwt
 	./shared/bootstrap
 	./shared/contracts
 )

@@ -7,103 +7,129 @@ handful of real `curl` calls as worked examples. For "how do I run this," see
 ## The pieces
 
 ```
-                          ┌─────────────┐
-   client (mobile/AR) ──▶ │   gateway   │  :3000
-                          └──────┬──────┘
-                                 │ reverse proxy, per path prefix
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                   ▼
-   championship-service   race-data-service   ingestion-service
-        :3003                  :3004               :3005
-              │                  │                   │
-              ▼                  ▼                   ▼
-   overdrive_championship  overdrive_race_data   (no DB of its own,
-        (Postgres)             (Postgres)         calls the two above)
+                                   ┌─────────────┐
+            client (mobile/AR) ──▶ │   gateway   │  :3000
+                                   └──────┬──────┘
+                                          │ reverse proxy, per path prefix
+       ┌──────────────┬──────────────┬────┴─────────┬──────────────────┐
+       ▼              ▼              ▼              ▼                  ▼
+  auth-service  user-data-service  championship-  race-data-      ingestion-service
+     :3001           :3002         service :3003  service :3004        :3005
+       │              │              │              │                  │
+       ▼              ▼              ▼              ▼                  ▼
+ overdrive_auth  overdrive_user_  overdrive_     overdrive_       (no DB: fetches
+   (Postgres)    data (Postgres)  championship   race_data         OpenF1 and pushes
+                                  (Postgres)     (Postgres)        into the two above)
 ```
 
-- **`gateway`** is the only thing a client ever talks to. It does auth, rate
+| Gateway prefix | Service | Auth expected by the gateway |
+| --- | --- | --- |
+| `/auth` | `auth-service` (login, register, refresh, sessions) | gateway token |
+| `/presets` | `user-data-service` (the user's AR/VR layouts) | **user access token** (JWT) |
+| `/v1/championship` | `championship-service` (catalog, standings) | gateway token |
+| `/v1/race-data` | `race-data-service` (race, telemetry, replay) | gateway token |
+| `/v1/ingestion` | `ingestion-service` (OpenF1 import) | gateway token |
+
+- **`gateway`** is the only thing a client should talk to. It does auth, rate
   limiting, request logging, path/parameter validation, and reverse-proxies to the
-  right upstream service. It has no database and no business logic of its own.
-- **`championship-service`** and **`race-data-service`** each own a private
-  Postgres database (via Prisma) and expose their own plain HTTP API — they don't
-  know they're behind a gateway.
+  right upstream service, **stripping its prefix** (`/v1/championship/championships`
+  reaches championship-service as `/championships`). It has no database and no
+  business logic of its own.
+- **`auth-service`** owns users and their sessions, and issues the access tokens
+  (HS256 JWT, `sub` = user ID, 15 min) and refresh tokens.
+- **`user-data-service`** stores per-user data (today: layout presets). It is the only
+  service that re-verifies the user's JWT itself and scopes every query to that user.
+- **`championship-service`** and **`race-data-service`** each own a private Postgres
+  database (via Prisma) and expose a plain HTTP API.
 - **`ingestion-service`** has no database. It fetches data from the OpenF1 public
   API, reshapes it, and pushes ("dispatches") it into `championship-service` and
   `race-data-service` over internal HTTP endpoints.
 - Each service follows the same hexagonal layout: `core/domain` (entities),
   `core/ports` (interfaces), `core/usecases` (business logic), `adapters/http`
-  (HTTP in), `adapters/repository/prisma` (DB out).
+  (HTTP in), `adapters/repository/prisma` (DB out), `adapters/downstream` (calls to
+  other services).
+- Shared modules: `shared/apierror` (the error envelope every component writes),
+  `shared/authjwt` (the single verifier of user access tokens, used by
+  auth-service, the gateway and user-data-service), `shared/contracts` (ingestion
+  batch format and deterministic IDs), `shared/bootstrap` (config loading).
+
+The examples below assume:
+
+```bash
+export GW=http://localhost:3000
+export TOKEN=$(grep GATEWAY_AUTH_TOKEN .env | cut -d= -f2)
+```
 
 ## Example 1 — a simple read: `GET /v1/championship/championships`
 
 ```bash
-curl -H "Authorization: Bearer admin" http://localhost:3000/v1/championship/championships
+curl -H "Authorization: Bearer $TOKEN" $GW/v1/championship/championships
 ```
 
 1. **Gateway receives the request** on `:3000`. `RateLimit` middleware checks the
-   client IP hasn't exceeded its token bucket. `RequestLogger` wraps the rest of the
+   client hasn't exceeded its token bucket. `RequestLogger` wraps the rest of the
    chain to log method/path/status/duration at the end.
 2. **`RequireAuthorization`** checks the `Authorization` header against
-   `GATEWAY_AUTH_TOKEN`. Missing or wrong → `401 {"error":"unauthorized"}`,
-   request stops here. This applies to every `/v1/*` route, no exceptions.
+   `GATEWAY_AUTH_TOKEN`. Missing or wrong → `401` with the shared error envelope
+   (`{"error":{"code":"UNAUTHORIZED","status":401,"message":"unauthorized"}}`),
+   and the request stops here.
 3. The path matches the `/v1/championship` prefix, registered in
    `gateway/internal/config/routes_championship.go` and pointing at
-   `CHAMPIONSHIP_SERVICE_URLS`. Because this prefix has no path-shaped parameters
-   here, `ValidateChampionshipDataset` (edge validation for dataset/driverNumber
-   params) passes through with nothing to check.
+   `CHAMPIONSHIP_SERVICE_URLS`. `ValidateChampionshipDataset` (edge validation for
+   dataset names and `driverNumber`) has nothing to check on this path.
 4. **`ReverseProxy`** (`gateway/internal/adapters/inbound/http/reverse_proxy.go`)
-   strips the `/v1/championship` prefix and forwards the rest (`/championships`) to
-   the upstream, e.g. `http://championship-service:3003/championships`.
+   strips the `/v1/championship` prefix and forwards `/championships` to the
+   upstream, e.g. `http://championship-service:3003/championships`.
 5. **`championship-service`** receives `GET /championships` on its own HTTP mux
    (`catalog.routes.go` → `catalog.controller.go`), calls
    `CatalogQueryUseCase.ListChampionships`, which calls the Prisma repository,
    which runs `Championship.FindMany()` against `overdrive_championship`.
 6. The controller maps the result to `domain.ChampionshipSummary` (camelCase JSON
-   tags) and writes a **bare JSON array** — no `{"count":, "data":[...]}` wrapper.
-   That response bubbles back through the reverse proxy, unmodified, to the client.
+   tags) and writes a **bare JSON array**. That response goes back through the
+   reverse proxy, unmodified, to the client.
 
 ## Example 2 — parameter validation: `GET /v1/race-data/sessions/{id}/race/laps`
 
 ```bash
-curl -H "Authorization: Bearer admin" \
-  "http://localhost:3000/v1/race-data/sessions/openf1:session:9998/race/laps?driverNumber=63"
+curl -H "Authorization: Bearer $TOKEN" \
+  "$GW/v1/race-data/sessions/openf1:session:9998/race/laps?driverNumber=63"
 ```
 
 Same auth/rate-limit/logging steps as above, but this prefix (`/v1/race-data`) is
-wrapped with **`ValidateRaceParameters`**
-(`gateway/internal/adapters/inbound/http/race_parameter_middleware.go`), which the
-`/v1/championship` prefix doesn't get. It inspects the path shape and:
+also wrapped with **`ValidateRaceParameters`**
+(`gateway/internal/adapters/inbound/http/race_parameter_middleware.go`). It inspects
+the path shape and:
 
 - checks `race` is followed by an allow-listed action (`position`, `laps`,
-  `stints`, `pitstops`, `control`, `weather`, `radio`) — an unknown action gets
-  `400 {"error":"invalid parameter"}` before ever reaching `race-data-service`;
-- checks `driverNumber` (path or query) is a positive integer if present.
+  `stints`, `pitstops`, `control`, `weather`, `radio`, `replay`) — anything else
+  gets `400 VALIDATION_ERROR` before ever reaching `race-data-service`;
+- checks `driverNumber` and `lapNumber` (path or query) are positive integers.
 
-Only after that does the reverse proxy forward `GET
+Only then does the reverse proxy forward `GET
 /sessions/openf1:session:9998/race/laps?driverNumber=63` to `race-data-service`.
-There, `race_live.controller.go` calls a usecase that:
+There, `race_live.controller.go`:
 
-1. queries `RaceLap` rows from `overdrive_race_data` filtered by session/driver,
-2. computes `bestLap`/`averageLap` on the fly from those rows (these are never
-   stored, only derived at read time),
-3. returns them as a single JSON object with a nested `laps` array.
+1. checks the session exists by asking `championship-service` (the owner of the
+   session catalog) — unknown session → `404 SESSION_NOT_FOUND`, championship-service
+   unreachable → `502 UPSTREAM_UNAVAILABLE`;
+2. calls the usecase, which queries `RaceLap` rows from `overdrive_race_data` and
+   computes `bestLap` / `averageLap` on the fly (they are never stored);
+3. answers a single object for one driver, or an array with one object per driver
+   when `driverNumber` is omitted. A driver with no lap data → `404 LAP_NOT_FOUND`.
 
-If `openf1:session:9998` doesn't exist at all, the repository's Prisma lookup
-returns Prisma's `ErrNotFound` sentinel, which the repository translates into a
-clean `(nil, nil)` — the controller then answers `404`, not a raw `500`. (This
-translation has to happen explicitly: `steebchen/prisma-client-go`'s
-`FindUnique`/`FindFirst` return `(nil, ErrNotFound)` on a miss, not `(nil, nil)`.)
+`steebchen/prisma-client-go`'s `FindUnique`/`FindFirst` return `(nil, ErrNotFound)`
+on a miss, not `(nil, nil)`: every repository translates that sentinel explicitly
+(`isNotFoundErr`) so a missing row becomes a `404`, not a `500`.
 
 ## Example 3 — the long-poll: `POST /v1/race-data/sessions/{id}/race/control`
 
 ```bash
-curl -X POST -H "Authorization: Bearer admin" \
-  "http://localhost:3000/v1/race-data/sessions/openf1:session:9998/race/control"
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  "$GW/v1/race-data/sessions/openf1:session:9998/race/control"
 ```
 
-This is the one route where the gateway doesn't just proxy-and-forget: the
-underlying `net/http/httputil.ReverseProxy` keeps the connection open for as long
-as `race-data-service` takes to answer. On the service side:
+The gateway keeps the connection open for as long as `race-data-service` takes to
+answer. On the service side:
 
 1. The handler asks an in-memory, single-process pub/sub
    (`race_control_broadcaster.go`) to wait for the next race-control event on this
@@ -115,107 +141,122 @@ as `race-data-service` takes to answer. On the service side:
    array `[]` — the client is expected to immediately re-`POST` to keep waiting.
    This is *not* an error; it's the documented long-poll contract.
 
-This mechanism is single-instance by construction (it's an in-process Go channel,
-not backed by Redis or any external broker) — if `race-data-service` is ever run
-as more than one replica, a client's long-poll could land on a replica that never
-sees the event, and this would need to move to a shared pub/sub.
+This mechanism is single-instance by construction (an in-process Go channel, not a
+shared broker): with more than one `race-data-service` replica, a client's
+long-poll could land on a replica that never sees the event.
 
 ## Example 4 — ingestion: `POST /v1/ingestion/providers/openf1/ingestions`
 
 ```bash
-curl -X POST -H "Authorization: Bearer admin" -H 'Content-Type: application/json' \
+curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"meeting_key":1255,"session_key":9998,"resources":["race_control"],"dispatch":true}' \
-  http://localhost:3000/v1/ingestion/providers/openf1/ingestions
+  $GW/v1/ingestion/providers/openf1/ingestions
 ```
 
 1. Gateway: same auth/rate-limit as always; `/v1/ingestion` has no extra parameter
-   validation middleware (unlike championship/race-data), so the body is forwarded
-   as-is to `ingestion-service`.
+   validation, so the body is forwarded as-is to `ingestion-service`.
 2. `ingestion-service`'s usecase (`ingest_openf1.usecase.go`) calls the OpenF1
-   provider adapter to fetch the raw `race_control` rows for that
-   meeting/session, maps them from OpenF1's snake_case shape into an internal
-   `contracts.Dataset`, and groups datasets by their target service
-   (`shared/contracts/ingestion`).
-3. It **dispatches** the batch over plain internal HTTP to `race-data-service`'s
-   `POST /internal/ingestion/batches` (this endpoint has no auth of its own — it
-   relies entirely on network topology/the gateway not exposing it, see
-   `docs/security.md`).
-4. `race-data-service`'s `AcceptIngestionBatchUseCase` writes the rows into
-   `RaceControlEvent` via the repository (deleting any existing rows for that
-   session first, then inserting fresh ones), and — specifically for
-   `race_control` batches — also **publishes** the new events to the in-memory
-   broadcaster from Example 3, so any client currently long-polling `POST
-   /race/control` for that session wakes up immediately instead of waiting out
-   the full 30s timeout.
+   provider adapter to fetch the raw rows of each requested resource (all of them
+   when `resources` is omitted), maps them from OpenF1's shape into internal
+   `contracts.Dataset`s, and groups the datasets by target service: catalog,
+   results and standings go to `championship-service`; laps, telemetry, positions,
+   race control, weather, radio, etc. go to `race-data-service`.
+3. It **dispatches** each batch over internal HTTP to the target's
+   `POST /internal/ingestion/batches`. This endpoint has no authentication of its
+   own: it relies on not being reachable from outside (see `docs/security.md`).
+4. `race-data-service`'s `AcceptIngestionBatchUseCase` writes the rows. For
+   `race_control`, the session's existing `RaceControlEvent` rows are deleted then
+   the fresh ones inserted, and the new events are **published** to the broadcaster
+   from Example 3, so any client long-polling `POST /race/control` for that session
+   wakes up immediately.
 5. High-volume datasets (`car_data`/telemetry, `location`, `position`,
    `intervals`, `laps`) are written with up to 16 rows in flight concurrently
-   (`runConcurrent` in `ingestion.repository.go`) instead of one at a time,
-   because the underlying Prisma Go client has no bulk `CreateMany` — without
-   this, a full session (thousands of samples × ~20 drivers) would take minutes,
-   dominated by per-row network round trips rather than any real computation.
-6. The HTTP response bubbles back up through `ingestion-service` →
-   gateway → client, summarizing what was fetched/mapped/dispatched.
+   (`runConcurrent` in `ingestion.repository.go`), because the Prisma Go client has
+   no bulk `CreateMany` — without this, a full session would take minutes of
+   per-row round trips.
+6. Parent rows built from a child row's fallbacks are created once and never updated:
+   when a `sessions` row arrives before its meeting, championship-service creates a
+   placeholder event from it, but a later re-ingestion does not overwrite the real
+   event written by `meetings` (otherwise the event name became "Race").
+7. The response summarises, per resource, how many rows were fetched and whether
+   they were dispatched.
 
-## Example 5 — the replay bulk dump: `GET /v1/race-data/sessions/{id}/race/replay`
+## Example 5 — the replay: catalog then bulk dump
 
 ```bash
-curl -H "Authorization: Bearer admin" \
-  "http://localhost:3000/v1/race-data/sessions/openf1:session:9998/race/replay?driverNumber=63"
+# which sessions can be replayed?
+curl -H "Authorization: Bearer $TOKEN" $GW/v1/race-data/championships/f1/replays
+
+# the replay itself
+curl -H "Authorization: Bearer $TOKEN" \
+  "$GW/v1/race-data/sessions/openf1:session:9998/race/replay?driverNumber=63"
 ```
 
-Same auth/rate-limit/logging as every other route, and — unlike an earlier
-version of this endpoint — nothing else is special about it end to end: it's
-a single `GET` that returns one JSON object, proxied like any other
-`/race/{action}` route (`replay` is one of `allowedRaceLiveActions` in
-`race_parameter_middleware.go`, matched by the same 6-segment path shape as
-`/race/position`, `/race/laps`, etc.).
+**The catalog** (`replay_catalog.*` in race-data-service) lists a championship's
+sessions with their event context in one call to championship-service
+(`GET /championships/{code}/sessions`), then keeps only those with at least one
+telemetry sample **and** one location sample — what the replay needs to animate
+cars. That check is a single raw `EXISTS` query on the `sessionId` indexes
+(`replay_catalog.repository.go`), because the Prisma Go client has no
+`DISTINCT`/`EXISTS` and the sample tables hold millions of rows. Newest first,
+`[]` when nothing is playable.
 
-On the `race-data-service` side, `race_replay_stream.controller.go` parses
-`sessionId`/optional `driverNumber` and calls `race_replay_stream.usecase.go`'s
-`GetReplay`, which:
+**The replay** is a plain `GET` returning one JSON object. `race_replay_stream.usecase.go`'s
+`GetReplay`:
 
-1. Validates `sessionId` against `championship-service`, same as every other
-   `/race/*`/`/telemetry/*` route (Example 2's pattern).
-2. Asks `race_stream.repository.go` for **eight** datasets — `telemetry`,
-   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`,
-   `lap` — each queried **once per call**, not once per row, sorted ascending
-   by timestamp. Some of these don't have a natural timestamp at all: `stint`
-   has no timestamp column in the schema, so each stint is anchored to the
-   recorded start time of its `lapStart` lap (a `RaceLap` lookup built once
-   and indexed in memory, the same "fetch once, forward-only pointer" pattern
-   used to resolve `lapNumber` on telemetry frames — see
-   `.claude/agents/od-backend-expert.md` for the full trap writeup).
-3. Groups the six driver-scoped datasets into `map[string][]T` keyed by
-   driver number (as a string), and leaves the two track-wide datasets
-   (`raceControl`, `weather`) as flat arrays. No merging across dataset types
-   is needed — each dataset lives under its own top-level JSON key instead of
-   one interleaved timeline, so each `List*Frames` repository call's own
-   ascending sort is all the ordering that's required.
-4. Returns the assembled `domain.RaceReplay` object as the JSON response body
-   — no pagination, no streaming, no pacing.
+1. validates `sessionId` against `championship-service` (Example 2's pattern);
+2. asks `race_stream.repository.go` for **eight** datasets — `telemetry`,
+   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`, `lap` — each
+   queried **once per call**, sorted by timestamp. Telemetry samples carry no lap
+   number nor position: `x`/`y`/`z` come from the nearest `RaceLocationSample` and
+   `lapNumber` from the `RaceLap` that started last, both resolved with a
+   forward-only pointer over the already-sorted rows. `stint` has no timestamp
+   column, so each stint is anchored to the start time of its `lapStart` lap;
+3. groups the six driver-scoped datasets by driver number (as a string key) and
+   leaves the two track-wide ones (`raceControl`, `weather`) as flat arrays;
+4. returns the assembled `domain.RaceReplay` — no pagination, no streaming.
 
-This is explicitly a **replay** of already-ingested historical samples, not a
-live feed of an in-progress race — there's no live race happening in this dev
-setup. See `services/race-data-service/doc/endpoint.md` for the full response
-shape and per-dataset notes.
+It is a **replay** of already-ingested historical samples, not a live feed. See
+`services/race-data-service/doc/endpoint.md` for the full response shape. The
+gateway still forwards `Flush()` through its logging middleware
+(`statusRecorder.Flush()`, covered by `flush_passthrough_test.go`), so a streaming
+endpoint would work through it if one is added.
 
-This endpoint used to be a paced Server-Sent Events stream
-(`/race/replay/stream`, with a `speed` query param) that multiplexed the same
-eight datasets onto one long-lived connection. It was simplified to this
-plain-JSON bulk dump — no more pacing/streaming/client-disconnect handling.
-The gateway's SSE flush-passthrough fix (`statusRecorder.Flush()` in
-`logging_middleware.go`) and its regression test (`flush_passthrough_test.go`) were
-kept in place even though no current route uses SSE, since they're harmless
-and directly reusable should a streaming endpoint be added again — see
-`gateway/ROUTES.md` for the writeup of that trap (embedding an
-`http.ResponseWriter` by interface does not promote `Flush()`, which belongs
-to the separate `http.Flusher` interface).
+## Example 6 — per-user data: `POST /presets`
+
+```bash
+# 1. log in (gateway token on /auth) and keep the user's access token
+JWT=$(curl -sS -X POST $GW/auth/login -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"me@example.com","password":"..."}' | jq -r .token)
+
+# 2. call /presets with the user's token — not the gateway token
+curl -X POST $GW/presets -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" -d '{"name":"Race view","data":{"widgets":[]}}'
+```
+
+1. The gateway sees the `/presets` prefix, listed in `userTokenRoutePrefixes`
+   (`router.go`), and uses **`RequireUserToken`** instead of the gateway-token
+   check: the header must carry a valid access token, verified with
+   `shared/authjwt` and `AUTH_JWT_SECRET`. The 401 code tells the client what to do:
+   `UNAUTHORIZED` (no token), `TOKEN_EXPIRED` (call `/auth/refresh`),
+   `INVALID_TOKEN` (log in again). The gateway token is refused here.
+2. The prefix is stripped and `POST /` reaches `user-data-service` with the
+   `Authorization` header unchanged.
+3. `user-data-service` **re-verifies** the token (`requireUser` middleware) and takes
+   the user ID **only** from its `sub` claim — no route accepts a user ID from the
+   client. Every repository query is scoped to that user, so another user's preset
+   answers `404`, exactly like a missing one.
+4. The creation runs in one transaction that starts with a per-user advisory lock
+   (`pg_advisory_xact_lock`): the 20-preset limit and the single default preset are
+   enforced by the database statement itself, so concurrent requests of one user
+   cannot bypass them (details in `services/user-data-service/doc/architecture.md`).
 
 ## Identifiers, end to end
 
 Nothing in the public API uses OpenF1's raw numeric keys directly. Every ID is
-built deterministically in `shared/contracts/ingestion/identity.go` and reused
-by every service, so the same real-world entity always maps to the same string:
+built deterministically in `shared/contracts/ingestion/identity.go` and reused by
+every service, so the same real-world entity always maps to the same string:
 
 | Entity | Format | Example |
 | --- | --- | --- |
@@ -225,29 +266,44 @@ by every service, so the same real-world entity always maps to the same string:
 | Driver | `<provider>:<championshipCode>:driver:<number>` | `openf1:f1:driver:63` |
 | Team | `<provider>:<championshipCode>:team:<slug>` | `openf1:f1:team:mercedes` |
 
+User and preset IDs are UUIDs generated by their own service.
+
 ## Response contract
 
-Every public route under `/v1/championship/*` and `/v1/race-data/*` follows the
-same shape rules:
+The public routes follow the same shape rules:
 
 - JSON field names are **camelCase**.
 - Any list-shaped response is a **bare JSON array** (`[...]`), never wrapped in a
   `{"count": ..., "data": [...]}` envelope.
-- Errors are always `{"error": "<message>"}` with a matching HTTP status —
-  `400` for invalid parameters, `401` for missing/invalid auth, `404` for an
-  unknown resource, `502` if an upstream service is unreachable.
+- Every error written by the gateway or a service uses the `shared/apierror`
+  envelope: `{"error":{"code":"SESSION_NOT_FOUND","status":404,"message":"session not found"}}`.
+  Typical statuses: `400` invalid parameter or body, `401` missing/invalid/expired
+  token, `404` unknown resource, `409` conflict (e.g. preset limit), `429` rate
+  limited, `502` upstream service unreachable, `504` upstream timeout. The
+  `message` never carries internal details.
+
+Known exceptions, kept for now and listed in the backlog:
+
+- race-data-service still serves a legacy facade (`/sessions/{id}`, `/sessions/{id}/datasets/...`,
+  `/drivers/{n}/{dataset}`, ...) with snake_case keys and `{count, data}` envelopes;
+  new clients should use `/race/*`, `/telemetry/*` and the championship routes.
+- A path that matches no route at all answers Go's default plain-text
+  `404 page not found`, not the JSON envelope.
 
 ## Auth and rate limiting, in one place
 
-- Every proxied `/v1/*` route requires `Authorization: Bearer <GATEWAY_AUTH_TOKEN>`
-  — missing or wrong both return `401`. `/health` and `/health/{service}` are the
-  only routes intentionally left open, for infra liveness probes.
-- Rate limiting is an in-memory token bucket per client IP
+- Every proxied route requires an `Authorization: Bearer ...` header. `/presets`
+  expects the **user's access token**; every other prefix (including `/auth`)
+  expects `GATEWAY_AUTH_TOKEN`. `/health` and `/health/{service}` are the only
+  routes left open, for infra liveness probes.
+- `GATEWAY_AUTH_TOKEN` identifies the client application, not a user. Per-user data
+  is only ever protected by the user's access token.
+- Rate limiting is an in-memory token bucket per client
   (`GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST`), reset whenever the
-  gateway process restarts. Exceeding it returns `429`.
-- None of this exists a second time inside the individual services — they trust
-  the gateway/network topology entirely. Calling a service's port directly
+  gateway restarts. Exceeding it returns `429 RATE_LIMIT_EXCEEDED`.
+- Apart from user-data-service's token check, none of this exists a second time
+  inside the services: they rely on the gateway. Calling a service's port directly
   (e.g. `curl http://localhost:3003/championships`, bypassing `:3000`) skips auth,
-  rate limiting, and parameter validation completely. That's fine for local
-  debugging, but it's why those ports shouldn't be reachable from outside a
-  private network in a real deployment.
+  rate limiting and parameter validation. The Compose file publishes those ports for
+  local debugging only; they must not be reachable from outside a private network
+  in a real deployment (see `docs/security.md`).

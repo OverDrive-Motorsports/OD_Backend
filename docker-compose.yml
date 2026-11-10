@@ -126,11 +126,16 @@ services:
       HTTP_PORT: "3002"
       APP_VERSION: dev
       USER_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_user_data?schema=public
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       GOCACHE: /tmp/go-build
+      HOME: /tmp
+      GOPATH: /tmp/go
+      GOMODCACHE: /tmp/go/pkg/mod
+    user: "${UID:-1000}:${GID:-1000}"
     command:
       - sh
       - -c
-      - go run ./services/user-data-service
+      - cd services/user-data-service && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma && cd /app && go run ./services/user-data-service
     volumes:
       - .:/app
     ports:
@@ -253,6 +258,7 @@ services:
       HTTP_PORT: "3000"
       APP_VERSION: dev
       GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS}
       GATEWAY_RATE_LIMIT_BURST: ${GATEWAY_RATE_LIMIT_BURST}
       AUTH_SERVICE_URLS: http://auth-service:3001

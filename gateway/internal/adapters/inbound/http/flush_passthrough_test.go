@@ -36,7 +36,7 @@ import (
 // (race-data-service's SSE replay endpoint was replaced by a plain-JSON bulk
 // dump), but the Flush() passthrough this test guards
 // (logging_middleware.go's statusRecorder) must keep working for whichever
-// future endpoint streams next — see that file for why it's easy to
+// future endpoint streams next, see that file for why it's easy to
 // accidentally break.
 func TestSSEStreamsIncrementallyThroughGateway(t *testing.T) {
 	const interFrameDelay = 300 * time.Millisecond
@@ -69,7 +69,7 @@ func TestSSEStreamsIncrementallyThroughGateway(t *testing.T) {
 	healthUseCase := usecases.NewCheckHealthUseCase()
 
 	routes := map[string][]*url.URL{"/v1/race-data": {upstreamURL}}
-	handler, err := NewHandler(routes, map[string][]*url.URL{}, 1000, 1000, healthUseCase, authorizeUseCase)
+	handler, err := NewHandler(routes, map[string][]*url.URL{}, 1000, 1000, healthUseCase, authorizeUseCase, usecases.NewAuthorizeUserRequestUseCase(nil))
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}
