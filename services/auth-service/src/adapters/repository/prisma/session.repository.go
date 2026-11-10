@@ -155,6 +155,65 @@ func (r *SessionRepository) AddUser(ctx context.Context, email string, passwordH
 	return &user, nil
 }
 
+// GetUserByOAuthAccount returns the user linked to a provider identity, or nil if none is.
+func (r *SessionRepository) GetUserByOAuthAccount(ctx context.Context, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	row, err := r.client.OAuthAccount.FindUnique(
+		db.OAuthAccount.ProviderProviderSubject(
+			db.OAuthAccount.Provider.Equals(db.ProviderType(provider)),
+			db.OAuthAccount.ProviderSubject.Equals(subject),
+		),
+	).With(
+		db.OAuthAccount.User.Fetch(),
+	).Exec(ctx)
+	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	user := mapUser(row.User())
+	return &user, nil
+}
+
+// AddOAuthUser creates a password-less user and its OAuthAccount link atomically.
+func (r *SessionRepository) AddOAuthUser(ctx context.Context, email string, username string, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	userID, err := generateUUID()
+	if err != nil {
+		return nil, err
+	}
+
+	createUser := r.client.User.CreateOne(
+		db.User.Email.Set(email),
+		db.User.DisplayName.Set(username),
+		db.User.ID.Set(userID),
+	).Tx()
+	createAccount := r.client.OAuthAccount.CreateOne(
+		db.OAuthAccount.Provider.Set(db.ProviderType(provider)),
+		db.OAuthAccount.ProviderSubject.Set(subject),
+		db.OAuthAccount.User.Link(db.User.ID.Equals(userID)),
+	).Tx()
+
+	if err := r.client.Prisma.Transaction(createUser, createAccount).Exec(ctx); err != nil {
+		return nil, err
+	}
+
+	user := mapUser(createUser.Result())
+	return &user, nil
+}
+
+// generateUUID returns a random RFC 4122 version 4 UUID.
+func generateUUID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	h := hex.EncodeToString(b)
+	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32], nil
+}
+
 func generateRefreshToken() (string, error) {
 	randomBytes := make([]byte, 32)
 	if _, err := rand.Read(randomBytes); err != nil {
@@ -224,11 +283,22 @@ func mapAuthSessionMin(row *db.AuthSessionModel) domain.AuthSession {
 
 // mapUser maps db user rows into an internal user dataset.
 func mapUser(row *db.UserModel) domain.User {
+	var passwordHash string
+	var usesOAuth = false
+
+	// A user without a password can only have been created through an OAuth provider.
+	if v, ok := row.PasswordHash(); ok {
+		passwordHash = v
+	} else {
+		usesOAuth = true
+	}
+
 	return domain.User{
 		ID:           row.ID,
 		Email:        row.Email,
 		DisplayName:  row.DisplayName,
-		PasswordHash: row.PasswordHash,
+		PasswordHash: passwordHash,
+		UsesOAuth:    usesOAuth,
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}

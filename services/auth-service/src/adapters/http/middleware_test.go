@@ -38,6 +38,22 @@ func (f *fakeAuthQueryUseCaseForMiddleware) Refresh(ctx context.Context, refresh
 	panic("not used by requireOwnUser")
 }
 
+func (f *fakeAuthQueryUseCaseForMiddleware) ListOAuthProviders() []domain.OAuthProviderInfo {
+	panic("not used by requireOwnUser")
+}
+
+func (f *fakeAuthQueryUseCaseForMiddleware) OAuthAuthorize(providerID string) (*domain.OAuthAuthorization, error) {
+	panic("not used by requireOwnUser")
+}
+
+func (f *fakeAuthQueryUseCaseForMiddleware) OAuthLogin(ctx context.Context, providerID string, callback domain.OAuthCallback) (*domain.LoginResponse, error) {
+	panic("not used by requireOwnUser")
+}
+
+func (f *fakeAuthQueryUseCaseForMiddleware) OAuthRegister(ctx context.Context, providerID string, callback domain.OAuthCallback, username string) (*domain.LoginResponse, error) {
+	panic("not used by requireOwnUser")
+}
+
 func (f *fakeAuthQueryUseCaseForMiddleware) VerifyToken(tokenString string) (string, error) {
 	return f.verifyTokenFn(tokenString)
 }
