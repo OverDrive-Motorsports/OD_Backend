@@ -14,3 +14,9 @@ package ports
 type TokenValidator interface {
 	ValidateBearerHeader(header string) bool
 }
+
+// UserTokenValidator verifies an end-user access token. It returns nil when the token is
+// valid, or domain.ErrMissingUserToken / ErrUserTokenExpired / ErrInvalidUserToken.
+type UserTokenValidator interface {
+	ValidateUserBearerHeader(header string) error
+}

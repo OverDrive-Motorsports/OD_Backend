@@ -128,6 +128,10 @@ services:
       USER_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_user_data?schema=public
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       GOCACHE: /tmp/go-build
+      HOME: /tmp
+      GOPATH: /tmp/go
+      GOMODCACHE: /tmp/go/pkg/mod
+    user: "${UID:-1000}:${GID:-1000}"
     command:
       - sh
       - -c

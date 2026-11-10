@@ -9,7 +9,12 @@
 
 package usecases
 
-import "testing"
+import (
+	"errors"
+	"testing"
+
+	"overdrive/gateway/internal/core/domain"
+)
 
 type fakeTokenValidator struct {
 	result bool
@@ -46,5 +51,27 @@ func TestAuthorizeRequestUseCase_RejectsWhenValidatorRejects(t *testing.T) {
 
 	if useCase.Execute("Bearer bad-token") {
 		t.Fatal("expected Execute to return false when validator rejects")
+	}
+}
+
+type fakeUserTokenValidator struct {
+	err       error
+	gotHeader string
+}
+
+func (f *fakeUserTokenValidator) ValidateUserBearerHeader(header string) error {
+	f.gotHeader = header
+	return f.err
+}
+
+// TestAuthorizeUserRequestUseCase_Execute proves the header reaches the validator unchanged and
+// the rejection reason is returned as-is (the HTTP layer maps it to a 401 code).
+func TestAuthorizeUserRequestUseCase_Execute(t *testing.T) {
+	validator := &fakeUserTokenValidator{err: domain.ErrUserTokenExpired}
+	if err := NewAuthorizeUserRequestUseCase(validator).Execute("Bearer x"); !errors.Is(err, domain.ErrUserTokenExpired) || validator.gotHeader != "Bearer x" {
+		t.Fatalf("expected the validator's reason and header, got err=%v header=%q", err, validator.gotHeader)
+	}
+	if err := NewAuthorizeUserRequestUseCase(&fakeUserTokenValidator{}).Execute("Bearer ok"); err != nil {
+		t.Fatalf("expected nil for a valid token, got %v", err)
 	}
 }

@@ -32,7 +32,7 @@ func Build(cfg config.Config) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, err
 	}
-	userAuthorizeUseCase := usecases.NewAuthorizeRequestUseCase(userTokenValidator)
+	userAuthorizeUseCase := usecases.NewAuthorizeUserRequestUseCase(userTokenValidator)
 
 	handler, err := httpinbound.NewHandler(
 		cfg.Routes,

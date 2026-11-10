@@ -12,8 +12,11 @@ Bearer auth is **mandatory** on every proxied route (`/health` and
 | `/presets` | `Bearer <user access token>`, the JWT returned by `POST /auth/login`, verified with `AUTH_JWT_SECRET`. The gateway token is **refused** here. |
 | every other proxied prefix | `Bearer <GATEWAY_AUTH_TOKEN>` |
 
-- no `Authorization` header: `401 Unauthorized`
-- `Authorization` header provided but invalid/mismatched (or the wrong kind of token for the prefix): `401 Unauthorized`
+- gateway-token prefixes: no, invalid or mismatched `Authorization` header → `401 UNAUTHORIZED`
+- `/presets`: the 401 code tells the client what to do, the same codes `user-data-service`
+  would answer itself — `UNAUTHORIZED` (no Bearer token), `TOKEN_EXPIRED` (call
+  `/auth/refresh`), `INVALID_TOKEN` (any other invalid token, including the gateway token:
+  log in again)
 
 `/presets` needs the caller's identity, and the gateway token and the user JWT cannot travel
 in the same header, hence the per-prefix rule. The `Authorization` header is forwarded
@@ -61,8 +64,6 @@ Forwarded/proxy headers added by gateway:
 | --- | --- | --- | --- |
 | Auth | `/auth` | `AUTH_SERVICE_URLS` | prefix stripped |
 | User data | `/presets` | `USER_DATA_SERVICE_URLS` | prefix stripped (user JWT auth, see above) |
-| User data | `/providers` | `USER_DATA_SERVICE_URLS` | prefix stripped |
-| User data | `/users` | `USER_DATA_SERVICE_URLS` | prefix stripped |
 | Championship v1 facade | `/v1/championship` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped |
 | Race data v1 facade | `/v1/race-data` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
 | Ingestion | `/v1/ingestion` | `INGESTION_SERVICE_URLS` | prefix stripped |

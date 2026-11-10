@@ -22,10 +22,8 @@ type PresetRepository interface {
 	ListByUser(ctx context.Context, userID string) ([]domain.Preset, error)
 	// GetByID returns the user's preset, or nil when missing or owned by someone else.
 	GetByID(ctx context.Context, userID string, presetID string) (*domain.Preset, error)
-	// CountByUser returns how many presets the user owns.
-	CountByUser(ctx context.Context, userID string) (int, error)
-	// Create stores a preset. When input.IsDefault is true, the user's other presets lose the
-	// default flag in the same transaction.
+	// Create stores a preset atomically with the per-user rules: at most MaxPresetsPerUser
+	// presets (domain.ErrPresetLimitReached otherwise).
 	Create(ctx context.Context, userID string, input domain.NewPreset) (*domain.Preset, error)
 	// Update applies the changes and returns the stored preset, or nil when missing or not
 	// owned. Setting IsDefault to true clears the flag on the user's other presets in the same

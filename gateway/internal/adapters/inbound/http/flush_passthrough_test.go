@@ -69,7 +69,7 @@ func TestSSEStreamsIncrementallyThroughGateway(t *testing.T) {
 	healthUseCase := usecases.NewCheckHealthUseCase()
 
 	routes := map[string][]*url.URL{"/v1/race-data": {upstreamURL}}
-	handler, err := NewHandler(routes, map[string][]*url.URL{}, 1000, 1000, healthUseCase, authorizeUseCase, authorizeUseCase)
+	handler, err := NewHandler(routes, map[string][]*url.URL{}, 1000, 1000, healthUseCase, authorizeUseCase, usecases.NewAuthorizeUserRequestUseCase(nil))
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}

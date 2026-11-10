@@ -10,10 +10,13 @@
 package auth
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"overdrive/gateway/internal/core/domain"
 )
 
 func signUserToken(t *testing.T, secret string, exp time.Time) string {
@@ -33,30 +36,33 @@ func TestNewUserTokenValidator_RequiresSecret(t *testing.T) {
 	}
 }
 
-// TestUserTokenValidator_ValidateBearerHeader proves only a Bearer header carrying a valid,
-// unexpired JWT signed with the shared secret is accepted, the static gateway token is not.
-func TestUserTokenValidator_ValidateBearerHeader(t *testing.T) {
+// TestUserTokenValidator_ValidateUserBearerHeader proves each rejection maps to the domain
+// reason the gateway turns into a distinct 401 code — and that the static gateway token is not
+// a valid user token.
+func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
 	validator, err := NewUserTokenValidator("secret")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !validator.ValidateBearerHeader("Bearer " + signUserToken(t, "secret", time.Now().Add(time.Minute))) {
-		t.Fatal("expected a valid user JWT to be accepted")
+	if err := validator.ValidateUserBearerHeader("Bearer " + signUserToken(t, "secret", time.Now().Add(time.Minute))); err != nil {
+		t.Fatalf("expected a valid user JWT to be accepted, got %v", err)
 	}
-	for name, header := range map[string]string{
-		"expired":       "Bearer " + signUserToken(t, "secret", time.Now().Add(-time.Minute)),
-		"wrong secret":  "Bearer " + signUserToken(t, "other", time.Now().Add(time.Minute)),
-		"static token":  "Bearer gateway-static-token",
-		"no scheme":     signUserToken(t, "secret", time.Now().Add(time.Minute)),
-		"empty":         "",
-		"zero verifier": "Bearer x",
-	} {
-		v := validator
-		if name == "zero verifier" {
-			v = UserTokenValidator{}
+	cases := map[string]struct {
+		header string
+		want   error
+	}{
+		"empty":        {"", domain.ErrMissingUserToken},
+		"no scheme":    {signUserToken(t, "secret", time.Now().Add(time.Minute)), domain.ErrMissingUserToken},
+		"expired":      {"Bearer " + signUserToken(t, "secret", time.Now().Add(-time.Minute)), domain.ErrUserTokenExpired},
+		"wrong secret": {"Bearer " + signUserToken(t, "other", time.Now().Add(time.Minute)), domain.ErrInvalidUserToken},
+		"static token": {"Bearer gateway-static-token", domain.ErrInvalidUserToken},
+	}
+	for name, tc := range cases {
+		if err := validator.ValidateUserBearerHeader(tc.header); !errors.Is(err, tc.want) {
+			t.Fatalf("%s: expected %v, got %v", name, tc.want, err)
 		}
-		if v.ValidateBearerHeader(header) {
-			t.Fatalf("%s: expected rejection", name)
-		}
+	}
+	if err := (UserTokenValidator{}).ValidateUserBearerHeader("Bearer x"); !errors.Is(err, domain.ErrInvalidUserToken) {
+		t.Fatalf("zero validator: expected ErrInvalidUserToken, got %v", err)
 	}
 }

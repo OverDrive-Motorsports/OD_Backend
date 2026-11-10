@@ -23,7 +23,6 @@ import (
 type fakePresetRepository struct {
 	owners    map[string]string // presetID -> userID
 	presets   map[string]domain.Preset
-	countErr  error
 	err       error
 	created   *domain.NewPreset
 	createdBy string
@@ -62,18 +61,13 @@ func (f *fakePresetRepository) GetByID(_ context.Context, userID string, presetI
 	return &preset, nil
 }
 
-func (f *fakePresetRepository) CountByUser(ctx context.Context, userID string) (int, error) {
-	if f.countErr != nil {
-		return 0, f.countErr
-	}
-	presets, _ := f.ListByUser(ctx, userID)
-	return len(presets), nil
-}
-
 func (f *fakePresetRepository) Create(_ context.Context, userID string, input domain.NewPreset) (*domain.Preset, error) {
 	f.created = &input
 	f.createdBy = userID
-	return &domain.Preset{ID: "new", Name: input.Name, IsDefault: input.IsDefault, Data: input.Data}, f.err
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &domain.Preset{ID: "new", Name: input.Name, IsDefault: input.IsDefault, Data: input.Data}, nil
 }
 
 func (f *fakePresetRepository) Update(ctx context.Context, userID string, presetID string, changes domain.PresetChanges) (*domain.Preset, error) {
@@ -127,44 +121,27 @@ func TestPresetUseCase_ListAndGet(t *testing.T) {
 	}
 }
 
-// TestPresetUseCase_Create proves validation runs before any storage call, the first preset of
-// a user is forced to default, later ones keep the requested flag, the limit answers
-// ErrPresetLimitReached without creating anything, and the user ID is forwarded unchanged.
+// TestPresetUseCase_Create proves validation runs before any storage call, a valid payload and
+// the user ID reach the repository unchanged, and the repository's limit / storage errors are
+// returned as-is (the limit and the first-preset default are enforced atomically there).
 func TestPresetUseCase_Create(t *testing.T) {
 	repo := newFakeRepo()
 	if _, err := NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "", Data: layout}); !errors.Is(err, domain.ErrInvalidPreset) || repo.created != nil {
 		t.Fatalf("invalid payload: expected ErrInvalidPreset without storage, got %v", err)
 	}
 
-	preset, err := NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "First", Data: layout})
-	if err != nil || !preset.IsDefault || repo.createdBy != "alice" {
-		t.Fatalf("first preset must become default: %+v err=%v by=%q", preset, err, repo.createdBy)
+	input := domain.NewPreset{Name: "Race", IsDefault: true, Data: layout}
+	preset, err := NewPresetUseCase(repo).Create(context.Background(), "alice", input)
+	if err != nil || preset.Name != "Race" || repo.createdBy != "alice" || repo.created == nil || !repo.created.IsDefault {
+		t.Fatalf("valid payload: got %+v err=%v by=%q input=%+v", preset, err, repo.createdBy, repo.created)
 	}
 
-	repo = newFakeRepo()
-	repo.add("alice", domain.Preset{ID: "p1"})
-	preset, _ = NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "Second", Data: layout})
-	if preset.IsDefault {
-		t.Fatal("a later preset must keep isDefault=false when not requested")
-	}
-	preset, _ = NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "Third", IsDefault: true, Data: layout})
-	if !preset.IsDefault {
-		t.Fatal("a later preset must honour isDefault=true")
-	}
-
-	repo = newFakeRepo()
-	for index := 0; index < domain.MaxPresetsPerUser; index++ {
-		repo.add("alice", domain.Preset{ID: string(rune('a' + index))})
-	}
-	if _, err := NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "One too many", Data: layout}); !errors.Is(err, domain.ErrPresetLimitReached) || repo.created != nil {
-		t.Fatalf("expected ErrPresetLimitReached without storage, got %v", err)
-	}
-
-	boom := errors.New("db down")
-	repo = newFakeRepo()
-	repo.countErr = boom
-	if _, err := NewPresetUseCase(repo).Create(context.Background(), "alice", domain.NewPreset{Name: "X", Data: layout}); !errors.Is(err, boom) {
-		t.Fatalf("expected the count error, got %v", err)
+	for _, want := range []error{domain.ErrPresetLimitReached, errors.New("db down")} {
+		repo = newFakeRepo()
+		repo.err = want
+		if _, err := NewPresetUseCase(repo).Create(context.Background(), "alice", input); !errors.Is(err, want) {
+			t.Fatalf("expected %v from the repository, got %v", want, err)
+		}
 	}
 }
 

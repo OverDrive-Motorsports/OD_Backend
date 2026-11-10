@@ -49,22 +49,12 @@ func (u *PresetUseCase) Get(ctx context.Context, userID string, presetID string)
 	return preset, nil
 }
 
-// Create validates the payload, enforces MaxPresetsPerUser, and stores the preset. A user's
-// first preset always becomes the default, whatever the payload says, so a user with presets
-// always starts with one default.
+// Create validates the payload and stores the preset. The per-user limit and the "first preset
+// becomes the default" rule are enforced atomically by the repository (concurrent requests of
+// one user are serialised there), not checked here, so they cannot be bypassed by racing.
 func (u *PresetUseCase) Create(ctx context.Context, userID string, input domain.NewPreset) (*domain.Preset, error) {
 	if err := input.Validate(); err != nil {
 		return nil, err
-	}
-	count, err := u.repository.CountByUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if count >= domain.MaxPresetsPerUser {
-		return nil, domain.ErrPresetLimitReached
-	}
-	if count == 0 {
-		input.IsDefault = true
 	}
 	return u.repository.Create(ctx, userID, input)
 }

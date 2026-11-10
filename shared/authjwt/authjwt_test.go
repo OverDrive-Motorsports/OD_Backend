@@ -94,3 +94,27 @@ func TestBearerToken(t *testing.T) {
 		}
 	}
 }
+
+// TestVerifier_VerifyBearerHeader proves the three outcomes callers map to distinct 401 codes:
+// ErrMissingToken (no / non-Bearer header), ErrTokenExpired, ErrInvalidToken — and the user ID
+// on success.
+func TestVerifier_VerifyBearerHeader(t *testing.T) {
+	verifier, _ := NewVerifier(testSecret)
+	key := []byte(testSecret)
+
+	if userID, err := verifier.VerifyBearerHeader("Bearer " + sign(t, jwt.SigningMethodHS256, key, validClaims())); err != nil || userID != "user-1" {
+		t.Fatalf("valid header: got %q, %v", userID, err)
+	}
+	for _, header := range []string{"", "Basic abc", "Bearer "} {
+		if _, err := verifier.VerifyBearerHeader(header); !errors.Is(err, ErrMissingToken) {
+			t.Fatalf("%q: expected ErrMissingToken, got %v", header, err)
+		}
+	}
+	expired := jwt.MapClaims{"sub": "user-1", "exp": time.Now().Add(-time.Minute).Unix()}
+	if _, err := verifier.VerifyBearerHeader("Bearer " + sign(t, jwt.SigningMethodHS256, key, expired)); !errors.Is(err, ErrTokenExpired) {
+		t.Fatalf("expired: expected ErrTokenExpired, got %v", err)
+	}
+	if _, err := verifier.VerifyBearerHeader("Bearer forged"); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("forged: expected ErrInvalidToken, got %v", err)
+	}
+}

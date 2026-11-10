@@ -32,7 +32,7 @@ It currently focuses on two domains:
 | `id` | `String` | Yes | Primary key, UUID, default generated | Unique identifier of the saved preset | `4fa6e548-ccf8-4b60-a8b8-6dc1a14ef761` |
 | `userId` | `String` | Yes | Indexed | Owner of the preset | `user_42` |
 | `name` | `String` | Yes | `varchar(50)` | Human-readable name of the preset | `Race Weekend Layout` |
-| `isDefault` | `Boolean` | Yes | Default `false` | Default layout of the user; at most one per user, enforced transactionally by the service | `true` |
+| `isDefault` | `Boolean` | Yes | Default `false` | Default layout of the user; at most one per user, enforced by the service (transaction + per-user advisory lock, see `doc/architecture.md`) | `true` |
 | `data` | `Json` | Yes | jsonb, JSON object ≤ 256 KiB (checked by the service) | Layout document produced by the client (widgets, positions, sizes, settings), stored as-is | `{"widgets":[{"type":"video","position":[0,1.2,-2]}]}` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the preset | `2026-04-14T10:20:00Z` |
 | `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp of the preset | `2026-04-14T10:40:00Z` |

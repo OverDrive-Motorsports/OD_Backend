@@ -48,10 +48,11 @@ strips its `/presets` prefix, so the service itself serves them on `/` and `/{pr
 
 - `name`: required, non-blank, at most 50 characters
 - `data`: required on creation, a JSON object, at most 256 KiB
-- at most **20 presets per user**
+- at most **20 presets per user**, enforced atomically
 - a user's **first** preset always becomes the default
 - setting `isDefault: true` on a preset clears it on the user's other presets in the same
-  transaction, a user never has two defaults
+  transaction; concurrent default changes of one user are serialised, so a user never has
+  two defaults, even when two requests arrive at the same time
 - deleting the default preset does not promote another one
 - request bodies: one JSON object, unknown fields and trailing data rejected, at most 320 KiB
 

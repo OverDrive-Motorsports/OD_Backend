@@ -31,9 +31,24 @@ directly in local Docker.
 ## Presets
 
 A preset is `{ name, isDefault, data }`, where `data` is the client's layout document stored
-as-is (a JSON object, at most 256 KiB). Setting a default is done in one Prisma transaction
-(clear the user's other defaults + update/create), so a user never has two defaults,
-Prisma cannot express a partial unique index (`UNIQUE (userId) WHERE isDefault`).
+as-is (a JSON object, at most 256 KiB).
+
+Two rules depend on the user's *other* presets: at most 20 presets, and exactly one default.
+Checking them and then writing is a race (two concurrent requests both pass the check), so
+every write that depends on them runs in one transaction that starts with a per-user advisory
+lock (`pg_advisory_xact_lock`): concurrent requests of one user are serialised, other users
+are not affected.
+
+- **Create**: lock → `INSERT ... SELECT ... WHERE (count of the user's presets) < 20`, the new
+  preset being the default when requested or when it is the user's first → clear the user's
+  other defaults if the new one is the default. No inserted row = limit reached (`409`). These
+  statements are raw SQL (`preset.repository.go`) because Prisma's Go client cannot express a
+  conditional insert; the ID is generated in Go since `@default(uuid())` is applied by the
+  Prisma engine, not by Postgres.
+- **Set default** (`PATCH isDefault: true`): lock → clear the user's other defaults → update.
+- A transaction alone is not enough: under Postgres' `READ COMMITTED`, each request would only
+  see the rows committed when its statement starts. Prisma cannot express the alternative for
+  the default rule, a partial unique index (`UNIQUE ("userId") WHERE "isDefault"`).
 
 ## Request flow
 

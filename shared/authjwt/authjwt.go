@@ -26,6 +26,9 @@ var (
 	// ErrTokenExpired is returned for an otherwise valid token past its `exp` claim, so callers
 	// can tell the client to refresh rather than to log in again.
 	ErrTokenExpired = errors.New("token expired")
+	// ErrMissingToken is returned by VerifyBearerHeader when the header is absent, uses
+	// another scheme than Bearer, or carries no token.
+	ErrMissingToken = errors.New("missing bearer token")
 	// ErrMissingSecret is returned by NewVerifier when no signing secret is configured.
 	ErrMissingSecret = errors.New("jwt secret is required")
 )
@@ -77,4 +80,15 @@ func BearerToken(header string) (token string, ok bool) {
 	}
 	value = strings.TrimSpace(value)
 	return value, value != ""
+}
+
+// VerifyBearerHeader extracts the token from an `Authorization` header value and verifies it.
+// The error is ErrMissingToken, ErrTokenExpired or ErrInvalidToken, so every caller (gateway,
+// services) answers the same 401 code for the same situation.
+func (v *Verifier) VerifyBearerHeader(header string) (string, error) {
+	token, ok := BearerToken(header)
+	if !ok {
+		return "", ErrMissingToken
+	}
+	return v.Verify(token)
 }

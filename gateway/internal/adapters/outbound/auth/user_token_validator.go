@@ -9,7 +9,12 @@
 
 package auth
 
-import "overdrive/shared/authjwt"
+import (
+	"errors"
+
+	"overdrive/gateway/internal/core/domain"
+	"overdrive/shared/authjwt"
+)
 
 // UserTokenValidator accepts an `Authorization: Bearer <jwt>` header carrying a valid access
 // token issued by auth-service. It guards the per-user routes (/presets), where the client
@@ -28,12 +33,21 @@ func NewUserTokenValidator(secret string) (UserTokenValidator, error) {
 	return UserTokenValidator{verifier: verifier}, nil
 }
 
-// ValidateBearerHeader reports whether the header carries a valid, unexpired user JWT.
-func (v UserTokenValidator) ValidateBearerHeader(header string) bool {
-	token, ok := authjwt.BearerToken(header)
-	if !ok || v.verifier == nil {
-		return false
+// ValidateUserBearerHeader returns nil for a valid, unexpired user JWT, otherwise the domain
+// reason: missing/non-Bearer header, expired token, or any other invalid token.
+func (v UserTokenValidator) ValidateUserBearerHeader(header string) error {
+	if v.verifier == nil {
+		return domain.ErrInvalidUserToken
 	}
-	_, err := v.verifier.Verify(token)
-	return err == nil
+	_, err := v.verifier.VerifyBearerHeader(header)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, authjwt.ErrMissingToken):
+		return domain.ErrMissingUserToken
+	case errors.Is(err, authjwt.ErrTokenExpired):
+		return domain.ErrUserTokenExpired
+	default:
+		return domain.ErrInvalidUserToken
+	}
 }

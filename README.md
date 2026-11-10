@@ -83,10 +83,10 @@ The active Docker Compose stack runs the full backend:
 - PostgreSQL
 
 `gateway` requires all five services to be healthy before starting, so every proxied
-prefix (`/auth`, `/presets`, `/providers`, `/users`, `/v1/championship`,
+prefix (`/auth`, `/presets`, `/v1/championship`,
 `/v1/race-data`, `/v1/ingestion`) is reachable once the stack is up.
-`user-data-service` is still scaffolding at the code level (health check only), but it
-is started and health-checked like the rest.
+`/presets` (user-data-service) authenticates with the user's access token from
+`POST /auth/login`, not the gateway token — see `gateway/ROUTES.md`.
 
 ## Default ports
 

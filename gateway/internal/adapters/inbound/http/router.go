@@ -33,7 +33,7 @@ func NewHandler(
 	rateLimitBurst float64,
 	healthUseCase usecases.CheckHealthUseCase,
 	authorizeUseCase usecases.AuthorizeRequestUseCase,
-	userAuthorizeUseCase usecases.AuthorizeRequestUseCase,
+	userAuthorizeUseCase usecases.AuthorizeUserRequestUseCase,
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
 
@@ -67,11 +67,10 @@ func NewHandler(
 			serviceHandler = ValidateRaceParameters(serviceHandler)
 		}
 
-		authorize := authorizeUseCase.Execute
+		protected := RequireAuthorization(authorizeUseCase.Execute, serviceHandler)
 		if _, perUser := userTokenRoutePrefixes[prefix]; perUser {
-			authorize = userAuthorizeUseCase.Execute
+			protected = RequireUserToken(userAuthorizeUseCase.Execute, serviceHandler)
 		}
-		protected := RequireAuthorization(authorize, serviceHandler)
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)
 	}
