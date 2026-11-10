@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -52,6 +53,20 @@ func (c *Client) ListChampionshipEvents(ctx context.Context, code string) (any, 
 	ok, err := c.getJSON(ctx, "/championships/"+code+"/events", &payload)
 	if err != nil || !ok {
 		return nil, err
+	}
+	return payload, nil
+}
+
+// ListChampionshipSessions returns every session of a championship with its event context;
+// (nil, nil) when championship-service answers 404 (unknown code). The code is path-escaped.
+func (c *Client) ListChampionshipSessions(ctx context.Context, code string) ([]ports.ChampionshipSessionRow, error) {
+	var payload []ports.ChampionshipSessionRow
+	ok, err := c.getJSON(ctx, "/championships/"+url.PathEscape(code)+"/sessions", &payload)
+	if err != nil || !ok {
+		return nil, err
+	}
+	if payload == nil {
+		payload = []ports.ChampionshipSessionRow{}
 	}
 	return payload, nil
 }

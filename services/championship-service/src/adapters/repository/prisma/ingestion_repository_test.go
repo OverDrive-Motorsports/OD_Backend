@@ -315,3 +315,21 @@ func TestDriverExternalKey(t *testing.T) {
 		t.Fatalf("expected the fixed placeholder, got %q", got)
 	}
 }
+
+// TestSessionSeasonYear proves a placeholder event built from a session row takes the row's
+// season_year when present, otherwise the year of the session start, never the ingestion
+// year for a past session, and only falls back to now without a start time.
+func TestSessionSeasonYear(t *testing.T) {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	start := time.Date(2025, 3, 23, 7, 0, 0, 0, time.UTC)
+
+	if got := sessionSeasonYear(map[string]any{"season_year": float64(2024)}, start, now); got != 2024 {
+		t.Fatalf("expected the explicit season_year, got %d", got)
+	}
+	if got := sessionSeasonYear(map[string]any{}, start, now); got != 2025 {
+		t.Fatalf("expected the session start year, got %d", got)
+	}
+	if got := sessionSeasonYear(map[string]any{}, time.Time{}, now); got != 2026 {
+		t.Fatalf("expected the current year without a start time, got %d", got)
+	}
+}

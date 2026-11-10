@@ -33,6 +33,11 @@ func TestValidateChampionshipDataset(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "championship sessions listing passes",
+			path:       "/v1/championship/championships/f1/sessions",
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "unknown dataset is rejected",
 			path:       "/v1/championship/sessions/1/datasets/not-a-dataset",
 			wantStatus: http.StatusBadRequest,

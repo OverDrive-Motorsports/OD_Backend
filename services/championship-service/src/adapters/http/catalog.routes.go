@@ -15,6 +15,7 @@ import "net/http"
 func registerCatalogRoutes(mux *http.ServeMux, catalogController *CatalogController) {
 	mux.HandleFunc("GET /championships", catalogController.ListChampionships)
 	mux.HandleFunc("GET /championships/{code}/events", catalogController.ListChampionshipEvents)
+	mux.HandleFunc("GET /championships/{code}/sessions", catalogController.ListChampionshipSessions)
 	mux.HandleFunc("GET /events/{eventId}", catalogController.GetEvent)
 	mux.HandleFunc("GET /events/{eventId}/sessions", catalogController.ListEventSessions)
 	mux.HandleFunc("GET /sessions/{sessionId}", catalogController.GetSession)

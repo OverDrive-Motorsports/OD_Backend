@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"overdrive/services/championship-service/src/core/domain"
 )
@@ -28,6 +29,10 @@ type fakeCatalogUseCase struct {
 
 	events  []domain.EventSummary
 	sessErr error
+
+	champSessions    []domain.ChampionshipSession
+	champSessionsErr error
+	lastChampCode    string
 
 	event    *domain.EventSummary
 	eventErr error
@@ -67,6 +72,11 @@ func (f *fakeCatalogUseCase) ListChampionships(ctx context.Context) ([]domain.Ch
 
 func (f *fakeCatalogUseCase) ListEventsByChampionship(ctx context.Context, code string) ([]domain.EventSummary, error) {
 	return f.events, f.sessErr
+}
+
+func (f *fakeCatalogUseCase) ListSessionsByChampionship(ctx context.Context, code string) ([]domain.ChampionshipSession, error) {
+	f.lastChampCode = code
+	return f.champSessions, f.champSessionsErr
 }
 
 func (f *fakeCatalogUseCase) GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error) {
@@ -252,5 +262,45 @@ func TestCatalogController_ListEventSessions_TypeFilter(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "s1" {
 		t.Fatalf("expected only the quali session to match ?type=Qualifying, got %+v", got)
+	}
+}
+
+// TestCatalogController_ListChampionshipSessions covers the route end to end through the
+// router: a bare JSON array with the flattened event context, `[]` (not null, not 404) for a
+// championship without sessions, 404 CHAMPIONSHIP_NOT_FOUND for an unknown code, and 500 on
+// a repository failure.
+func TestCatalogController_ListChampionshipSessions(t *testing.T) {
+	start := time.Date(2024, 3, 2, 15, 0, 0, 0, time.UTC)
+	serve := func(usecase *fakeCatalogUseCase, path string) *httptest.ResponseRecorder {
+		mux := http.NewServeMux()
+		registerCatalogRoutes(mux, NewCatalogController(usecase))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		return rec
+	}
+
+	usecase := &fakeCatalogUseCase{champSessions: []domain.ChampionshipSession{{
+		SessionID: "openf1:session:9472", Name: "Race", Type: "race", Status: "finished", StartTime: start,
+		EventID: "openf1:event:1229", EventName: "Bahrain Grand Prix", SeasonYear: 2024, Circuit: "Bahrain International Circuit",
+	}}}
+	rec := serve(usecase, "/championships/f1/sessions")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || usecase.lastChampCode != "f1" {
+		t.Fatalf("status = %d code=%q body=%s", rec.Code, usecase.lastChampCode, body)
+	}
+	for _, want := range []string{`"sessionId":"openf1:session:9472"`, `"eventName":"Bahrain Grand Prix"`, `"seasonYear":2024`, `"circuit":"Bahrain International Circuit"`, `"startTime":"2024-03-02T15:00:00Z"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected %s in %s", want, body)
+		}
+	}
+
+	if rec := serve(&fakeCatalogUseCase{champSessions: []domain.ChampionshipSession{}}, "/championships/f1/sessions"); rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("empty championship: status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(&fakeCatalogUseCase{}, "/championships/nope/sessions"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "CHAMPIONSHIP_NOT_FOUND") {
+		t.Fatalf("unknown championship: status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(&fakeCatalogUseCase{champSessionsErr: errors.New("db down")}, "/championships/f1/sessions"); rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), "db down") {
+		t.Fatalf("repository failure: status = %d body=%s", rec.Code, rec.Body.String())
 	}
 }

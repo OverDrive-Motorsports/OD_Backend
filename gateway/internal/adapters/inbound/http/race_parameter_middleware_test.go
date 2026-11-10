@@ -33,6 +33,11 @@ func TestValidateRaceParameters(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name:       "championship replay catalog passes",
+			path:       "/v1/race-data/championships/f1/replays",
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "unknown session dataset is rejected",
 			path:       "/v1/race-data/sessions/1/datasets/not-a-dataset",
 			wantStatus: http.StatusBadRequest,

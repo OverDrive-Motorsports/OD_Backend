@@ -31,6 +31,7 @@ type fakeCatalogRepository struct {
 	dataset       domain.SessionDatasetResponse
 	standings     []domain.StandingRow
 	driverProfile *domain.DriverProfile
+	champSessions []domain.ChampionshipSession
 	err           error
 
 	lastTeamID           string
@@ -44,6 +45,11 @@ func (f *fakeCatalogRepository) ListChampionships(ctx context.Context) ([]domain
 
 func (f *fakeCatalogRepository) ListEventsByChampionship(ctx context.Context, code string) ([]domain.EventSummary, error) {
 	return f.events, f.err
+}
+
+func (f *fakeCatalogRepository) ListSessionsByChampionship(ctx context.Context, code string) ([]domain.ChampionshipSession, error) {
+	f.lastChampionshipCode = code
+	return f.champSessions, f.err
 }
 
 func (f *fakeCatalogRepository) GetEvent(ctx context.Context, eventID string) (*domain.EventSummary, error) {
@@ -197,5 +203,27 @@ func TestCatalogQueryUseCase_FilterParametersForwarded(t *testing.T) {
 	}
 	if repo.lastStandingsDriver == nil || *repo.lastStandingsDriver != 44 {
 		t.Fatalf("expected driverNumber=44 to be forwarded, got %v", repo.lastStandingsDriver)
+	}
+}
+
+// TestCatalogQueryUseCase_ListSessionsByChampionship proves the usecase is a pass-through that
+// forwards the championship code and preserves the nil (unknown championship) vs empty list
+// distinction and repository errors.
+func TestCatalogQueryUseCase_ListSessionsByChampionship(t *testing.T) {
+	want := []domain.ChampionshipSession{{SessionID: "s1", EventName: "Bahrain Grand Prix", SeasonYear: 2024}}
+	repo := &fakeCatalogRepository{champSessions: want}
+	got, err := NewCatalogQueryUseCase(repo).ListSessionsByChampionship(context.Background(), "f1")
+	if err != nil || len(got) != 1 || got[0] != want[0] || repo.lastChampionshipCode != "f1" {
+		t.Fatalf("unexpected result: %+v err=%v code=%q", got, err, repo.lastChampionshipCode)
+	}
+
+	got, err = NewCatalogQueryUseCase(&fakeCatalogRepository{}).ListSessionsByChampionship(context.Background(), "nope")
+	if err != nil || got != nil {
+		t.Fatalf("expected (nil, nil) for an unknown championship, got %+v err=%v", got, err)
+	}
+
+	boom := errors.New("db down")
+	if _, err := NewCatalogQueryUseCase(&fakeCatalogRepository{err: boom}).ListSessionsByChampionship(context.Background(), "f1"); !errors.Is(err, boom) {
+		t.Fatalf("expected the repository error, got %v", err)
 	}
 }

@@ -55,6 +55,22 @@ type SessionSummary struct {
 	EndTime      *time.Time `json:"endTime,omitempty"`
 }
 
+// ChampionshipSession is one session of a championship flattened with its event context
+// (name, season, circuit), exposed under GET /championships/{code}/sessions so a client can
+// build a season-wide catalog in a single call.
+type ChampionshipSession struct {
+	SessionID  string     `json:"sessionId"`
+	Name       string     `json:"name,omitempty"`
+	Type       string     `json:"type"`
+	Status     string     `json:"status"`
+	StartTime  time.Time  `json:"startTime"`
+	EndTime    *time.Time `json:"endTime,omitempty"`
+	EventID    string     `json:"eventId"`
+	EventName  string     `json:"eventName"`
+	SeasonYear int        `json:"seasonYear"`
+	Circuit    string     `json:"circuit,omitempty"`
+}
+
 type DriverSummary struct {
 	ID           string `json:"id,omitempty"`
 	DriverNumber int    `json:"driverNumber"`
