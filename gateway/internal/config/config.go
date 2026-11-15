@@ -50,10 +50,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	authToken, err := getRequiredEnv("GATEWAY_AUTH_TOKEN")
-	if err != nil {
-		return Config{}, err
-	}
+	authToken, _ := os.LookupEnv("GATEWAY_AUTH_TOKEN")
 
 	userJWTSecret, err := getRequiredEnv("AUTH_JWT_SECRET")
 	if err != nil {
