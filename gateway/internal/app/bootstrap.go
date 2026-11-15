@@ -25,7 +25,12 @@ type Runtime struct {
 }
 
 func Build(cfg config.Config) (Runtime, error) {
-	tokenValidator := auth.NewStaticTokenValidator(cfg.AuthToken)
+	jwtSecret := cfg.JWTSecret
+	if jwtSecret == "" {
+		jwtSecret = cfg.AuthToken
+	}
+
+	tokenValidator := auth.NewJWTValidator(jwtSecret)
 	healthUseCase := usecases.NewCheckHealthUseCase()
 	authorizeUseCase := usecases.NewAuthorizeRequestUseCase(tokenValidator)
 
