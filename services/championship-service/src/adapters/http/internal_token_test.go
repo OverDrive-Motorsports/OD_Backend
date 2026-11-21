@@ -21,8 +21,8 @@ import (
 const testInternalToken = "internal-token-long-enough-for-the-check"
 
 // TestInternalIngestionEndpoint_RequiresToken proves POST /internal/ingestion/batches, through
-// the real router, answers 401 without the token or with a wrong one — without reaching the
-// usecase — and accepts the batch with the right token.
+// the real router, answers 401 without the token or with a wrong one - without reaching the
+// usecase - and accepts the batch with the right token.
 func TestInternalIngestionEndpoint_RequiresToken(t *testing.T) {
 	for name, token := range map[string]string{"missing": "", "wrong": "internal-token-long-enough-but-not-right"} {
 		usecase := &fakeIngestionUseCase{}

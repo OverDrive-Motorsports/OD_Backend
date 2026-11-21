@@ -51,7 +51,7 @@ Invalid token example on a protected `/v1/*` route:
 curl -i -H "Authorization: Bearer invalid" http://localhost:3000/v1/championship/championships
 ```
 
-Missing header example (now rejected — see Middleware section below):
+Missing header example (now rejected - see Middleware section below):
 
 ```bash
 curl -i http://localhost:3000/v1/championship/championships
@@ -127,7 +127,7 @@ Additional route-specific validation:
 `/v1/*` proxied routes now require a valid `Authorization: Bearer <token>` header.
 A missing header or a header that does not match the configured token both result
 in `401 Unauthorized`. (Previously, requests with no `Authorization` header at all
-were let through unauthenticated — this was a known bypass and has been fixed.)
+were let through unauthenticated - this was a known bypass and has been fixed.)
 
 ## Forwarded Headers
 

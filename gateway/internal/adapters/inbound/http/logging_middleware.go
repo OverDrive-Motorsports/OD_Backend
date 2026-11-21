@@ -14,6 +14,7 @@ package httpinbound
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -30,7 +31,7 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 // Flush forwards to the underlying ResponseWriter's Flush, if it implements
 // http.Flusher. This is required for streaming responses (e.g. Server-Sent
 // Events): embedding the http.ResponseWriter INTERFACE only promotes the
-// methods declared on that interface (Header/Write/WriteHeader) — it does
+// methods declared on that interface (Header/Write/WriteHeader) - it does
 // NOT promote Flush(), since that belongs to the separate http.Flusher
 // interface, even though the concrete *http.response underneath implements
 // it. Without this explicit forward, statusRecorder silently breaks
@@ -39,7 +40,7 @@ func (r *statusRecorder) WriteHeader(statusCode int) {
 // frame-by-frame. No current route in this codebase streams a response
 // (race-data-service's former /race/replay/stream SSE endpoint was replaced
 // by the plain-JSON /race/replay bulk dump), so this forwarding is currently
-// unexercised in production — kept in place, and covered by
+// unexercised in production - kept in place, and covered by
 // flush_passthrough_test.go, as a guard for the next streaming endpoint. Any future
 // ResponseWriter wrapper added to this package's middleware chain needs the
 // same treatment (Flush and, if ever needed, Hijack/Push/etc.).
@@ -56,6 +57,6 @@ func RequestLogger(next http.Handler) http.Handler {
 
 		next.ServeHTTP(recorder, r)
 
-		log.Printf("%s %s status=%d duration=%s remote=%s", r.Method, r.URL.Path, recorder.statusCode, time.Since(start).Round(time.Millisecond), r.RemoteAddr)
+		log.Printf("%s %s status=%d duration=%s remote=%s", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), recorder.statusCode, time.Since(start).Round(time.Millisecond), strconv.Quote(r.RemoteAddr))
 	})
 }

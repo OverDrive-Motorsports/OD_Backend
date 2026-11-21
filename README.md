@@ -86,7 +86,7 @@ The active Docker Compose stack runs the full backend:
 prefix (`/auth`, `/presets`, `/v1/championship`,
 `/v1/race-data`, `/v1/ingestion`) is reachable once the stack is up.
 `/presets` (user-data-service) authenticates with the user's access token from
-`POST /auth/login`, not the gateway token — see `gateway/ROUTES.md`.
+`POST /auth/login`, not the gateway token - see `gateway/ROUTES.md`.
 
 ## Default ports
 
@@ -116,13 +116,13 @@ URLs). Upgrading a checkout that already has a database: see "Upgrading an exist
 | `GATEWAY_AUTH_TOKEN` | `gateway` | bearer token required on every `/v1/...` route |
 | `GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST` | `gateway` | rate limiter tuning |
 | `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
-| `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder — the three refuse to start otherwise |
-| `INTERNAL_INGESTION_TOKEN` | `ingestion-service`, `championship-service`, `race-data-service` | **required**, at least 32 bytes — protects `POST /internal/ingestion/batches` (sent by the ingestion dispatcher in `X-Internal-Token`) |
+| `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder - the three refuse to start otherwise |
+| `INTERNAL_INGESTION_TOKEN` | `ingestion-service`, `championship-service`, `race-data-service` | **required**, at least 32 bytes - protects `POST /internal/ingestion/batches` (sent by the ingestion dispatcher in `X-Internal-Token`) |
 
 ## Database setup
 
 The backend uses one PostgreSQL database per service.
-Root Prisma commands resolve the service-specific `.env` file automatically based on the selected schema.
+`tools/prisma.sh` resolves the service-specific `.env` file automatically based on the selected service.
 
 Start only PostgreSQL:
 
@@ -163,32 +163,27 @@ Do not point multiple services to the same physical database in deployment.
 
 ## Prisma utilities
 
-Install the local Node dev dependencies before running Prisma Studio or validation commands:
+`tools/prisma.sh` runs any Prisma CLI command on one service schema with the CLI embedded in
+`prisma-client-go`, the same version the `*-dbsync` jobs use to push the schemas, so it only needs
+Go. Studio is the exception: the embedded CLI cannot run it, so the script starts it with
+`npx prisma@<embedded version>`, which needs Node.js.
+
+Validate the four schemas (`auth`, `user-data`, `championship`, `race-data`):
 
 ```bash
-npm install
+tools/prisma.sh all validate
 ```
 
-Validate the active Prisma schemas:
+Open Prisma Studio on a running stack:
 
 ```bash
-npm run prisma:validate:active
+tools/prisma.sh championship studio --port 5555
+tools/prisma.sh race-data studio --port 5556
 ```
 
-All four schemas (`auth`, `user-data`, `championship`, `race-data`) are pushed by their
-own `*-dbsync` Compose job. `npm run prisma:validate:active` only covers the
-`championship` and `race-data` schemas; use `npm run prisma:validate:auth` /
-`npm run prisma:validate:user-data` for the other two.
-
-Open Prisma Studio for the active databases:
-
-```bash
-npx prisma studio --schema services/championship-service/resources/schema.prisma --port 5555
-npx prisma studio --schema services/race-data-service/resources/schema.prisma --port 5556
-```
-
-`prisma.config.ts` builds the connection URL from `POSTGRES_USER` / `POSTGRES_PASSWORD` in the
-root `.env` (or uses the schema's `*_DATABASE_URL` when it is set).
+The script uses the schema's `*_DATABASE_URL` when it is set (environment, then the service
+`.env`); otherwise it builds the URL from `POSTGRES_USER` / `POSTGRES_PASSWORD` in the root
+`.env` for `localhost:5432`. The `.env` files are parsed, never executed.
 
 ## Ingestion quick start
 
@@ -213,29 +208,34 @@ Then ingest race-data resources in manageable batches. Large driver-scoped resou
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push (all branches) and on every pull request.
-Because there is no root Go module, every check runs **per module** across the nine
-modules (`gateway`, the five `services/*`, `shared/apierror`, `shared/bootstrap`,
-`shared/contracts`):
+Because there is no root Go module, every check runs **per module** across the ten
+modules (`gateway`, the five `services/*`, `shared/apierror`, `shared/authjwt`,
+`shared/bootstrap`, `shared/contracts`), with Go 1.27:
 
 | Check | What it runs |
 | --- | --- |
-| `lint` | `gofmt -l` must report nothing (excluding generated `resources/db`) and `go vet ./...` |
+| `lint` | `gofmt -l` must report nothing (excluding generated `resources/db`), then `go vet`, `staticcheck`, `gosec` (generated code excluded) and `govulncheck` on `./...` |
 | `test` | `go test ./... -race` |
-| `build` | `go build ./...` |
+| `build` | `go build ./...` in the workspace, then again with `GOWORK=off`: each `go.mod` declares its real dependencies and the `replace` directives for `shared/*`, so a module builds on its own |
+
+An accepted analyzer finding carries an inline `//lint:ignore <check> <reason>` (staticcheck) or
+`// #nosec <rule> -- <reason>` (gosec). Analyzer versions are pinned in `ci.yml`.
+
+GitHub Actions are pinned by commit SHA. Dependencies, actions and images are updated by hand.
 
 Each check is a matrix of per-module jobs (`lint (gateway)`, `test (gateway)`, ...) plus
-an aggregate job with the stable name `lint`, `test`, or `build` — those three are the
+an aggregate job with the stable name `lint`, `test`, or `build` - those three are the
 names to use as required status checks in branch protection.
 
 The Prisma Go clients under `services/*/resources/db` are generated artifacts and are
 gitignored, so CI regenerates them (`go run github.com/steebchen/prisma-client-go
-generate`) for `auth-service`, `championship-service`, and `race-data-service` before
-building or testing them. Generation needs no database connection.
+generate`) for `auth-service`, `user-data-service`, `championship-service`, and
+`race-data-service` before building or testing them. Generation needs no database connection.
 
 Reproduce a check locally, e.g.:
 
 ```bash
-cd services/championship-service && gofmt -l . && go vet ./... && go test ./... -race && go build ./...
+cd services/championship-service && gofmt -l . && go vet ./... && go test ./... -race && go build ./... && GOWORK=off go build ./...
 ```
 
 ## Security

@@ -21,7 +21,7 @@ import (
 
 // TestSecurityHeaders_OnGatewayAndProxiedResponses proves the hardening headers are on the
 // gateway's own responses (a 401 written before any proxying, /health) and on proxied
-// responses — exactly once, even when the upstream already sets them.
+// responses - exactly once, even when the upstream already sets them.
 func TestSecurityHeaders_OnGatewayAndProxiedResponses(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Frame-Options", "DENY")

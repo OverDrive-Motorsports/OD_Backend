@@ -553,7 +553,7 @@ func TestIsRemoteDataset(t *testing.T) {
 }
 
 // TestIntFromAny_SessionQuery covers every supported dynamic-value branch of the session_query
-// package's intFromAny, including the string-parsing and empty-string/unsupported-type fallbacks.
+// package's intFromAny, including the string-parsing, non-numeric, empty-string and unsupported-type fallbacks.
 func TestIntFromAny_SessionQuery(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -565,6 +565,8 @@ func TestIntFromAny_SessionQuery(t *testing.T) {
 		{"int64", int64(7), 7},
 		{"float64", float64(8.9), 8},
 		{"numeric string", "9", 9},
+		{"numeric prefix keeps the leading number", "12abc", 12},
+		{"non-numeric string", "abc", 0},
 		{"empty string", "", 0},
 		{"unsupported type", true, 0},
 	}

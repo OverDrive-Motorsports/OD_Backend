@@ -1,3 +1,3 @@
 module overdrive/shared/contracts
 
-go 1.22
+go 1.27

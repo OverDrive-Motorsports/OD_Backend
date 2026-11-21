@@ -43,7 +43,7 @@ func TestNewVerifier_RequiresSecret(t *testing.T) {
 }
 
 // TestValidateSecret_Strength proves a secret shorter than MinSecretBytes, or equal to the
-// template placeholder, is refused as weak — including by NewVerifier — while a 32-byte secret
+// template placeholder, is refused as weak - including by NewVerifier - while a 32-byte secret
 // is accepted.
 func TestValidateSecret_Strength(t *testing.T) {
 	for _, secret := range []string{"secret", "dev-local-jwt-secret", strings.Repeat("a", MinSecretBytes-1), "change-me-in-production"} {
@@ -114,7 +114,7 @@ func TestBearerToken(t *testing.T) {
 }
 
 // TestVerifier_VerifyBearerHeader proves the three outcomes callers map to distinct 401 codes:
-// ErrMissingToken (no / non-Bearer header), ErrTokenExpired, ErrInvalidToken — and the user ID
+// ErrMissingToken (no / non-Bearer header), ErrTokenExpired, ErrInvalidToken - and the user ID
 // on success.
 func TestVerifier_VerifyBearerHeader(t *testing.T) {
 	verifier, _ := NewVerifier(testSecret)

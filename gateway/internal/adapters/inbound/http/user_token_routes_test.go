@@ -29,7 +29,7 @@ const userJWTSecret = "gateway-test-secret-long-enough-for-hs256"
 // TestNewHandler_UserTokenRoutes proves /presets is authorised with a user JWT (and rejects the
 // static gateway token), while other prefixes keep requiring the static token (and reject a
 // user JWT). The upstream receives the caller's Authorization header unchanged so it can
-// re-verify the JWT itself. On /presets, each rejection carries its own 401 code — in
+// re-verify the JWT itself. On /presets, each rejection carries its own 401 code - in
 // particular TOKEN_EXPIRED, which tells the client to refresh instead of logging in again.
 func TestNewHandler_UserTokenRoutes(t *testing.T) {
 	var gotAuthorization string
