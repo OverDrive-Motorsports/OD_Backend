@@ -28,11 +28,16 @@ func signUserToken(t *testing.T, secret string, exp time.Time) string {
 	return token
 }
 
+// validatorSecret is long enough for authjwt.ValidateSecret (32 bytes minimum).
+const validatorSecret = "validator-secret-long-enough-for-hs256"
+
 // TestNewUserTokenValidator_RequiresSecret proves the gateway cannot be built without
-// AUTH_JWT_SECRET.
+// AUTH_JWT_SECRET, nor with a weak one (shorter than 32 bytes).
 func TestNewUserTokenValidator_RequiresSecret(t *testing.T) {
-	if _, err := NewUserTokenValidator(""); err == nil {
-		t.Fatal("expected an error for an empty secret")
+	for _, secret := range []string{"", "dev-local-jwt-secret"} {
+		if _, err := NewUserTokenValidator(secret); err == nil {
+			t.Fatalf("expected an error for secret %q", secret)
+		}
 	}
 }
 
@@ -40,11 +45,11 @@ func TestNewUserTokenValidator_RequiresSecret(t *testing.T) {
 // reason the gateway turns into a distinct 401 code — and that the static gateway token is not
 // a valid user token.
 func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
-	validator, err := NewUserTokenValidator("secret")
+	validator, err := NewUserTokenValidator(validatorSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validator.ValidateUserBearerHeader("Bearer " + signUserToken(t, "secret", time.Now().Add(time.Minute))); err != nil {
+	if err := validator.ValidateUserBearerHeader("Bearer " + signUserToken(t, validatorSecret, time.Now().Add(time.Minute))); err != nil {
 		t.Fatalf("expected a valid user JWT to be accepted, got %v", err)
 	}
 	cases := map[string]struct {
@@ -52,9 +57,9 @@ func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
 		want   error
 	}{
 		"empty":        {"", domain.ErrMissingUserToken},
-		"no scheme":    {signUserToken(t, "secret", time.Now().Add(time.Minute)), domain.ErrMissingUserToken},
-		"expired":      {"Bearer " + signUserToken(t, "secret", time.Now().Add(-time.Minute)), domain.ErrUserTokenExpired},
-		"wrong secret": {"Bearer " + signUserToken(t, "other", time.Now().Add(time.Minute)), domain.ErrInvalidUserToken},
+		"no scheme":    {signUserToken(t, validatorSecret, time.Now().Add(time.Minute)), domain.ErrMissingUserToken},
+		"expired":      {"Bearer " + signUserToken(t, validatorSecret, time.Now().Add(-time.Minute)), domain.ErrUserTokenExpired},
+		"wrong secret": {"Bearer " + signUserToken(t, "another-secret-long-enough-for-hs256-keys", time.Now().Add(time.Minute)), domain.ErrInvalidUserToken},
 		"static token": {"Bearer gateway-static-token", domain.ErrInvalidUserToken},
 	}
 	for name, tc := range cases {

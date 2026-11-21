@@ -12,6 +12,7 @@
 package httpinbound
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"overdrive/gateway/internal/core/usecases"
@@ -31,6 +32,7 @@ func NewHandler(
 	serviceHealthRoutes map[string][]*url.URL,
 	rateLimitRPS float64,
 	rateLimitBurst float64,
+	trustedProxies []*net.IPNet,
 	healthUseCase usecases.CheckHealthUseCase,
 	authorizeUseCase usecases.AuthorizeRequestUseCase,
 	userAuthorizeUseCase usecases.AuthorizeUserRequestUseCase,
@@ -76,7 +78,8 @@ func NewHandler(
 	}
 
 	// Global middleware order for every route:
-	// 1) Rate limit at the edge
+	// 1) Security headers, so every response carries them (including 429 and 401)
 	// 2) Request logging on final status
-	return RequestLogger(RateLimit(rateLimitRPS, rateLimitBurst, mux)), nil
+	// 3) Rate limit at the edge
+	return SecurityHeaders(RequestLogger(RateLimit(rateLimitRPS, rateLimitBurst, trustedProxies, mux))), nil
 }

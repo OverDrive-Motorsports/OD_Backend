@@ -4,22 +4,25 @@ import { defineConfig } from "prisma/config";
 
 const DEFAULT_SCHEMA = "services/auth-service/resources/schema.prisma";
 const ROOT_ENV_PATH = path.resolve(".env");
-const schemaConfigMap: Record<string, { envName: string; fallbackUrl: string }> = {
+// Each schema's connection URL comes from its *_DATABASE_URL variable or, for host-side tools
+// (Prisma Studio, validate), is built from the root .env credentials. No credential is
+// hard-coded here.
+const schemaConfigMap: Record<string, { envName: string; database: string }> = {
   "services/auth-service/resources/schema.prisma": {
     envName: "AUTH_DATABASE_URL",
-    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_auth?schema=public",
+    database: "overdrive_auth",
   },
   "services/user-data-service/resources/schema.prisma": {
     envName: "USER_DATA_DATABASE_URL",
-    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_user_data?schema=public",
+    database: "overdrive_user_data",
   },
   "services/championship-service/resources/schema.prisma": {
     envName: "CHAMPIONSHIP_DATABASE_URL",
-    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_championship?schema=public",
+    database: "overdrive_championship",
   },
   "services/race-data-service/resources/schema.prisma": {
     envName: "RACE_DATA_DATABASE_URL",
-    fallbackUrl: "postgresql://postgres:postgres@localhost:5432/overdrive_race_data?schema=public",
+    database: "overdrive_race_data",
   },
 };
 
@@ -85,7 +88,19 @@ const [schema, schemaConfig] = schemaEntry;
 
 loadServiceEnv(schema);
 
-const datasourceUrl = process.env[schemaConfig.envName] ?? schemaConfig.fallbackUrl;
+// Without credentials (e.g. `prisma validate` on a machine with no .env), a URL with no user
+// or password is returned: commands that never connect keep working, and commands that do
+// connect (Studio) fail with Postgres' own authentication error.
+function localDatabaseUrl(database: string): string {
+  const user = process.env.POSTGRES_USER;
+  const password = process.env.POSTGRES_PASSWORD;
+  if (!user || !password) {
+    return `postgresql://localhost:5432/${database}?schema=public`;
+  }
+  return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@localhost:5432/${database}?schema=public`;
+}
+
+const datasourceUrl = process.env[schemaConfig.envName] ?? localDatabaseUrl(schemaConfig.database);
 
 export default defineConfig({
   schema,

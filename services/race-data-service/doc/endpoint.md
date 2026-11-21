@@ -8,6 +8,11 @@ Returns the runtime status of the service.
 
 Internal endpoint used by `ingestion-service` to persist normalized race-oriented datasets.
 
+Requires the header `X-Internal-Token: <INTERNAL_INGESTION_TOKEN>` (the shared secret of the
+root `.env`, compared in constant time). Missing or wrong token: `401`
+`{"error":{"code":"UNAUTHORIZED","status":401,"message":"invalid internal token"}}`, returned
+before the body is read. The service refuses to start without a token of at least 32 bytes.
+
 Accepted dataset names:
 
 - `lap_timing`

@@ -34,7 +34,7 @@ func main() {
 
 	provider := openf1.NewClient(cfg.OpenF1BaseURL, cfg.OpenF1Timeout, cfg.OpenF1RetryCount, cfg.OpenF1RetryDelay)
 	mapper := openf1.NewMapper()
-	dispatcher := httpdispatcher.NewDispatcher(cfg.RaceDataServiceURL, cfg.ChampionshipServiceURL, cfg.DispatchTimeout)
+	dispatcher := httpdispatcher.NewDispatcher(cfg.RaceDataServiceURL, cfg.ChampionshipServiceURL, cfg.InternalIngestionToken, cfg.DispatchTimeout)
 	ingestUseCase := usecases.NewIngestOpenF1UseCase(provider, mapper, dispatcher)
 	ingestionController := httpadapter.NewIngestionController(ingestUseCase)
 

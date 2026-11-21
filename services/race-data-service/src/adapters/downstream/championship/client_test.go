@@ -295,3 +295,34 @@ func TestClient_ListChampionshipSessions(t *testing.T) {
 		t.Fatal("expected an error on a 500 response")
 	}
 }
+
+// TestClient_PathSegmentsAreEscaped proves client-supplied identifiers cannot change the path
+// called on championship-service: "/" and ".." stay inside one escaped segment (no traversal to
+// another route), while regular IDs such as "openf1:session:9998" are sent unchanged.
+func TestClient_PathSegmentsAreEscaped(t *testing.T) {
+	var gotPaths []string
+	client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPaths = append(gotPaths, r.URL.EscapedPath())
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ctx := context.Background()
+	_, _ = client.GetSession(ctx, "../../internal/ingestion/batches")
+	_, _ = client.GetSessionDataset(ctx, "openf1:session:9998", "laps/../../x")
+	_, _ = client.ListChampionshipEvents(ctx, "f1/../x")
+	_, _ = client.GetSession(ctx, "openf1:session:9998")
+
+	want := []string{
+		"/sessions/..%2F..%2Finternal%2Fingestion%2Fbatches",
+		"/sessions/openf1:session:9998/datasets/laps%2F..%2F..%2Fx",
+		"/championships/f1%2F..%2Fx/events",
+		"/sessions/openf1:session:9998",
+	}
+	if len(gotPaths) != len(want) {
+		t.Fatalf("expected %d calls, got %v", len(want), gotPaths)
+	}
+	for index := range want {
+		if gotPaths[index] != want[index] {
+			t.Fatalf("call %d: path = %q, want %q", index, gotPaths[index], want[index])
+		}
+	}
+}

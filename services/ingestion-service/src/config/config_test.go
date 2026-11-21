@@ -127,6 +127,7 @@ func requiredEnv(t *testing.T) {
 	t.Setenv("HTTP_PORT", "3005")
 	t.Setenv("RACE_DATA_SERVICE_URL", "http://race-data-service:3004")
 	t.Setenv("CHAMPIONSHIP_SERVICE_URL", "http://championship-service:3003")
+	t.Setenv("INTERNAL_INGESTION_TOKEN", "internal-token-long-enough-for-the-check")
 }
 
 // TestLoad_AllRequiredPresent proves Load succeeds and populates both the shared bootstrap
@@ -152,6 +153,9 @@ func TestLoad_AllRequiredPresent(t *testing.T) {
 	if cfg.OpenF1RetryCount != 5 {
 		t.Fatalf("OpenF1RetryCount = %d, want 5 (env override)", cfg.OpenF1RetryCount)
 	}
+	if cfg.InternalIngestionToken != "internal-token-long-enough-for-the-check" {
+		t.Fatalf("InternalIngestionToken = %q", cfg.InternalIngestionToken)
+	}
 	if cfg.OpenF1BaseURL != "https://api.openf1.org/v1" {
 		t.Fatalf("OpenF1BaseURL = %q, want the default", cfg.OpenF1BaseURL)
 	}
@@ -169,5 +173,21 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Fatal("expected an error when RACE_DATA_SERVICE_URL is missing")
+	}
+}
+
+// TestLoad_InternalTokenRequired proves the service refuses to start when
+// INTERNAL_INGESTION_TOKEN is missing or shorter than 32 bytes: without it every dispatch
+// would be rejected by the receiving services.
+func TestLoad_InternalTokenRequired(t *testing.T) {
+	for name, value := range map[string]string{"missing": "", "too short": "short-token"} {
+		t.Run(name, func(t *testing.T) {
+			withTempEnvFile(t)
+			requiredEnv(t)
+			t.Setenv("INTERNAL_INGESTION_TOKEN", value)
+			if _, err := Load(); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
 	}
 }

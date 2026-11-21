@@ -11,7 +11,10 @@
 
 package auth
 
-import "strings"
+import (
+	"crypto/subtle"
+	"strings"
+)
 
 type StaticTokenValidator struct {
 	expectedToken string
@@ -41,5 +44,7 @@ func (v StaticTokenValidator) ValidateBearerHeader(header string) bool {
 		return false
 	}
 
-	return token == v.expectedToken
+	// Constant-time comparison: a plain == returns as soon as a byte differs, which leaks how
+	// much of the token an attacker guessed right through response timing.
+	return subtle.ConstantTimeCompare([]byte(token), []byte(v.expectedToken)) == 1
 }

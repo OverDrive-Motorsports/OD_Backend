@@ -11,7 +11,8 @@ package httpadapter
 
 import "net/http"
 
-// NewRouter builds and returns a router with its required dependencies.
+// NewRouter builds and returns a router with its required dependencies. internalToken protects
+// POST /internal/ingestion/batches (see requireInternalToken).
 func NewRouter(
 	healthController *HealthController,
 	ingestionController *IngestionController,
@@ -20,13 +21,14 @@ func NewRouter(
 	telemetryController *TelemetryController,
 	raceReplayStreamController *RaceReplayStreamController,
 	replayCatalogController *ReplayCatalogController,
+	internalToken string,
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthController.GetHealth)
-	mux.Handle("POST /internal/ingestion/batches", limitRequestBody(
+	mux.Handle("POST /internal/ingestion/batches", requireInternalToken(internalToken, limitRequestBody(
 		http.HandlerFunc(ingestionController.ReceiveBatch),
 		internalIngestionBodyLimitBytes,
-	))
+	)))
 	registerSessionRoutes(mux, sessionController)
 	registerRaceLiveRoutes(mux, raceLiveController)
 	registerTelemetryRoutes(mux, telemetryController)
