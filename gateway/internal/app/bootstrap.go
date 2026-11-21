@@ -25,7 +25,7 @@ type Runtime struct {
 }
 
 func Build(cfg config.Config) (Runtime, error) {
-	tokenValidator := auth.NewJWTValidator(cfg.UserJWTSecret)
+	tokenValidator := auth.NewStaticTokenValidator(cfg.AuthToken)
 	healthUseCase := usecases.NewCheckHealthUseCase()
 	authorizeUseCase := usecases.NewAuthorizeRequestUseCase(tokenValidator)
 	userTokenValidator, err := auth.NewUserTokenValidator(cfg.UserJWTSecret)
@@ -39,6 +39,7 @@ func Build(cfg config.Config) (Runtime, error) {
 		cfg.ServiceHealthRoutes,
 		cfg.RateLimitRPS,
 		cfg.RateLimitBurst,
+		cfg.TrustedProxies,
 		healthUseCase,
 		authorizeUseCase,
 		userAuthorizeUseCase,

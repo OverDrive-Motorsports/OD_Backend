@@ -34,8 +34,9 @@ type ReverseProxy struct {
 func NewReverseProxy(routePrefix string, targets []*url.URL) (*ReverseProxy, error) {
 	rp := &ReverseProxy{routePrefix: normalizePrefix(routePrefix), targets: targets}
 	rp.proxy = &httputil.ReverseProxy{
-		Director:     rp.director,
-		ErrorHandler: rp.handleProxyError,
+		Director:       rp.director,
+		ModifyResponse: stripSecurityHeaders,
+		ErrorHandler:   rp.handleProxyError,
 	}
 
 	return rp, nil

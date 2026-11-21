@@ -162,8 +162,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
    results and standings go to `championship-service`; laps, telemetry, positions,
    race control, weather, radio, etc. go to `race-data-service`.
 3. It **dispatches** each batch over internal HTTP to the target's
-   `POST /internal/ingestion/batches`. This endpoint has no authentication of its
-   own: it relies on not being reachable from outside (see `docs/security.md`).
+   `POST /internal/ingestion/batches`, with the shared `INTERNAL_INGESTION_TOKEN` in the
+   `X-Internal-Token` header: without it the receiving service answers `401` before reading
+   the body (see `docs/security.md`).
 4. `race-data-service`'s `AcceptIngestionBatchUseCase` writes the rows. For
    `race_control`, the session's existing `RaceControlEvent` rows are deleted then
    the fresh ones inserted, and the new events are **published** to the broadcaster

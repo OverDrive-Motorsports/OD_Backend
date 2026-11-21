@@ -97,18 +97,27 @@ prefix (`/auth`, `/presets`, `/v1/championship`,
 - `race-data-service`: `3004`
 - `ingestion-service`: `3005`
 
-Each service includes a scaffolded `.env.template`. Local `.env` files are ignored by git.
+Only the gateway port is published to the network. The service ports and Postgres (`5432`) are
+bound to `127.0.0.1`: reachable from your machine for debugging, not from another one.
+
+Each service also has a `.env.template` to run it alone outside Docker (`go run`); it holds no
+secret value. Local `.env` files are ignored by git.
 
 ## Root environment file
 
-Docker Compose reads the root `.env` (copy it from `.env.template`). Required keys:
+Docker Compose reads the root `.env` (copy it from `.env.template`). Secrets ship empty: generate
+each one with `openssl rand -hex 32` (hex, because the Postgres password is embedded in database
+URLs). Upgrading a checkout that already has a database: see "Upgrading an existing checkout" in
+`docs/getting-started.md`. Required keys:
 
 | Variable | Used by | Notes |
 | --- | --- | --- |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`, every service's database URL | dev credentials only |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`, every service's database URL | `POSTGRES_PASSWORD` must be set |
 | `GATEWAY_AUTH_TOKEN` | `gateway` | bearer token required on every `/v1/...` route |
 | `GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST` | `gateway` | rate limiter tuning |
-| `AUTH_JWT_SECRET` | `auth-service` | **required** — `auth-service` exits at startup if it is unset (there is no insecure fallback), so the container will crash-loop without it |
+| `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
+| `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder — the three refuse to start otherwise |
+| `INTERNAL_INGESTION_TOKEN` | `ingestion-service`, `championship-service`, `race-data-service` | **required**, at least 32 bytes — protects `POST /internal/ingestion/batches` (sent by the ingestion dispatcher in `X-Internal-Token`) |
 
 ## Database setup
 
@@ -174,12 +183,12 @@ own `*-dbsync` Compose job. `npm run prisma:validate:active` only covers the
 Open Prisma Studio for the active databases:
 
 ```bash
-CHAMPIONSHIP_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_championship?schema=public' \
 npx prisma studio --schema services/championship-service/resources/schema.prisma --port 5555
-
-RACE_DATA_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_race_data?schema=public' \
 npx prisma studio --schema services/race-data-service/resources/schema.prisma --port 5556
 ```
+
+`prisma.config.ts` builds the connection URL from `POSTGRES_USER` / `POSTGRES_PASSWORD` in the
+root `.env` (or uses the schema's `*_DATABASE_URL` when it is set).
 
 ## Ingestion quick start
 

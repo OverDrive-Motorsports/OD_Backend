@@ -37,7 +37,7 @@ func main() {
 	// preset request can be authenticated, so the service refuses to start.
 	verifier, err := authjwt.NewVerifier(os.Getenv("AUTH_JWT_SECRET"))
 	if err != nil {
-		log.Fatal("AUTH_JWT_SECRET is required")
+		log.Fatalf("AUTH_JWT_SECRET: %v (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()

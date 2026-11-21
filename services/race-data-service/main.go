@@ -34,6 +34,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// INTERNAL_INGESTION_TOKEN protects POST /internal/ingestion/batches: only ingestion-service
+	// knows it. Refusing to start without it keeps the write endpoint from ever being open.
+	internalToken := os.Getenv("INTERNAL_INGESTION_TOKEN")
+	if err := httpadapter.ValidateInternalToken(internalToken); err != nil {
+		log.Fatalf("INTERNAL_INGESTION_TOKEN: %v (generate one with: openssl rand -hex 32)", err)
+	}
+
 	client := db.NewClient()
 	if err := client.Prisma.Connect(); err != nil {
 		log.Fatal(err)
@@ -89,6 +96,7 @@ func main() {
 			telemetryController,
 			raceReplayStreamController,
 			replayCatalogController,
+			internalToken,
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

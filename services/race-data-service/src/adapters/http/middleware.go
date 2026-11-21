@@ -9,7 +9,14 @@
 
 package httpadapter
 
-import "net/http"
+import (
+	"crypto/subtle"
+	"errors"
+	"fmt"
+	"net/http"
+
+	"overdrive/shared/apierror"
+)
 
 const internalIngestionBodyLimitBytes int64 = 256 << 20
 
@@ -27,4 +34,36 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 // limitRequestBody caps request bodies before JSON decoding.
 func limitRequestBody(next http.Handler, limitBytes int64) http.Handler {
 	return http.MaxBytesHandler(next, limitBytes)
+}
+
+// InternalTokenHeader carries the service-to-service secret on the internal ingestion endpoint.
+const InternalTokenHeader = "X-Internal-Token"
+
+// MinInternalTokenBytes is the minimum length of INTERNAL_INGESTION_TOKEN (256 bits).
+const MinInternalTokenBytes = 32
+
+// ErrWeakInternalToken is returned by ValidateInternalToken for a missing or too short token.
+var ErrWeakInternalToken = errors.New("internal ingestion token is missing or too short")
+
+// ValidateInternalToken reports whether token can protect the internal ingestion endpoint; the
+// service refuses to start otherwise, so the endpoint is never left open by mistake.
+func ValidateInternalToken(token string) error {
+	if len(token) < MinInternalTokenBytes {
+		return fmt.Errorf("%w: at least %d bytes required", ErrWeakInternalToken, MinInternalTokenBytes)
+	}
+	return nil
+}
+
+// requireInternalToken lets a request through only when it carries the service-to-service
+// secret in InternalTokenHeader (compared in constant time). It runs before the body limit, so
+// an unauthenticated caller cannot make the service read a large body.
+func requireInternalToken(expected string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got := r.Header.Get(InternalTokenHeader)
+		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
+			apierror.Write(w, r.URL.Path, apierror.Unauthorized("invalid internal token", nil))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
