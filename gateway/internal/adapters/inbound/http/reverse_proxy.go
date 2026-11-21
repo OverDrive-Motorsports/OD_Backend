@@ -35,6 +35,7 @@ type ReverseProxy struct {
 func NewReverseProxy(routePrefix string, targets []*url.URL) (*ReverseProxy, error) {
 	rp := &ReverseProxy{routePrefix: normalizePrefix(routePrefix), targets: targets}
 	rp.proxy = &httputil.ReverseProxy{
+		//lint:ignore SA1019 moving to Rewrite changes the X-Forwarded-* headers sent upstream; tracked separately.
 		Director:       rp.director,
 		ModifyResponse: stripSecurityHeaders,
 		ErrorHandler:   rp.handleProxyError,

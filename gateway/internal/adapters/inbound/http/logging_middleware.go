@@ -57,6 +57,6 @@ func RequestLogger(next http.Handler) http.Handler {
 
 		next.ServeHTTP(recorder, r)
 
-		log.Printf("%s %s status=%d duration=%s remote=%s", r.Method, strconv.Quote(r.URL.Path), recorder.statusCode, time.Since(start).Round(time.Millisecond), r.RemoteAddr)
+		log.Printf("%s %s status=%d duration=%s remote=%s", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), recorder.statusCode, time.Since(start).Round(time.Millisecond), strconv.Quote(r.RemoteAddr))
 	})
 }

@@ -49,13 +49,13 @@ func TestRequestLogger_QuotesPathSoItCannotForgeLogLines(t *testing.T) {
 	if strings.Contains(got, "\n") {
 		t.Fatalf("log output spans several lines: %q", got)
 	}
-	if !strings.HasPrefix(got, `GET "/v1/x\nGET /admin status=200" status=204 `) {
+	if !strings.HasPrefix(got, `"GET" "/v1/x\nGET /admin status=200" status=204 `) {
 		t.Fatalf("unexpected log line: %q", got)
 	}
 }
 
-// TestRequestLogger_LogsPlainPathQuoted proves the normal line format: method,
-// quoted path and recorded status.
+// TestRequestLogger_LogsPlainPathQuoted proves the normal line format: quoted
+// method, quoted path, recorded status and quoted remote address.
 func TestRequestLogger_LogsPlainPathQuoted(t *testing.T) {
 	buf := captureLog(t)
 	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -64,8 +64,11 @@ func TestRequestLogger_LogsPlainPathQuoted(t *testing.T) {
 
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/v1/race-data/sessions", nil))
 
-	if !strings.HasPrefix(buf.String(), `POST "/v1/race-data/sessions" status=418 `) {
+	if !strings.HasPrefix(buf.String(), `"POST" "/v1/race-data/sessions" status=418 `) {
 		t.Fatalf("unexpected log line: %q", buf.String())
+	}
+	if !strings.HasSuffix(buf.String(), ` remote="192.0.2.1:1234"`+"\n") {
+		t.Fatalf("remote address not quoted: %q", buf.String())
 	}
 }
 
