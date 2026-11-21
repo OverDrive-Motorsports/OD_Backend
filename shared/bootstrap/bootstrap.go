@@ -84,7 +84,7 @@ func loadDotEnv(serviceName string) error {
 
 // applyDotEnvFile reads key/value pairs from a .env file into the process environment.
 func applyDotEnvFile(path string) error {
-	file, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return err
 	}

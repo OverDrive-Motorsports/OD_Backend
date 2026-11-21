@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	googleAuthURL     = "https://accounts.google.com/o/oauth2/v2/auth"
-	googleTokenURL    = "https://oauth2.googleapis.com/token"
-	googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"
+	googleAuthURL         = "https://accounts.google.com/o/oauth2/v2/auth"
+	googleCodeExchangeURL = "https://oauth2.googleapis.com/token"
+	googleUserInfoURL     = "https://openidconnect.googleapis.com/v1/userinfo"
 )
 
 // NewGoogleProvider builds the Google provider. Only credentials and the redirect URL are
@@ -29,7 +29,7 @@ func NewGoogleProvider(clientID string, clientSecret string, redirectURL string)
 		ClientSecret:    clientSecret,
 		RedirectURL:     redirectURL,
 		AuthURL:         googleAuthURL,
-		TokenURL:        googleTokenURL,
+		TokenURL:        googleCodeExchangeURL,
 		UserInfoURL:     googleUserInfoURL,
 		Scopes:          []string{"openid", "email", "profile"},
 		ExtraAuthParams: url.Values{"prompt": {"select_account"}},

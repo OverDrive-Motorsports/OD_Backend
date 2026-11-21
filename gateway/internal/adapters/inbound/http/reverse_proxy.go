@@ -18,6 +18,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -34,6 +35,7 @@ type ReverseProxy struct {
 func NewReverseProxy(routePrefix string, targets []*url.URL) (*ReverseProxy, error) {
 	rp := &ReverseProxy{routePrefix: normalizePrefix(routePrefix), targets: targets}
 	rp.proxy = &httputil.ReverseProxy{
+		//lint:ignore SA1019 moving to Rewrite changes the X-Forwarded-* headers sent upstream; tracked separately.
 		Director:       rp.director,
 		ModifyResponse: stripSecurityHeaders,
 		ErrorHandler:   rp.handleProxyError,
@@ -80,7 +82,7 @@ func (p *ReverseProxy) nextTarget() *url.URL {
 }
 
 func (p *ReverseProxy) handleProxyError(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("proxy error for %s: %v", r.URL.Path, err)
+	log.Printf("proxy error for %s: %v", strconv.Quote(r.URL.Path), err)
 	apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("upstream service unavailable", err))
 }
 

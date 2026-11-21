@@ -75,7 +75,7 @@ func NewVerifier(secret string) (*Verifier, error) {
 	return &Verifier{secret: []byte(secret)}, nil
 }
 
-// Verify validates the token signature (HS256 only — any other algorithm, including `none`,
+// Verify validates the token signature (HS256 only - any other algorithm, including `none`,
 // is rejected), its expiry, and returns the authenticated user ID from the `sub` claim.
 func (v *Verifier) Verify(tokenString string) (string, error) {
 	token, err := jwt.Parse(tokenString, func(*jwt.Token) (any, error) {
