@@ -19,6 +19,7 @@ import (
 	oauthadapter "overdrive/services/auth-service/src/adapters/oauth"
 	prismaadapter "overdrive/services/auth-service/src/adapters/repository/prisma"
 	"overdrive/services/auth-service/src/core/usecases"
+	"overdrive/shared/authjwt"
 	"overdrive/shared/bootstrap"
 	"time"
 )
@@ -35,8 +36,8 @@ func main() {
 	// Required, no insecure fallback: if this were allowed to default to a
 	// well-known value, anyone reading this repo could forge valid session tokens.
 	jwtSecret := os.Getenv("AUTH_JWT_SECRET")
-	if jwtSecret == "" {
-		log.Fatal("AUTH_JWT_SECRET is required and must be defined in the environment or .env")
+	if err := authjwt.ValidateSecret(jwtSecret); err != nil {
+		log.Fatalf("AUTH_JWT_SECRET: %v (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()

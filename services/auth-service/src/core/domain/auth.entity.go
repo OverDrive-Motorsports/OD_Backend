@@ -15,7 +15,7 @@ type User struct {
 	ID           string         `json:"id"`
 	Email        string         `json:"email"`
 	DisplayName  string         `json:"displayName"`
-	PasswordHash string         `json:"passwordHash"`
+	PasswordHash string         `json:"-"` // never serialised, even by accident
 	UsesOAuth    bool           `json:"usesOAuth"`
 	CreatedAt    types.DateTime `json:"createdAt"`
 	UpdatedAt    types.DateTime `json:"updatedAt"`

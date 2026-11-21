@@ -15,6 +15,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ type Config struct {
 	UserJWTSecret       string
 	RateLimitRPS        float64
 	RateLimitBurst      float64
+	TrustedProxies      []*net.IPNet
 	Routes              map[string][]*url.URL
 	ServiceHealthRoutes map[string][]*url.URL
 }
@@ -70,6 +72,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	trustedProxies, err := parseTrustedProxies(os.Getenv("GATEWAY_TRUSTED_PROXIES"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	targets, err := buildUpstreamTargets()
 	if err != nil {
 		return Config{}, err
@@ -81,6 +88,7 @@ func Load() (Config, error) {
 		UserJWTSecret:       userJWTSecret,
 		RateLimitRPS:        rps,
 		RateLimitBurst:      burst,
+		TrustedProxies:      trustedProxies,
 		Routes:              buildRoutes(targets),
 		ServiceHealthRoutes: buildServiceHealthRoutes(targets),
 	}, nil
@@ -256,4 +264,30 @@ func applyDotEnvFile(path string) error {
 	}
 
 	return scanner.Err()
+}
+
+// parseTrustedProxies parses GATEWAY_TRUSTED_PROXIES: a comma-separated list of IPs or CIDRs of
+// the reverse proxies placed in front of the gateway. Only their X-Forwarded-For is trusted to
+// identify the client (rate limiting). Empty means no proxy: the TCP peer is the client.
+func parseTrustedProxies(raw string) ([]*net.IPNet, error) {
+	var networks []*net.IPNet
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if !strings.Contains(entry, "/") {
+			if ip := net.ParseIP(entry); ip != nil && ip.To4() != nil {
+				entry += "/32"
+			} else {
+				entry += "/128"
+			}
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("GATEWAY_TRUSTED_PROXIES: invalid entry %q", entry)
+		}
+		networks = append(networks, network)
+	}
+	return networks, nil
 }

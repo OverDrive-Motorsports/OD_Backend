@@ -22,19 +22,25 @@ import (
 	contracts "overdrive/shared/contracts/ingestion"
 )
 
+// internalTokenHeader carries the service-to-service secret checked by the receiving services.
+const internalTokenHeader = "X-Internal-Token"
+
 type Dispatcher struct {
-	httpClient *http.Client
-	endpoints  map[string]string
+	httpClient    *http.Client
+	endpoints     map[string]string
+	internalToken string
 }
 
 // NewDispatcher builds and returns a dispatcher with its required dependencies.
-func NewDispatcher(raceDataServiceURL string, championshipServiceURL string, timeout time.Duration) *Dispatcher {
+// internalToken is sent in internalTokenHeader on every dispatch.
+func NewDispatcher(raceDataServiceURL string, championshipServiceURL string, internalToken string, timeout time.Duration) *Dispatcher {
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
 
 	return &Dispatcher{
-		httpClient: &http.Client{Timeout: timeout},
+		internalToken: internalToken,
+		httpClient:    &http.Client{Timeout: timeout},
 		endpoints: map[string]string{
 			"race-data-service":    strings.TrimRight(raceDataServiceURL, "/") + "/internal/ingestion/batches",
 			"championship-service": strings.TrimRight(championshipServiceURL, "/") + "/internal/ingestion/batches",
@@ -59,6 +65,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, service string, batch contrac
 		return contracts.DispatchAck{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(internalTokenHeader, d.internalToken)
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {

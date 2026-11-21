@@ -50,7 +50,7 @@ func (c *Client) ListChampionships(ctx context.Context) (any, error) {
 // ListChampionshipEvents returns a collection of championship events for the requested context.
 func (c *Client) ListChampionshipEvents(ctx context.Context, code string) (any, error) {
 	var payload []map[string]any
-	ok, err := c.getJSON(ctx, "/championships/"+code+"/events", &payload)
+	ok, err := c.getJSON(ctx, "/championships/"+url.PathEscape(code)+"/events", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (c *Client) ListChampionshipSessions(ctx context.Context, code string) ([]p
 // GetEventPayload returns the requested event payload payload for the supplied identifiers.
 func (c *Client) GetEventPayload(ctx context.Context, eventID string) (any, error) {
 	var payload map[string]any
-	ok, err := c.getJSON(ctx, "/events/"+eventID, &payload)
+	ok, err := c.getJSON(ctx, "/events/"+url.PathEscape(eventID), &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (c *Client) GetEventPayload(ctx context.Context, eventID string) (any, erro
 // ListEventSessions returns a collection of event sessions for the requested context.
 func (c *Client) ListEventSessions(ctx context.Context, eventID string) (any, error) {
 	var payload []map[string]any
-	ok, err := c.getJSON(ctx, "/events/"+eventID+"/sessions", &payload)
+	ok, err := c.getJSON(ctx, "/events/"+url.PathEscape(eventID)+"/sessions", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (c *Client) ListEventSessions(ctx context.Context, eventID string) (any, er
 // GetSession returns the requested session payload for the supplied identifiers.
 func (c *Client) GetSession(ctx context.Context, sessionID string) (*ports.ChampionshipSessionRef, error) {
 	var payload ports.ChampionshipSessionRef
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID, &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID), &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (c *Client) GetSession(ctx context.Context, sessionID string) (*ports.Champ
 // GetEvent returns the requested event payload for the supplied identifiers.
 func (c *Client) GetEvent(ctx context.Context, eventID string) (*ports.ChampionshipEventRef, error) {
 	var payload ports.ChampionshipEventRef
-	ok, err := c.getJSON(ctx, "/events/"+eventID, &payload)
+	ok, err := c.getJSON(ctx, "/events/"+url.PathEscape(eventID), &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (c *Client) GetEvent(ctx context.Context, eventID string) (*ports.Champions
 // championship-service now returns a bare JSON array (camelCase fields).
 func (c *Client) ListSessionDrivers(ctx context.Context, sessionID string) ([]ports.ChampionshipDriverRef, error) {
 	var payload []ports.ChampionshipDriverRef
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/drivers", &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/drivers", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (c *Client) ListSessionDrivers(ctx context.Context, sessionID string) ([]po
 // ListSessionTeams returns a collection of session teams for the requested context.
 func (c *Client) ListSessionTeams(ctx context.Context, sessionID string) ([]map[string]any, error) {
 	var payload []map[string]any
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/teams", &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/teams", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (c *Client) ListSessionTeams(ctx context.Context, sessionID string) ([]map[
 // GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
 func (c *Client) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (map[string]any, error) {
 	var payload map[string]any
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/datasets/"+dataset, &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/datasets/"+url.PathEscape(dataset), &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (c *Client) GetSessionDataset(ctx context.Context, sessionID string, datase
 // GetSessionRaceStandings returns the requested session race standings payload for the supplied identifiers.
 func (c *Client) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	var payload map[string]any
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/standings/race", &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/standings/race", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (c *Client) GetSessionRaceStandings(ctx context.Context, sessionID string) 
 // GetSessionBroadcast returns the requested session broadcast payload for the supplied identifiers.
 func (c *Client) GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error) {
 	var payload map[string]any
-	ok, err := c.getJSON(ctx, "/sessions/"+sessionID+"/broadcast", &payload)
+	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/broadcast", &payload)
 	if err != nil || !ok {
 		return nil, err
 	}

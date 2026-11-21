@@ -28,9 +28,35 @@ First, create the root `.env` from the template:
 cp .env.template .env
 ```
 
-`AUTH_JWT_SECRET` must be set in there — `auth-service` refuses to start without it
-(there is deliberately no insecure default), so leaving it empty makes that container
-crash-loop.
+Every secret ships empty: fill `POSTGRES_PASSWORD`, `GATEWAY_AUTH_TOKEN`, `AUTH_JWT_SECRET` and
+`INTERNAL_INGESTION_TOKEN`, generating each value with:
+
+```bash
+openssl rand -hex 32
+```
+
+There is deliberately no default: the services refuse to start when `AUTH_JWT_SECRET` or
+`INTERNAL_INGESTION_TOKEN` is missing or shorter than 32 bytes, and a **new** Postgres volume
+refuses an empty password. The failing container exits and `docker compose up` stops with
+`dependency failed to start` until the `.env` is complete.
+
+**Upgrading an existing checkout.** Postgres only reads `POSTGRES_PASSWORD` when it creates its
+volume: an existing `overdrive-postgres-data` volume keeps the password it was created with.
+After pulling this change:
+1. Add `INTERNAL_INGESTION_TOKEN` to your `.env`, and regenerate `AUTH_JWT_SECRET` if it is
+   shorter than 32 bytes or still `change-me-in-production`.
+2. To change the database password, either keep your data and update it in place before
+   restarting (replace `postgres` with your `POSTGRES_USER` if you changed it):
+   ```bash
+   docker compose up -d postgres
+   docker compose exec postgres psql -U postgres -c "ALTER USER postgres PASSWORD '<new value from .env>'"
+   docker compose up -d --build
+   ```
+   or start from an empty database (all data lost, re-ingest afterwards):
+   `docker compose down -v && docker compose up -d --build`.
+
+Only the gateway (`3000`) is reachable from the network; the service ports (`3001`–`3005`) and
+Postgres (`5432`) only answer on `localhost`.
 
 Then, from the repo root:
 
@@ -55,11 +81,10 @@ require authentication (every other route does, see below).
 ## 3. Get the gateway's auth token
 
 Every route under `/v1/...` requires a `Authorization: Bearer <token>` header. In
-this dev setup, the token is a fixed value read from the root `.env`
-(`GATEWAY_AUTH_TOKEN`, `admin` in `.env.template`):
+this dev setup, the token is the `GATEWAY_AUTH_TOKEN` value of the root `.env`:
 
 ```bash
-TOKEN=admin
+TOKEN=$(grep '^GATEWAY_AUTH_TOKEN=' .env | cut -d= -f2-)
 ```
 
 If you ever change that value in `.env`, update this everywhere you see `$TOKEN`
@@ -182,10 +207,7 @@ Studio:
 ```bash
 npm install   # once, from repo root
 
-CHAMPIONSHIP_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_championship?schema=public' \
 npx prisma studio --schema services/championship-service/resources/schema.prisma --port 5555
-
-RACE_DATA_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/overdrive_race_data?schema=public' \
 npx prisma studio --schema services/race-data-service/resources/schema.prisma --port 5556
 ```
 
@@ -202,8 +224,11 @@ Data persists in a Docker volume (`overdrive-postgres-data`) between restarts �
 
 ## Troubleshooting
 
-- **A request to `/v1/...` returns `401`**: you forgot the `Authorization: Bearer
-  admin` header, or the token is wrong.
+- **A request to `/v1/...` returns `401`**: you forgot the `Authorization: Bearer $TOKEN`
+  header (`GATEWAY_AUTH_TOKEN` of the root `.env`), or the token is wrong.
+- **`docker compose up` stops with `dependency failed to start`**: a required secret is
+  missing or too short (`docker compose logs <service>` names it), or the Postgres password
+  in `.env` no longer matches the existing volume — see "Upgrading an existing checkout".
 - **A curl call to `car_data`/`location` fails with `422` / "too much data"**: you
   didn't scope it to one `driver_number` — see step 4.
 - **You changed some Go code and it's not reflected**: services run via `go run`

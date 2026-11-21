@@ -27,7 +27,14 @@ type Config struct {
 	DispatchTimeout        time.Duration
 	RaceDataServiceURL     string
 	ChampionshipServiceURL string
+	// InternalIngestionToken is sent on every dispatch; championship-service and
+	// race-data-service reject batches without it.
+	InternalIngestionToken string
 }
+
+// minInternalTokenBytes is the minimum length of INTERNAL_INGESTION_TOKEN (256 bits); the
+// receiving services enforce the same minimum.
+const minInternalTokenBytes = 32
 
 // Load loads configuration and validates the values required by the service.
 func Load() (Config, error) {
@@ -47,6 +54,13 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	internalToken, err := getRequiredEnv("INTERNAL_INGESTION_TOKEN")
+	if err != nil {
+		return Config{}, err
+	}
+	if len(internalToken) < minInternalTokenBytes {
+		return Config{}, fmt.Errorf("INTERNAL_INGESTION_TOKEN must be at least %d bytes", minInternalTokenBytes)
+	}
 
 	return Config{
 		Config:                 base,
@@ -57,6 +71,7 @@ func Load() (Config, error) {
 		DispatchTimeout:        getDuration("DISPATCH_TIMEOUT", 10*time.Minute),
 		RaceDataServiceURL:     raceDataServiceURL,
 		ChampionshipServiceURL: championshipServiceURL,
+		InternalIngestionToken: internalToken,
 	}, nil
 }
 

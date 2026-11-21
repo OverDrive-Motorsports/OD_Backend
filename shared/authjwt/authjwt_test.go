@@ -11,13 +11,14 @@ package authjwt
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const testSecret = "test-secret"
+const testSecret = "test-secret-long-enough-for-hs256-keys"
 
 func sign(t *testing.T, method jwt.SigningMethod, key any, claims jwt.MapClaims) string {
 	t.Helper()
@@ -38,6 +39,23 @@ func TestNewVerifier_RequiresSecret(t *testing.T) {
 		if _, err := NewVerifier(secret); !errors.Is(err, ErrMissingSecret) {
 			t.Fatalf("secret %q: expected ErrMissingSecret, got %v", secret, err)
 		}
+	}
+}
+
+// TestValidateSecret_Strength proves a secret shorter than MinSecretBytes, or equal to the
+// template placeholder, is refused as weak — including by NewVerifier — while a 32-byte secret
+// is accepted.
+func TestValidateSecret_Strength(t *testing.T) {
+	for _, secret := range []string{"secret", "dev-local-jwt-secret", strings.Repeat("a", MinSecretBytes-1), "change-me-in-production"} {
+		if err := ValidateSecret(secret); !errors.Is(err, ErrWeakSecret) {
+			t.Fatalf("%q: expected ErrWeakSecret, got %v", secret, err)
+		}
+		if _, err := NewVerifier(secret); !errors.Is(err, ErrWeakSecret) {
+			t.Fatalf("NewVerifier(%q): expected ErrWeakSecret, got %v", secret, err)
+		}
+	}
+	if err := ValidateSecret(strings.Repeat("a", MinSecretBytes)); err != nil {
+		t.Fatalf("expected a 32-byte secret to be accepted, got %v", err)
 	}
 }
 
@@ -63,7 +81,7 @@ func TestVerifier_Verify(t *testing.T) {
 
 	noneToken := sign(t, jwt.SigningMethodNone, jwt.UnsafeAllowNoneSignatureType, validClaims())
 	invalid := map[string]string{
-		"wrong secret":   sign(t, jwt.SigningMethodHS256, []byte("other"), validClaims()),
+		"wrong secret":   sign(t, jwt.SigningMethodHS256, []byte("another-secret-long-enough-for-hs256"), validClaims()),
 		"alg none":       noneToken,
 		"HS512":          sign(t, jwt.SigningMethodHS512, key, validClaims()),
 		"missing sub":    sign(t, jwt.SigningMethodHS256, key, jwt.MapClaims{"exp": time.Now().Add(time.Minute).Unix()}),

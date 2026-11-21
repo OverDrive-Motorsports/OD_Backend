@@ -14,6 +14,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	db "overdrive/services/championship-service/resources/db"
 	httpadapter "overdrive/services/championship-service/src/adapters/http"
 	prismaadapter "overdrive/services/championship-service/src/adapters/repository/prisma"
@@ -30,6 +31,13 @@ func main() {
 	)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	// INTERNAL_INGESTION_TOKEN protects POST /internal/ingestion/batches: only ingestion-service
+	// knows it. Refusing to start without it keeps the write endpoint from ever being open.
+	internalToken := os.Getenv("INTERNAL_INGESTION_TOKEN")
+	if err := httpadapter.ValidateInternalToken(internalToken); err != nil {
+		log.Fatalf("INTERNAL_INGESTION_TOKEN: %v (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()
@@ -53,7 +61,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, ingestionController, catalogController),
+		Handler:           httpadapter.NewRouter(healthController, ingestionController, catalogController, internalToken),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

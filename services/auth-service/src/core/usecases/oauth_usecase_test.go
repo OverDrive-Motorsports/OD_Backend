@@ -63,7 +63,7 @@ func authorize(t *testing.T, uc *AuthQueryUseCase, providerID string) domain.OAu
 }
 
 func TestListOAuthProviders_KeepsRegistrationOrder(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", &fakeOAuthProvider{id: "google"}, &fakeOAuthProvider{id: "f1tv"})
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, &fakeOAuthProvider{id: "google"}, &fakeOAuthProvider{id: "f1tv"})
 
 	got := uc.ListOAuthProviders()
 	if len(got) != 2 || got[0].ID != "google" || got[1].ID != "f1tv" || got[0].Name != "GOOGLE" {
@@ -72,7 +72,7 @@ func TestListOAuthProviders_KeepsRegistrationOrder(t *testing.T) {
 }
 
 func TestOAuthAuthorize_UnknownProvider(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake())
 
 	if _, err := uc.OAuthAuthorize("github"); !errors.Is(err, domain.ErrUnknownOAuthProvider) {
 		t.Fatalf("expected ErrUnknownOAuthProvider, got %v", err)
@@ -82,7 +82,7 @@ func TestOAuthAuthorize_UnknownProvider(t *testing.T) {
 // TestOAuthAuthorize_URLCarriesStateAndS256Challenge proves the consent URL embeds the returned
 // state and the S256 challenge of the returned verifier (never the verifier itself).
 func TestOAuthAuthorize_URLCarriesStateAndS256Challenge(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake())
 
 	auth, err := uc.OAuthAuthorize("google")
 	if err != nil {
@@ -103,7 +103,7 @@ func TestOAuthLogin_Success(t *testing.T) {
 	repo := &fakeSessionRepository{usersByOAuth: map[string]*domain.User{
 		"GOOGLE:google-sub-1": {ID: "user-1", Email: "user@example.com"},
 	}}
-	uc := NewAuthQueryUseCase(repo, "s", provider)
+	uc := NewAuthQueryUseCase(repo, testJWTSecret, provider)
 	callback := authorize(t, uc, "google")
 
 	resp, err := uc.OAuthLogin(context.Background(), "google", callback)
@@ -122,7 +122,7 @@ func TestOAuthLogin_Success(t *testing.T) {
 }
 
 func TestOAuthLogin_NotLinked(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake())
 
 	_, err := uc.OAuthLogin(context.Background(), "google", authorize(t, uc, "google"))
 	if !errors.Is(err, domain.ErrOAuthAccountNotLinked) {
@@ -132,8 +132,8 @@ func TestOAuthLogin_NotLinked(t *testing.T) {
 
 func TestOAuthLogin_RejectsInvalidStates(t *testing.T) {
 	google, other := newGoogleFake(), &fakeOAuthProvider{id: "other", identity: newGoogleFake().identity}
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", google, other)
-	foreignSecret := NewAuthQueryUseCase(&fakeSessionRepository{}, "other-secret", google)
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, google, other)
+	foreignSecret := NewAuthQueryUseCase(&fakeSessionRepository{}, "another-secret-long-enough-for-hs256", google)
 	accessToken, _ := uc.generateJWT("user-1", "user@example.com")
 
 	cases := map[string]string{
@@ -158,7 +158,7 @@ func TestOAuthLogin_RejectsInvalidStates(t *testing.T) {
 
 // TestOAuthState_IsNotAnAccessToken proves a state token can never authenticate API calls.
 func TestOAuthState_IsNotAnAccessToken(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake())
 
 	if _, err := uc.VerifyToken(authorize(t, uc, "google").State); !errors.Is(err, domain.ErrInvalidToken) {
 		t.Fatalf("expected state to be rejected by VerifyToken, got %v", err)
@@ -166,7 +166,7 @@ func TestOAuthState_IsNotAnAccessToken(t *testing.T) {
 }
 
 func TestOAuthLogin_MissingCodeOrVerifier(t *testing.T) {
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake())
 	callback := authorize(t, uc, "google")
 	callback.CodeVerifier = ""
 
@@ -178,7 +178,7 @@ func TestOAuthLogin_MissingCodeOrVerifier(t *testing.T) {
 func TestOAuthLogin_ProviderError(t *testing.T) {
 	provider := newGoogleFake()
 	provider.err = domain.ErrOAuthExchangeFailed
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", provider)
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, provider)
 
 	if _, err := uc.OAuthLogin(context.Background(), "google", authorize(t, uc, "google")); !errors.Is(err, domain.ErrOAuthExchangeFailed) {
 		t.Fatalf("expected ErrOAuthExchangeFailed, got %v", err)
@@ -188,7 +188,7 @@ func TestOAuthLogin_ProviderError(t *testing.T) {
 func TestOAuthLogin_UnverifiedEmail(t *testing.T) {
 	provider := newGoogleFake()
 	provider.identity.EmailVerified = false
-	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, "s", provider)
+	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, provider)
 
 	if _, err := uc.OAuthLogin(context.Background(), "google", authorize(t, uc, "google")); !errors.Is(err, domain.ErrOAuthEmailNotVerified) {
 		t.Fatalf("expected ErrOAuthEmailNotVerified, got %v", err)
@@ -197,7 +197,7 @@ func TestOAuthLogin_UnverifiedEmail(t *testing.T) {
 
 func TestOAuthRegister_Success(t *testing.T) {
 	repo := &fakeSessionRepository{}
-	uc := NewAuthQueryUseCase(repo, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(repo, testJWTSecret, newGoogleFake())
 
 	resp, err := uc.OAuthRegister(context.Background(), "google", authorize(t, uc, "google"), "")
 	if err != nil {
@@ -216,7 +216,7 @@ func TestOAuthRegister_Success(t *testing.T) {
 
 func TestOAuthRegister_UsesRequestedUsername(t *testing.T) {
 	repo := &fakeSessionRepository{}
-	uc := NewAuthQueryUseCase(repo, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(repo, testJWTSecret, newGoogleFake())
 
 	if _, err := uc.OAuthRegister(context.Background(), "google", authorize(t, uc, "google"), "  speedy  "); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -228,7 +228,7 @@ func TestOAuthRegister_UsesRequestedUsername(t *testing.T) {
 
 func TestOAuthRegister_AlreadyLinked(t *testing.T) {
 	repo := &fakeSessionRepository{usersByOAuth: map[string]*domain.User{"GOOGLE:google-sub-1": {ID: "user-1"}}}
-	uc := NewAuthQueryUseCase(repo, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(repo, testJWTSecret, newGoogleFake())
 
 	_, err := uc.OAuthRegister(context.Background(), "google", authorize(t, uc, "google"), "")
 	if !errors.Is(err, domain.ErrOAuthAccountAlreadyLinked) || repo.addedOAuthUser != nil {
@@ -240,7 +240,7 @@ func TestOAuthRegister_AlreadyLinked(t *testing.T) {
 // email is never taken over by an OAuth sign-up.
 func TestOAuthRegister_EmailTakenIsNotSilentlyLinked(t *testing.T) {
 	repo := &fakeSessionRepository{usersByEmail: map[string]*domain.User{"user@example.com": {ID: "user-1"}}}
-	uc := NewAuthQueryUseCase(repo, "s", newGoogleFake())
+	uc := NewAuthQueryUseCase(repo, testJWTSecret, newGoogleFake())
 
 	_, err := uc.OAuthRegister(context.Background(), "google", authorize(t, uc, "google"), "")
 	if !errors.Is(err, domain.ErrEmailAlreadyRegistered) || repo.addedOAuthUser != nil {
@@ -264,5 +264,5 @@ func TestNewAuthQueryUseCase_DuplicateProviderPanics(t *testing.T) {
 			t.Fatalf("expected panic on duplicate provider id")
 		}
 	}()
-	NewAuthQueryUseCase(&fakeSessionRepository{}, "s", newGoogleFake(), newGoogleFake())
+	NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, newGoogleFake(), newGoogleFake())
 }

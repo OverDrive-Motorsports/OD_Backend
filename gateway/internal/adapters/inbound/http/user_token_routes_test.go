@@ -23,6 +23,9 @@ import (
 	"overdrive/gateway/internal/core/usecases"
 )
 
+// userJWTSecret is long enough for authjwt.ValidateSecret (32 bytes minimum).
+const userJWTSecret = "gateway-test-secret-long-enough-for-hs256"
+
 // TestNewHandler_UserTokenRoutes proves /presets is authorised with a user JWT (and rejects the
 // static gateway token), while other prefixes keep requiring the static token (and reject a
 // user JWT). The upstream receives the caller's Authorization header unchanged so it can
@@ -37,13 +40,13 @@ func TestNewHandler_UserTokenRoutes(t *testing.T) {
 	defer upstream.Close()
 	upstreamURL, _ := url.Parse(upstream.URL)
 
-	userValidator, err := auth.NewUserTokenValidator("jwt-secret")
+	userValidator, err := auth.NewUserTokenValidator(userJWTSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
 	handler, err := NewHandler(
 		map[string][]*url.URL{"/presets": {upstreamURL}, "/v1/race-data": {upstreamURL}},
-		map[string][]*url.URL{}, 1000, 1000,
+		map[string][]*url.URL{}, 1000, 1000, nil,
 		usecases.NewCheckHealthUseCase(),
 		usecases.NewAuthorizeRequestUseCase(auth.NewStaticTokenValidator("static-token")),
 		usecases.NewAuthorizeUserRequestUseCase(userValidator),
@@ -51,7 +54,7 @@ func TestNewHandler_UserTokenRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	userJWT, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "user-1", "exp": time.Now().Add(time.Minute).Unix()}).SignedString([]byte("jwt-secret"))
+	userJWT, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "user-1", "exp": time.Now().Add(time.Minute).Unix()}).SignedString([]byte(userJWTSecret))
 
 	serve := func(path, authorization string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -81,7 +84,7 @@ func TestNewHandler_UserTokenRoutes(t *testing.T) {
 		}
 	}
 
-	expiredJWT, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "user-1", "exp": time.Now().Add(-time.Minute).Unix()}).SignedString([]byte("jwt-secret"))
+	expiredJWT, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "user-1", "exp": time.Now().Add(-time.Minute).Unix()}).SignedString([]byte(userJWTSecret))
 	for name, tc := range map[string]struct{ authorization, code string }{
 		"no token":     {"", `"UNAUTHORIZED"`},
 		"expired JWT":  {"Bearer " + expiredJWT, `"TOKEN_EXPIRED"`},

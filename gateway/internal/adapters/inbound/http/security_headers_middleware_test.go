@@ -1,0 +1,64 @@
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## security_headers_middleware_test.go - Tests the hardening headers on gateway responses.
+##
+*/
+
+package httpinbound
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
+	"overdrive/gateway/internal/adapters/outbound/auth"
+	"overdrive/gateway/internal/core/usecases"
+)
+
+// TestSecurityHeaders_OnGatewayAndProxiedResponses proves the hardening headers are on the
+// gateway's own responses (a 401 written before any proxying, /health) and on proxied
+// responses — exactly once, even when the upstream already sets them.
+func TestSecurityHeaders_OnGatewayAndProxiedResponses(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	upstreamURL, _ := url.Parse(upstream.URL)
+
+	handler, err := NewHandler(
+		map[string][]*url.URL{"/v1/race-data": {upstreamURL}}, map[string][]*url.URL{}, 1000, 1000, nil,
+		usecases.NewCheckHealthUseCase(),
+		usecases.NewAuthorizeRequestUseCase(auth.NewStaticTokenValidator("static-token")),
+		usecases.NewAuthorizeUserRequestUseCase(nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve := func(path, authorization string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if authorization != "" {
+			req.Header.Set("Authorization", authorization)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"gateway 401":     serve("/v1/race-data/championships", ""),
+		"gateway /health": serve("/health", ""),
+		"proxied 200":     serve("/v1/race-data/championships", "Bearer static-token"),
+	} {
+		for header, want := range securityHeaders {
+			if got := rec.Header().Values(header); len(got) != 1 || got[0] != want {
+				t.Fatalf("%s: %s = %v, want exactly [%q]", name, header, got, want)
+			}
+		}
+	}
+}

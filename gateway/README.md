@@ -174,14 +174,17 @@ Gateway liveness response:
 
 ## Configuration
 
-All variables below are required. Set them in `gateway/.env` (or as process env vars).
+Set them in `gateway/.env` (or as process env vars). Secrets have no default: generate them
+with `openssl rand -hex 32`.
 
 | Variable | Required | Example | Description |
 | --- | --- | --- | --- |
 | `HTTP_PORT` | Yes | `3000` | Gateway listen port |
-| `GATEWAY_AUTH_TOKEN` | Yes | `admin` | Bearer token for optional auth validation |
+| `GATEWAY_AUTH_TOKEN` | Yes | *(generated)* | Bearer token of the gateway-token prefixes, compared in constant time |
+| `AUTH_JWT_SECRET` | Yes | *(generated, ≥ 32 bytes)* | Verifies user access tokens on `/presets`; the gateway refuses to start with a weak value |
 | `GATEWAY_RATE_LIMIT_RPS` | Yes | `10` | Rate-limiter refill (tokens/sec) |
 | `GATEWAY_RATE_LIMIT_BURST` | Yes | `20` | Rate-limiter burst capacity |
+| `GATEWAY_TRUSTED_PROXIES` | No | `10.0.0.0/8, 192.0.2.7` | Reverse proxies in front of the gateway. Clients are rate-limited by TCP peer address; only these proxies' `X-Forwarded-For` is read (right to left). Empty: no proxy |
 | `AUTH_SERVICE_URLS` | Yes | `http://localhost:3001` | Auth upstream targets |
 | `USER_DATA_SERVICE_URLS` | Yes | `http://localhost:3002` | User-data upstream targets |
 | `CHAMPIONSHIP_SERVICE_URLS` | Yes | `http://localhost:3003` | Championship upstream targets |
