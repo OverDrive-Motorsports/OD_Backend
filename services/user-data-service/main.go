@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## main.go - Service entrypoint and HTTP server bootstrap for user-data-service.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## main.go - Service entrypoint and HTTP server bootstrap for user-data-service.
+##
 */
+
 package main
 
 import (

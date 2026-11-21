@@ -11,12 +11,22 @@ package domain
 
 import "github.com/steebchen/prisma-client-go/runtime/types"
 
+// UserRole is the access level of an account, issued in the `role` claim of its access tokens.
+// Values match the UserRole enum of resources/schema.prisma.
+type UserRole string
+
+const (
+	RoleUser  UserRole = "user"
+	RoleAdmin UserRole = "admin"
+)
+
 type User struct {
 	ID           string         `json:"id"`
 	Email        string         `json:"email"`
 	DisplayName  string         `json:"displayName"`
 	PasswordHash string         `json:"-"` // never serialised, even by accident
 	UsesOAuth    bool           `json:"usesOAuth"`
+	Role         UserRole       `json:"role"`
 	CreatedAt    types.DateTime `json:"createdAt"`
 	UpdatedAt    types.DateTime `json:"updatedAt"`
 }

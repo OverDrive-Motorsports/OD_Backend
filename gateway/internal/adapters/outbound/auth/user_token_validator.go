@@ -17,9 +17,9 @@ import (
 )
 
 // UserTokenValidator accepts an `Authorization: Bearer <jwt>` header carrying a valid access
-// token issued by auth-service. It guards the per-user routes (/presets), where the client
-// sends its own JWT instead of the shared gateway token; the upstream service re-verifies the
-// token and reads the user ID from it.
+// token issued by auth-service. It guards every route that needs a user (data, presets,
+// sessions) and the admin routes; services that need the caller's identity re-verify the
+// token and read the user ID from it.
 type UserTokenValidator struct {
 	verifier *authjwt.Verifier
 }
@@ -33,21 +33,21 @@ func NewUserTokenValidator(secret string) (UserTokenValidator, error) {
 	return UserTokenValidator{verifier: verifier}, nil
 }
 
-// ValidateUserBearerHeader returns nil for a valid, unexpired user JWT, otherwise the domain
+// ValidateUserBearerHeader returns the role of a valid, unexpired user JWT, otherwise the domain
 // reason: missing/non-Bearer header, expired token, or any other invalid token.
-func (v UserTokenValidator) ValidateUserBearerHeader(header string) error {
+func (v UserTokenValidator) ValidateUserBearerHeader(header string) (domain.UserRole, error) {
 	if v.verifier == nil {
-		return domain.ErrInvalidUserToken
+		return "", domain.ErrInvalidUserToken
 	}
-	_, err := v.verifier.VerifyBearerHeader(header)
+	claims, err := v.verifier.VerifyBearerHeaderClaims(header)
 	switch {
 	case err == nil:
-		return nil
+		return domain.UserRole(claims.Role), nil
 	case errors.Is(err, authjwt.ErrMissingToken):
-		return domain.ErrMissingUserToken
+		return "", domain.ErrMissingUserToken
 	case errors.Is(err, authjwt.ErrTokenExpired):
-		return domain.ErrUserTokenExpired
+		return "", domain.ErrUserTokenExpired
 	default:
-		return domain.ErrInvalidUserToken
+		return "", domain.ErrInvalidUserToken
 	}
 }

@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## health.entity.go - Package domain source file for services/race-data-service/src/core/domain.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## health.entity.go - Package domain source file for services/race-data-service/src/core/domain.
+##
 */
+
 package domain
 
 type HealthStatus struct {

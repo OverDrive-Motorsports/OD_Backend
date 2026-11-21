@@ -24,8 +24,8 @@ the `Authorization: Bearer <access token>` header with `shared/authjwt` (HS256 o
 required, secret `AUTH_JWT_SECRET`) and puts the token's `sub` in the request context. It is
 the **only** source of the user ID; every repository query is scoped by it, so another user's
 preset behaves like a missing one (`404`). The service refuses to start without
-`AUTH_JWT_SECRET`. The gateway checks the same token on `/presets` before proxying (defence in
-depth), but the service never trusts the gateway alone since its port is also reachable
+`AUTH_JWT_SECRET`. The gateway checks the same token on `/v1/presets` and `/presets` before
+proxying (defence in depth), but the service never trusts the gateway alone since its port is also reachable
 directly in local Docker.
 
 ## Presets

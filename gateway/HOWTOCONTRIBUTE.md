@@ -70,11 +70,11 @@ GATEWAY_TOKEN="$(grep '^GATEWAY_AUTH_TOKEN=' gateway/.env | cut -d= -f2-)"
 # Gateway health (no auth header)
 curl -i http://localhost:3000/health
 
-# Gateway health with valid auth header
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" http://localhost:3000/health
+# User route without a token must fail (401 UNAUTHORIZED)
+curl -i http://localhost:3000/v1/championship/championships
 
-# Invalid provided token must fail
-curl -i -H "Authorization: Bearer invalid" http://localhost:3000/health
+# Gateway token is refused on a user route (401 INVALID_TOKEN)
+curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" http://localhost:3000/v1/championship/championships
 
 # Service health via gateway
 curl -i http://localhost:3000/health/auth

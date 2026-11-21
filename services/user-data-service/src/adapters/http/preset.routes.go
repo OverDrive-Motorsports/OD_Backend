@@ -11,9 +11,10 @@ package httpadapter
 
 import "net/http"
 
-// registerPresetRoutes attaches the preset handlers. The gateway strips its `/presets` prefix,
-// so the public `/presets` and `/presets/{presetId}` arrive here as `/` and `/{presetId}`.
-// `GET /health` stays more specific than `GET /{presetId}` and keeps priority.
+// registerPresetRoutes attaches the preset handlers under `/presets`. The gateway forwards that
+// prefix unchanged (from the public `/v1/presets` and `/presets`), so a public path can only
+// reach preset routes: `/presets/health` is a preset ID (404 PRESET_NOT_FOUND), never the
+// service's own `GET /health`. The collection answers with and without a trailing slash.
 func registerPresetRoutes(mux *http.ServeMux, controller *PresetController, auth func(http.Handler) http.Handler) {
 	handle := func(pattern string, handler http.HandlerFunc, withBody bool) {
 		var h http.Handler = handler
@@ -22,9 +23,11 @@ func registerPresetRoutes(mux *http.ServeMux, controller *PresetController, auth
 		}
 		mux.Handle(pattern, auth(h))
 	}
-	handle("GET /{$}", controller.List, false)
-	handle("POST /{$}", controller.Create, true)
-	handle("GET /{presetId}", controller.Get, false)
-	handle("PATCH /{presetId}", controller.Update, true)
-	handle("DELETE /{presetId}", controller.Delete, false)
+	handle("GET /presets", controller.List, false)
+	handle("GET /presets/{$}", controller.List, false)
+	handle("POST /presets", controller.Create, true)
+	handle("POST /presets/{$}", controller.Create, true)
+	handle("GET /presets/{presetId}", controller.Get, false)
+	handle("PATCH /presets/{presetId}", controller.Update, true)
+	handle("DELETE /presets/{presetId}", controller.Delete, false)
 }

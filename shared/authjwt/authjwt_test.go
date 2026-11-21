@@ -98,6 +98,47 @@ func TestVerifier_Verify(t *testing.T) {
 	}
 }
 
+// TestVerifier_VerifyClaims proves the role claim is read: absent means RoleUser (tokens issued
+// before roles existed), "user" and "admin" are kept, and any other value or type makes the
+// token invalid instead of being read as a privilege.
+func TestVerifier_VerifyClaims(t *testing.T) {
+	verifier, err := NewVerifier(testSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := []byte(testSecret)
+	withRole := func(role any) string {
+		claims := validClaims()
+		claims["role"] = role
+		return sign(t, jwt.SigningMethodHS256, key, claims)
+	}
+
+	for name, tc := range map[string]struct {
+		token, wantRole string
+	}{
+		"no role claim": {sign(t, jwt.SigningMethodHS256, key, validClaims()), RoleUser},
+		"user role":     {withRole("user"), RoleUser},
+		"admin role":    {withRole("admin"), RoleAdmin},
+	} {
+		claims, err := verifier.VerifyClaims(tc.token)
+		if err != nil || claims.UserID != "user-1" || claims.Role != tc.wantRole {
+			t.Fatalf("%s: got %+v, %v; want user-1 / %s", name, claims, err, tc.wantRole)
+		}
+	}
+	for name, role := range map[string]any{"unknown role": "superuser", "upper case": "ADMIN", "empty": "", "non-string": true} {
+		if _, err := verifier.VerifyClaims(withRole(role)); !errors.Is(err, ErrInvalidToken) {
+			t.Fatalf("%s: expected ErrInvalidToken, got %v", name, err)
+		}
+	}
+
+	if claims, err := verifier.VerifyBearerHeaderClaims("Bearer " + withRole("admin")); err != nil || claims.Role != RoleAdmin {
+		t.Fatalf("bearer header: got %+v, %v", claims, err)
+	}
+	if _, err := verifier.VerifyBearerHeaderClaims("Basic abc"); !errors.Is(err, ErrMissingToken) {
+		t.Fatalf("non-bearer header: expected ErrMissingToken, got %v", err)
+	}
+}
+
 // TestBearerToken proves the scheme is matched case-insensitively, surrounding whitespace is
 // ignored, and an empty header, another scheme or a missing token is rejected.
 func TestBearerToken(t *testing.T) {

@@ -18,6 +18,5 @@ type SessionQueryUseCase interface {
 	GetUserSessions(ctx context.Context, userID string) ([]domain.AuthSession, error)
 	GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.AuthSession, error)
-	AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error)
 	RemoveUserSession(ctx context.Context, userID string, sessionID string) error
 }

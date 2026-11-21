@@ -33,9 +33,12 @@ Gateway starts on `http://localhost:${HTTP_PORT}` (default template: `3000`).
 
 ## Use Gateway
 
-Read configured token from `.env`:
+Get a user access token from the public login route (15 minutes), and keep the gateway token
+for the admin routes:
 
 ```bash
+TOKEN="$(curl -s -X POST http://localhost:3000/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","password":"..."}' | jq -r .token)"
 GATEWAY_TOKEN="$(grep '^GATEWAY_AUTH_TOKEN=' gateway/.env | cut -d= -f2-)"
 ```
 
@@ -45,13 +48,13 @@ Liveness (no auth required, kept open for infra probes):
 curl -i http://localhost:3000/health
 ```
 
-Invalid token example on a protected `/v1/*` route:
+Invalid token example on a user route (`401 INVALID_TOKEN`, the gateway token gets the same answer):
 
 ```bash
 curl -i -H "Authorization: Bearer invalid" http://localhost:3000/v1/championship/championships
 ```
 
-Missing header example (now rejected - see Middleware section below):
+Missing header example (`401 UNAUTHORIZED`):
 
 ```bash
 curl -i http://localhost:3000/v1/championship/championships
@@ -60,20 +63,20 @@ curl -i http://localhost:3000/v1/championship/championships
 Proxied API examples:
 
 ```bash
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+curl -i -H "Authorization: Bearer ${TOKEN}" \
   http://localhost:3000/v1/championship/championships
 
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+curl -i -H "Authorization: Bearer ${TOKEN}" \
   http://localhost:3000/v1/race-data/championships
 ```
 
 Dataset validation examples:
 
 ```bash
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+curl -i -H "Authorization: Bearer ${TOKEN}" \
   http://localhost:3000/v1/championship/sessions/123/datasets/not_allowed
 
-curl -i -H "Authorization: Bearer ${GATEWAY_TOKEN}" \
+curl -i -H "Authorization: Bearer ${TOKEN}" \
   http://localhost:3000/v1/race-data/sessions/123/drivers/not_a_number/profile
 ```
 
@@ -107,7 +110,7 @@ Dependency direction:
 
 Applied at gateway level:
 
-- Mandatory Bearer auth on all `/v1/*` proxied routes (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`); `/health` and `/health/{service}` stay open for infra probes
+- Per-route access level (`domain.RouteAccess`, declared in `internal/config/routes_*.go`): public (`/v1/auth` login, register, refresh, OAuth), user access token (data, presets, sessions) or admin (`/v1/ingestion`: `admin` access token or `GATEWAY_AUTH_TOKEN`); `/health` and `/health/{service}` stay open for infra probes. See `ROUTES.md`
 - Request logging (method, path, status, duration, remote)
 - In-memory token-bucket rate limiting by client IP
 
@@ -124,10 +127,9 @@ Additional route-specific validation:
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}` validates `action` against the allowed telemetry sub-resources (`speed`, `engine`, `location`, `intervals`)
 - `/v1/race-data/*?driverNumber=` and `?lapNumber=` validate those query parameters are positive integers when present
 
-`/v1/*` proxied routes now require a valid `Authorization: Bearer <token>` header.
-A missing header or a header that does not match the configured token both result
-in `401 Unauthorized`. (Previously, requests with no `Authorization` header at all
-were let through unauthenticated - this was a known bypass and has been fixed.)
+Every proxied route except the public auth routes requires a valid
+`Authorization: Bearer <token>` header: `401` (`UNAUTHORIZED`, `TOKEN_EXPIRED` or
+`INVALID_TOKEN`) otherwise, and `403 FORBIDDEN` for a `user` token on an admin route.
 
 ## Forwarded Headers
 
@@ -180,8 +182,8 @@ with `openssl rand -hex 32`.
 | Variable | Required | Example | Description |
 | --- | --- | --- | --- |
 | `HTTP_PORT` | Yes | `3000` | Gateway listen port |
-| `GATEWAY_AUTH_TOKEN` | Yes | *(generated)* | Bearer token of the gateway-token prefixes, compared in constant time |
-| `AUTH_JWT_SECRET` | Yes | *(generated, ≥ 32 bytes)* | Verifies user access tokens on `/presets`; the gateway refuses to start with a weak value |
+| `GATEWAY_AUTH_TOKEN` | Yes | *(generated, ≥ 32 bytes)* | Bearer token for internal and scripted calls, accepted on the admin routes only, compared in constant time; never shipped in a client; the gateway refuses to start with a shorter value |
+| `AUTH_JWT_SECRET` | Yes | *(generated, ≥ 32 bytes)* | Verifies user access tokens (and their role) on the user and admin routes; the gateway refuses to start with a weak value |
 | `GATEWAY_RATE_LIMIT_RPS` | Yes | `10` | Rate-limiter refill (tokens/sec) |
 | `GATEWAY_RATE_LIMIT_BURST` | Yes | `20` | Rate-limiter burst capacity |
 | `GATEWAY_TRUSTED_PROXIES` | No | `10.0.0.0/8, 192.0.2.7` | Reverse proxies in front of the gateway. Clients are rate-limited by TCP peer address; only these proxies' `X-Forwarded-For` is read (right to left). Empty: no proxy |

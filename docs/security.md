@@ -18,18 +18,62 @@ accident.
 
 ## User authentication (access tokens)
 
-Access tokens are HS256 JWTs issued by `auth-service` (`sub` = user ID, 15 min expiry). They are
-verified by a single shared implementation, `shared/authjwt` (HS256 pinned, `none` and other
-algorithms rejected, expiry required, non-empty `sub`), used by `auth-service`, the gateway
-and `user-data-service`.
+Access tokens are HS256 JWTs issued by `auth-service` (`sub` = user ID, `role` = `user` or
+`admin`, 15 min expiry). They are verified by a single shared implementation, `shared/authjwt`
+(HS256 pinned, `none` and other algorithms rejected, expiry required, non-empty `sub`, unknown
+`role` value rejected, missing `role` read as `user`), used by `auth-service`, the gateway and
+`user-data-service`.
 
-- `/presets` (gateway) requires a valid **user** access token instead of the shared gateway
-  token; the gateway token is refused there.
-- `user-data-service` re-verifies the token and takes the user ID **only** from `sub`; no
-  route accepts a user ID from the client. Every preset query is scoped to that user, and
-  another user's preset answers `404` (not `403`) so IDs cannot be probed.
-- The shared `GATEWAY_AUTH_TOKEN` still protects every other prefix. It identifies the client
-  application, not a user, and must not be relied on for per-user data.
+Access model at the gateway (`gateway/ROUTES.md`):
+
+- **Public**: `/v1/auth` login, register, refresh and OAuth routes need no credential. They are
+  an allow-list (any other path under `/v1/auth` needs a user token, so a new route or an
+  encoded slash fails closed; encoded dot segments under a public route are left to
+  auth-service, whose router redirects them and whose session routes check the token) and are covered by the gateway rate limit.
+- **User**: `/v1/championship`, `/v1/race-data`, `/v1/presets` and the rest of `/v1/auth` (the
+  session routes) require a
+  valid access token of any role. The gateway token is refused there.
+- **Admin**: `/v1/ingestion` requires an access token with the `admin` role (`403` for a
+  `user` token), or the gateway token.
+- `user-data-service` and the auth-service session routes re-verify the token and take the
+  user ID **only** from `sub`; no route accepts a user ID from the client. Another user's preset
+  or session answers `404` (not `403`) so IDs cannot be probed. Session responses never carry
+  the refresh token or its hash.
+
+### Roles
+
+Every account is created with the `user` role (`User.role`, default `user`). There is no API
+to change a role: an operator promotes an account by hand, on the auth database:
+
+```sql
+UPDATE "User" SET "role" = 'admin' WHERE "email" = 'operator@example.com';
+```
+
+Demotion sets `'user'` back. The role is copied into the access token at login and refresh, so
+the change applies at the next refresh, at most 15 minutes later (the lifetime of an access
+token already issued).
+
+### Gateway token
+
+`GATEWAY_AUTH_TOKEN` is only for internal or scripted calls (for example an ingestion
+trigger run by an operator script or a scheduler). It identifies no user and opens only the
+admin routes. It must **never be shipped in a client application**: anything embedded in an
+app is public. Clients authenticate with the user's own access token. The gateway refuses to
+start with a token shorter than 32 bytes.
+
+**Rotate it when the access model is deployed.** Earlier app builds embedded this token to
+call every route, so its current value must be treated as public: generate a new one
+(`openssl rand -hex 32`), set it in the deployment's `.env`, restart the gateway, and give it
+only to the scripts that trigger ingestion. Until then, anyone holding an old app build can
+trigger ingestion.
+
+### CORS
+
+No CORS headers are sent and preflight requests are not answered: the clients are native (AR
+platform, mobile app), which do not enforce CORS. This is a decision, not an omission. If a
+browser client (web dashboard, WebXR) is ever planned, add CORS handling at the gateway with an
+explicit origin allow-list (never `*` with credentials) and `OPTIONS` handled before the method
+checks.
 
 > Note: the sections below predate the gateway and describe the services as if they were
 > reached directly with no auth or rate limiting. The gateway now enforces mandatory
@@ -109,7 +153,7 @@ hard-coded.
 | Secret | Used by | Rule |
 | --- | --- | --- |
 | `POSTGRES_PASSWORD` | Postgres, every database URL | required (the Postgres image refuses an empty password) |
-| `GATEWAY_AUTH_TOKEN` | gateway | compared in constant time |
+| `GATEWAY_AUTH_TOKEN` | gateway | at least 32 bytes, compared in constant time; opens the admin routes only, never shipped in a client; rotated when the access model is deployed |
 | `AUTH_JWT_SECRET` | auth-service, gateway, user-data-service | at least 32 bytes, not a placeholder |
 | `INTERNAL_INGESTION_TOKEN` | ingestion-service, championship-service, race-data-service | at least 32 bytes |
 
@@ -138,10 +182,10 @@ gateway credentials from the deployment secret manager, not from a checked-in
 
 ## Known Gaps
 
-- This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces mandatory Bearer auth (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`) on every proxied `/v1/*` route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/README.md` for current behavior, don't trust the bullet points below at face value.
+- This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces the access model described above on every proxied route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/ROUTES.md` for current behavior, don't trust the bullet points below at face value.
+- The public auth routes rely on the global gateway rate limit only: there are no dedicated per-account or per-IP limits on login, registration and refresh yet.
 - Individual services behind the gateway (`championship-service`, `race-data-service`, etc.) have no authentication of their own on their public routes: they rely on the gateway, and on their ports being bound to loopback. The internal ingestion endpoints are protected by `INTERNAL_INGESTION_TOKEN`.
 - No rate limiting is implemented inside the individual Go services themselves (only at the gateway edge). The gateway keys its limiter on the TCP peer address; `X-Forwarded-For` is only read when the peer is listed in `GATEWAY_TRUSTED_PROXIES`, from the right, so a client cannot pick a new identity per request. Idle buckets are purged.
 - The gateway reverse proxy still uses the `httputil.ReverseProxy.Director` hook, deprecated since Go 1.26 (accepted in staticcheck). Moving to `Rewrite` changes the `X-Forwarded-*` headers sent upstream and is tracked separately.
-- CORS is not configured anywhere in the repo. This is consistent with native mobile/AR clients talking to the gateway, but should be revisited if a browser-based client is ever introduced.
 
 These gaps should be addressed before exposing the services beyond a local or private development network.

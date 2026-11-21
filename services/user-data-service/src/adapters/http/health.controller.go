@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## health.controller.go - HTTP controller exposing the user-data-service health endpoint.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## health.controller.go - HTTP controller exposing the user-data-service health endpoint.
+##
 */
+
 package httpadapter
 
 import (

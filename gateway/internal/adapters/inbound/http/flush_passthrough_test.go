@@ -20,8 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"overdrive/gateway/internal/adapters/outbound/auth"
-	"overdrive/gateway/internal/core/usecases"
+	"overdrive/gateway/internal/core/domain"
 )
 
 // TestSSEStreamsIncrementallyThroughGateway proves that a real Server-Sent
@@ -64,12 +63,8 @@ func TestSSEStreamsIncrementallyThroughGateway(t *testing.T) {
 		t.Fatalf("parse upstream url: %v", err)
 	}
 
-	tokenValidator := auth.NewStaticTokenValidator("test-token")
-	authorizeUseCase := usecases.NewAuthorizeRequestUseCase(tokenValidator)
-	healthUseCase := usecases.NewCheckHealthUseCase()
-
-	routes := map[string][]*url.URL{"/v1/race-data": {upstreamURL}}
-	handler, err := NewHandler(routes, map[string][]*url.URL{}, 1000, 1000, nil, healthUseCase, authorizeUseCase, usecases.NewAuthorizeUserRequestUseCase(nil))
+	routes := []domain.Route{{Prefix: "/v1/race-data", Targets: []*url.URL{upstreamURL}, Access: domain.AccessUser}}
+	handler, err := newTestHandler(t, routes)
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}
@@ -81,7 +76,7 @@ func TestSSEStreamsIncrementallyThroughGateway(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Authorization", "Bearer "+signTestJWT(t, "user", time.Minute))
 
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)

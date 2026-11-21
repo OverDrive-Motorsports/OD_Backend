@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## main.go - Package main source file for services/race-data-service.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## main.go - Package main source file for services/race-data-service.
+##
 */
+
 package main
 
 import (

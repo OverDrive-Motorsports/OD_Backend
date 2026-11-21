@@ -13,13 +13,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"overdrive/services/auth-service/src/core/domain"
 )
 
 // fakeAuthQueryUseCaseForMiddleware implements ports.AuthQueryUseCase. Only VerifyToken needs
-// a real implementation for requireOwnUser's tests - the middleware never calls the other 3
+// a real implementation for requireUser's tests - the middleware never calls the other 3
 // methods, so they panic if invoked, making an accidental call to them fail loudly instead of
 // silently.
 type fakeAuthQueryUseCaseForMiddleware struct {
@@ -27,142 +28,87 @@ type fakeAuthQueryUseCaseForMiddleware struct {
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) Register(ctx context.Context, email string, password string, userName string) (*domain.LoginResponse, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) Refresh(ctx context.Context, refreshToken string, sessionID string) (*domain.RefreshResponse, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) ListOAuthProviders() []domain.OAuthProviderInfo {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) OAuthAuthorize(providerID string) (*domain.OAuthAuthorization, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) OAuthLogin(ctx context.Context, providerID string, callback domain.OAuthCallback) (*domain.LoginResponse, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) OAuthRegister(ctx context.Context, providerID string, callback domain.OAuthCallback, username string) (*domain.LoginResponse, error) {
-	panic("not used by requireOwnUser")
+	panic("not used by requireUser")
 }
 
 func (f *fakeAuthQueryUseCaseForMiddleware) VerifyToken(tokenString string) (string, error) {
 	return f.verifyTokenFn(tokenString)
 }
 
-// newProtectedTestHandler builds a requireOwnUser-wrapped handler for the given {userID} path
-// pattern, plus a pointer that records whether the inner handler was actually reached.
-func newProtectedTestHandler(authUseCase *fakeAuthQueryUseCaseForMiddleware) (http.Handler, *bool) {
-	reached := false
+// newProtectedTestHandler builds a requireUser-wrapped handler, plus a pointer that records the
+// user ID the inner handler read from the context (empty when it was never reached).
+func newProtectedTestHandler(authUseCase *fakeAuthQueryUseCaseForMiddleware) (http.Handler, *string) {
+	reachedAs := ""
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reached = true
+		reachedAs = userIDFrom(r)
 		w.WriteHeader(http.StatusOK)
 	})
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /{userID}/protected", requireOwnUser(authUseCase)(inner))
-	return mux, &reached
+	mux.Handle("GET /protected", requireUser(authUseCase)(inner))
+	return mux, &reachedAs
 }
 
-// TestRequireOwnUser_MissingAuthorizationHeader proves a request with no Authorization header
-// at all is rejected with 401 and never reaches the protected handler.
-func TestRequireOwnUser_MissingAuthorizationHeader(t *testing.T) {
-	authUseCase := &fakeAuthQueryUseCaseForMiddleware{
-		verifyTokenFn: func(tokenString string) (string, error) {
-			panic("VerifyToken must not be called when the header is missing")
-		},
-	}
-	handler, reached := newProtectedTestHandler(authUseCase)
-
-	req := httptest.NewRequest(http.MethodGet, "/user-1/protected", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-	if *reached {
-		t.Fatalf("expected the protected handler to never be reached")
-	}
-}
-
-// TestRequireOwnUser_InvalidToken proves a request whose bearer token fails VerifyToken is
-// rejected with 401 and never reaches the protected handler.
-func TestRequireOwnUser_InvalidToken(t *testing.T) {
-	authUseCase := &fakeAuthQueryUseCaseForMiddleware{
-		verifyTokenFn: func(tokenString string) (string, error) {
-			return "", domain.ErrInvalidToken
-		},
-	}
-	handler, reached := newProtectedTestHandler(authUseCase)
-
-	req := httptest.NewRequest(http.MethodGet, "/user-1/protected", nil)
-	req.Header.Set("Authorization", "Bearer some-invalid-token")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rec.Code)
-	}
-	if *reached {
-		t.Fatalf("expected the protected handler to never be reached")
-	}
-}
-
-// TestRequireOwnUser_TokenAuthenticatesDifferentUser is the direct regression test for the
-// IDOR that was fixed in requireOwnUser: a valid token that authenticates as a DIFFERENT user
-// than the {userID} path segment being accessed must be rejected with 403, not allowed
-// through. Before this fix, any caller holding a valid JWT for ANY account could read/add/
-// remove session records for every OTHER user.
-func TestRequireOwnUser_TokenAuthenticatesDifferentUser(t *testing.T) {
-	authUseCase := &fakeAuthQueryUseCaseForMiddleware{
-		verifyTokenFn: func(tokenString string) (string, error) {
-			return "user-attacker", nil
-		},
-	}
-	handler, reached := newProtectedTestHandler(authUseCase)
-
-	req := httptest.NewRequest(http.MethodGet, "/user-victim/protected", nil)
-	req.Header.Set("Authorization", "Bearer attacker-token")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 when the token authenticates a different user than the path's {userID}, got %d", rec.Code)
-	}
-	if *reached {
-		t.Fatalf("expected the protected handler to never be reached for a cross-user request - this is the IDOR requireOwnUser exists to close")
-	}
-}
-
-// TestRequireOwnUser_TokenAuthenticatesSameUser proves a valid token whose authenticated user
-// matches the {userID} path segment is allowed through to the protected handler.
-func TestRequireOwnUser_TokenAuthenticatesSameUser(t *testing.T) {
-	authUseCase := &fakeAuthQueryUseCaseForMiddleware{
-		verifyTokenFn: func(tokenString string) (string, error) {
+// TestRequireUser proves the middleware answers 401 UNAUTHORIZED without a bearer token and
+// 401 INVALID_TOKEN for a token VerifyToken rejects, without reaching the handler, and that an
+// accepted token reaches it with the token's user ID in the context (the bearer scheme is
+// matched case-insensitively).
+func TestRequireUser(t *testing.T) {
+	authUseCase := &fakeAuthQueryUseCaseForMiddleware{verifyTokenFn: func(token string) (string, error) {
+		if token == "good-token" {
 			return "user-1", nil
-		},
-	}
-	handler, reached := newProtectedTestHandler(authUseCase)
+		}
+		return "", domain.ErrInvalidToken
+	}}
 
-	req := httptest.NewRequest(http.MethodGet, "/user-1/protected", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+	for name, tc := range map[string]struct {
+		authorization, wantCode, wantUser string
+		wantStatus                        int
+	}{
+		"no header":     {"", `"UNAUTHORIZED"`, "", http.StatusUnauthorized},
+		"other scheme":  {"Basic good-token", `"UNAUTHORIZED"`, "", http.StatusUnauthorized},
+		"empty token":   {"Bearer ", `"UNAUTHORIZED"`, "", http.StatusUnauthorized},
+		"invalid token": {"Bearer bad-token", `"INVALID_TOKEN"`, "", http.StatusUnauthorized},
+		"valid token":   {"bearer good-token", "", "user-1", http.StatusOK},
+	} {
+		handler, reachedAs := newProtectedTestHandler(authUseCase)
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		if tc.authorization != "" {
+			req.Header.Set("Authorization", tc.authorization)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	if !*reached {
-		t.Fatalf("expected the protected handler to be reached for a matching user")
+		if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), tc.wantCode) {
+			t.Fatalf("%s: status = %d body = %s, want %d %s", name, rec.Code, rec.Body.String(), tc.wantStatus, tc.wantCode)
+		}
+		if *reachedAs != tc.wantUser {
+			t.Fatalf("%s: handler reached as %q, want %q", name, *reachedAs, tc.wantUser)
+		}
 	}
 }
 

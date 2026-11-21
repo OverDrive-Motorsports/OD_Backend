@@ -11,12 +11,16 @@
 
 package config
 
-import "net/url"
+import (
+	"net/url"
+
+	"overdrive/gateway/internal/core/domain"
+)
 
 func raceDataServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
-		proxied: map[string][]*url.URL{
-			"/v1/race-data": targets.raceData,
+		proxied: []domain.Route{
+			{Prefix: "/v1/race-data", Targets: targets.raceData, Access: domain.AccessUser},
 		},
 		health: map[string][]*url.URL{
 			"/health/race-data": targets.raceData,

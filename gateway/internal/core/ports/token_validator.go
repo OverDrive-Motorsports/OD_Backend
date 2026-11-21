@@ -11,12 +11,15 @@
 
 package ports
 
+import "overdrive/gateway/internal/core/domain"
+
+// TokenValidator checks the static gateway token (internal and scripted calls).
 type TokenValidator interface {
 	ValidateBearerHeader(header string) bool
 }
 
-// UserTokenValidator verifies an end-user access token. It returns nil when the token is
+// UserTokenValidator verifies an end-user access token. It returns the token's role when it is
 // valid, or domain.ErrMissingUserToken / ErrUserTokenExpired / ErrInvalidUserToken.
 type UserTokenValidator interface {
-	ValidateUserBearerHeader(header string) error
+	ValidateUserBearerHeader(header string) (domain.UserRole, error)
 }

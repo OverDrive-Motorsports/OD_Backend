@@ -134,7 +134,7 @@ func TestOAuthLogin_RejectsInvalidStates(t *testing.T) {
 	google, other := newGoogleFake(), &fakeOAuthProvider{id: "other", identity: newGoogleFake().identity}
 	uc := NewAuthQueryUseCase(&fakeSessionRepository{}, testJWTSecret, google, other)
 	foreignSecret := NewAuthQueryUseCase(&fakeSessionRepository{}, "another-secret-long-enough-for-hs256", google)
-	accessToken, _ := uc.generateJWT("user-1", "user@example.com")
+	accessToken, _ := uc.generateJWT(&domain.User{ID: "user-1", Email: "user@example.com"})
 
 	cases := map[string]string{
 		"empty":                "",
