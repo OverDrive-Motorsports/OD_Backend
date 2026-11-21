@@ -37,18 +37,18 @@ All responses are **camelCase** JSON. List endpoints return **bare JSON arrays**
 - `GET /sessions/{sessionId}/drivers` (query: `teamId`)
 - `GET /sessions/{sessionId}/teams`
 - `GET /sessions/{sessionId}/datasets/{dataset}`
-- `GET /sessions/{sessionId}/standings` (query: `driverNumber`) — generic standings (currently backed by session race results)
-- `GET /sessions/{sessionId}/standings/race` — deprecated alias of `/standings`, kept for backward compatibility with existing internal consumers
+- `GET /sessions/{sessionId}/standings` (query: `driverNumber`) - generic standings (currently backed by session race results)
+- `GET /sessions/{sessionId}/standings/race` - deprecated alias of `/standings`, kept for backward compatibility with existing internal consumers
 - `GET /sessions/{sessionId}/broadcast`
-- `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) — global, session-independent driver profile
+- `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) - global, session-independent driver profile
 
-Known gap: `GET /sessions/{sessionId}` does not populate `weatherAtStart` — this
+Known gap: `GET /sessions/{sessionId}` does not populate `weatherAtStart` - this
 service has no weather data source (weather samples are owned by
 `race-data-service`). The field is simply omitted from the response today; wiring
 cross-service enrichment is left for a follow-up.
 
 Known gap: `driverPicture` on `GET /drivers/{driverNumber}/profile` is always
-empty — no data source is currently ingested for driver headshots.
+empty - no data source is currently ingested for driver headshots.
 
 Supported session datasets:
 

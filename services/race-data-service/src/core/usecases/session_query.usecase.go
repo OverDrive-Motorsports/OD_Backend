@@ -435,7 +435,9 @@ func intFromAny(value any) int {
 			return 0
 		}
 		var parsed int
-		fmt.Sscanf(v, "%d", &parsed)
+		if _, err := fmt.Sscanf(v, "%d", &parsed); err != nil {
+			return 0
+		}
 		return parsed
 	default:
 		return 0

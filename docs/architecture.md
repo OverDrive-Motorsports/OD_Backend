@@ -1,4 +1,4 @@
-# OverDrive Backend — How It Works
+# OverDrive Backend - How It Works
 
 This document explains how a request actually travels through the system, using a
 handful of real `curl` calls as worked examples. For "how do I run this," see
@@ -60,7 +60,7 @@ export GW=http://localhost:3000
 export TOKEN=$(grep GATEWAY_AUTH_TOKEN .env | cut -d= -f2)
 ```
 
-## Example 1 — a simple read: `GET /v1/championship/championships`
+## Example 1 - a simple read: `GET /v1/championship/championships`
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" $GW/v1/championship/championships
@@ -88,7 +88,7 @@ curl -H "Authorization: Bearer $TOKEN" $GW/v1/championship/championships
    tags) and writes a **bare JSON array**. That response goes back through the
    reverse proxy, unmodified, to the client.
 
-## Example 2 — parameter validation: `GET /v1/race-data/sessions/{id}/race/laps`
+## Example 2 - parameter validation: `GET /v1/race-data/sessions/{id}/race/laps`
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -101,7 +101,7 @@ also wrapped with **`ValidateRaceParameters`**
 the path shape and:
 
 - checks `race` is followed by an allow-listed action (`position`, `laps`,
-  `stints`, `pitstops`, `control`, `weather`, `radio`, `replay`) — anything else
+  `stints`, `pitstops`, `control`, `weather`, `radio`, `replay`) - anything else
   gets `400 VALIDATION_ERROR` before ever reaching `race-data-service`;
 - checks `driverNumber` and `lapNumber` (path or query) are positive integers.
 
@@ -110,7 +110,7 @@ Only then does the reverse proxy forward `GET
 There, `race_live.controller.go`:
 
 1. checks the session exists by asking `championship-service` (the owner of the
-   session catalog) — unknown session → `404 SESSION_NOT_FOUND`, championship-service
+   session catalog) - unknown session → `404 SESSION_NOT_FOUND`, championship-service
    unreachable → `502 UPSTREAM_UNAVAILABLE`;
 2. calls the usecase, which queries `RaceLap` rows from `overdrive_race_data` and
    computes `bestLap` / `averageLap` on the fly (they are never stored);
@@ -121,7 +121,7 @@ There, `race_live.controller.go`:
 on a miss, not `(nil, nil)`: every repository translates that sentinel explicitly
 (`isNotFoundErr`) so a missing row becomes a `404`, not a `500`.
 
-## Example 3 — the long-poll: `POST /v1/race-data/sessions/{id}/race/control`
+## Example 3 - the long-poll: `POST /v1/race-data/sessions/{id}/race/control`
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" \
@@ -138,14 +138,14 @@ answer. On the service side:
    request is waiting (see Example 4), the broadcaster wakes the handler
    immediately, which responds `200` with the new event(s).
 3. If nothing arrives within 30 seconds, the handler responds `200` with an empty
-   array `[]` — the client is expected to immediately re-`POST` to keep waiting.
+   array `[]` - the client is expected to immediately re-`POST` to keep waiting.
    This is *not* an error; it's the documented long-poll contract.
 
 This mechanism is single-instance by construction (an in-process Go channel, not a
 shared broker): with more than one `race-data-service` replica, a client's
 long-poll could land on a replica that never sees the event.
 
-## Example 4 — ingestion: `POST /v1/ingestion/providers/openf1/ingestions`
+## Example 4 - ingestion: `POST /v1/ingestion/providers/openf1/ingestions`
 
 ```bash
 curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -173,7 +173,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 5. High-volume datasets (`car_data`/telemetry, `location`, `position`,
    `intervals`, `laps`) are written with up to 16 rows in flight concurrently
    (`runConcurrent` in `ingestion.repository.go`), because the Prisma Go client has
-   no bulk `CreateMany` — without this, a full session would take minutes of
+   no bulk `CreateMany` - without this, a full session would take minutes of
    per-row round trips.
 6. Parent rows built from a child row's fallbacks are created once and never updated:
    when a `sessions` row arrives before its meeting, championship-service creates a
@@ -182,7 +182,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
 7. The response summarises, per resource, how many rows were fetched and whether
    they were dispatched.
 
-## Example 5 — the replay: catalog then bulk dump
+## Example 5 - the replay: catalog then bulk dump
 
 ```bash
 # which sessions can be replayed?
@@ -196,7 +196,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 **The catalog** (`replay_catalog.*` in race-data-service) lists a championship's
 sessions with their event context in one call to championship-service
 (`GET /championships/{code}/sessions`), then keeps only those with at least one
-telemetry sample **and** one location sample — what the replay needs to animate
+telemetry sample **and** one location sample - what the replay needs to animate
 cars. That check is a single raw `EXISTS` query on the `sessionId` indexes
 (`replay_catalog.repository.go`), because the Prisma Go client has no
 `DISTINCT`/`EXISTS` and the sample tables hold millions of rows. Newest first,
@@ -206,8 +206,8 @@ cars. That check is a single raw `EXISTS` query on the `sessionId` indexes
 `GetReplay`:
 
 1. validates `sessionId` against `championship-service` (Example 2's pattern);
-2. asks `race_stream.repository.go` for **eight** datasets — `telemetry`,
-   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`, `lap` — each
+2. asks `race_stream.repository.go` for **eight** datasets - `telemetry`,
+   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`, `lap` - each
    queried **once per call**, sorted by timestamp. Telemetry samples carry no lap
    number nor position: `x`/`y`/`z` come from the nearest `RaceLocationSample` and
    `lapNumber` from the `RaceLap` that started last, both resolved with a
@@ -215,7 +215,7 @@ cars. That check is a single raw `EXISTS` query on the `sessionId` indexes
    column, so each stint is anchored to the start time of its `lapStart` lap;
 3. groups the six driver-scoped datasets by driver number (as a string key) and
    leaves the two track-wide ones (`raceControl`, `weather`) as flat arrays;
-4. returns the assembled `domain.RaceReplay` — no pagination, no streaming.
+4. returns the assembled `domain.RaceReplay` - no pagination, no streaming.
 
 It is a **replay** of already-ingested historical samples, not a live feed. See
 `services/race-data-service/doc/endpoint.md` for the full response shape. The
@@ -223,7 +223,7 @@ gateway still forwards `Flush()` through its logging middleware
 (`statusRecorder.Flush()`, covered by `flush_passthrough_test.go`), so a streaming
 endpoint would work through it if one is added.
 
-## Example 6 — per-user data: `POST /presets`
+## Example 6 - per-user data: `POST /presets`
 
 ```bash
 # 1. log in (gateway token on /auth) and keep the user's access token
@@ -231,7 +231,7 @@ JWT=$(curl -sS -X POST $GW/auth/login -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"email":"me@example.com","password":"..."}' | jq -r .token)
 
-# 2. call /presets with the user's token — not the gateway token
+# 2. call /presets with the user's token - not the gateway token
 curl -X POST $GW/presets -H "Authorization: Bearer $JWT" \
   -H "Content-Type: application/json" -d '{"name":"Race view","data":{"widgets":[]}}'
 ```
@@ -245,7 +245,7 @@ curl -X POST $GW/presets -H "Authorization: Bearer $JWT" \
 2. The prefix is stripped and `POST /` reaches `user-data-service` with the
    `Authorization` header unchanged.
 3. `user-data-service` **re-verifies** the token (`requireUser` middleware) and takes
-   the user ID **only** from its `sub` claim — no route accepts a user ID from the
+   the user ID **only** from its `sub` claim - no route accepts a user ID from the
    client. Every repository query is scoped to that user, so another user's preset
    answers `404`, exactly like a missing one.
 4. The creation runs in one transaction that starts with a per-user advisory lock

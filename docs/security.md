@@ -39,7 +39,7 @@ and `user-data-service`.
 ## HTTP Surface
 
 Only the gateway (`3000`) is published on every network interface. The services
-(`3001`–`3005`) and Postgres (`5432`) are bound to the host's loopback (`127.0.0.1`) in
+(`3001`-`3005`) and Postgres (`5432`) are bound to the host's loopback (`127.0.0.1`) in
 `docker-compose.yml`: they stay reachable from the developer's own machine for debugging, but
 not from another machine on the network. Services reach each other over the Docker network.
 
@@ -102,8 +102,9 @@ Each Go HTTP server sets `ReadHeaderTimeout` to protect request header parsing.
 Local `.env` files are ignored by git. Templates (`.env.template` at the root, and the
 per-service `.env.template` used to run a single service outside Docker) contain no secret
 value: every secret is empty and must be generated, e.g. `openssl rand -hex 32`. Host-side
-Prisma tools (`prisma.config.ts`) build their database URL from `POSTGRES_USER` /
-`POSTGRES_PASSWORD` in the root `.env`; no credential is hard-coded.
+Prisma tools (`tools/prisma.sh`) build their database URL from `POSTGRES_USER` /
+`POSTGRES_PASSWORD` in the root `.env`, which they parse without executing it; no credential is
+hard-coded.
 
 | Secret | Used by | Rule |
 | --- | --- | --- |
@@ -122,11 +123,25 @@ These are development-grade values only. Production should source database and
 gateway credentials from the deployment secret manager, not from a checked-in
 `.env.template`-style file.
 
+## Toolchain And Dependencies
+
+- Go 1.27 everywhere (Compose images, CI, `go.work` and every `go.mod`): only the two latest Go
+  releases receive security fixes, so the toolchain must follow them.
+- The CI `lint` job runs `govulncheck` (reachable known vulnerabilities, standard library
+  included), `staticcheck` and `gosec` on every module and fails on any finding. An accepted
+  finding is annotated inline with its reason (`//lint:ignore`, `// #nosec <rule> -- <reason>`).
+- Dependencies, GitHub Actions and Compose images are updated by hand (no update bot); every
+  action is pinned by commit SHA. The Postgres image is pinned to a minor version; a major
+  upgrade needs a dump/restore.
+- `go.mongodb.org/mongo-driver/v2` is only pulled by prisma-client-go for its BSON decoder; it is
+  kept on its latest version until the Prisma client is replaced.
+
 ## Known Gaps
 
 - This document predates the API gateway (`gateway/`), which now exists and is fully implemented. The gateway enforces mandatory Bearer auth (`Authorization: Bearer <GATEWAY_AUTH_TOKEN>`) on every proxied `/v1/*` route and applies in-memory token-bucket rate limiting; `/health` and `/health/{service}` are intentionally left open for infra probes. See `gateway/README.md` for current behavior, don't trust the bullet points below at face value.
 - Individual services behind the gateway (`championship-service`, `race-data-service`, etc.) have no authentication of their own on their public routes: they rely on the gateway, and on their ports being bound to loopback. The internal ingestion endpoints are protected by `INTERNAL_INGESTION_TOKEN`.
 - No rate limiting is implemented inside the individual Go services themselves (only at the gateway edge). The gateway keys its limiter on the TCP peer address; `X-Forwarded-For` is only read when the peer is listed in `GATEWAY_TRUSTED_PROXIES`, from the right, so a client cannot pick a new identity per request. Idle buckets are purged.
+- The gateway reverse proxy still uses the `httputil.ReverseProxy.Director` hook, deprecated since Go 1.26 (accepted in staticcheck). Moving to `Rewrite` changes the `X-Forwarded-*` headers sent upstream and is tracked separately.
 - CORS is not configured anywhere in the repo. This is consistent with native mobile/AR clients talking to the gateway, but should be revisited if a browser-based client is ever introduced.
 
 These gaps should be addressed before exposing the services beyond a local or private development network.

@@ -42,7 +42,7 @@ func TestNewUserTokenValidator_RequiresSecret(t *testing.T) {
 }
 
 // TestUserTokenValidator_ValidateUserBearerHeader proves each rejection maps to the domain
-// reason the gateway turns into a distinct 401 code — and that the static gateway token is not
+// reason the gateway turns into a distinct 401 code - and that the static gateway token is not
 // a valid user token.
 func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
 	validator, err := NewUserTokenValidator(validatorSecret)

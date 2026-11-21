@@ -1,12 +1,22 @@
 module overdrive/services/auth-service
 
-go 1.25.0
-
-require overdrive/shared/bootstrap v0.0.0
+go 1.27
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	golang.org/x/crypto v0.54.0 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/joho/godotenv v1.5.1
+	github.com/shopspring/decimal v1.6.0
+	github.com/steebchen/prisma-client-go v0.47.0
+	golang.org/x/crypto v0.59.0
+	overdrive/shared/apierror v0.0.0
+	overdrive/shared/authjwt v0.0.0
+	overdrive/shared/bootstrap v0.0.0
 )
 
+require go.mongodb.org/mongo-driver/v2 v2.10.1 // indirect
+
 replace overdrive/shared/bootstrap => ../../shared/bootstrap
+
+replace overdrive/shared/apierror => ../../shared/apierror
+
+replace overdrive/shared/authjwt => ../../shared/authjwt

@@ -15,8 +15,8 @@ import (
 	"testing"
 )
 
-// TestUser_PasswordHashNeverSerialised proves a User marshalled to JSON — by a future endpoint
-// or a log line — never contains its password hash, neither the field nor the value.
+// TestUser_PasswordHashNeverSerialised proves a User marshalled to JSON - by a future endpoint
+// or a log line - never contains its password hash, neither the field nor the value.
 func TestUser_PasswordHashNeverSerialised(t *testing.T) {
 	const hash = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012"
 	raw, err := json.Marshal(User{ID: "user-1", Email: "a@a.fr", PasswordHash: hash})
