@@ -102,7 +102,7 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 		return nil, domain.ErrInvalidSession
 	}
 
-	token, err := u.generateJWT(user.ID, user.Email)
+	token, err := u.generateJWT(user)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (u *AuthQueryUseCase) Refresh(ctx context.Context, refreshToken string, ses
 
 // startSession issues an access token and persists a new refresh session for user.
 func (u *AuthQueryUseCase) startSession(ctx context.Context, user *domain.User) (*domain.LoginResponse, error) {
-	token, err := u.generateJWT(user.ID, user.Email)
+	token, err := u.generateJWT(user)
 	if err != nil {
 		return nil, err
 	}
@@ -141,10 +141,18 @@ func hashPassword(password string) (string, error) {
 	return string(hash), nil
 }
 
-func (u *AuthQueryUseCase) generateJWT(userID string, email string) (string, error) {
+// generateJWT issues the access token of user. The `role` claim is read again from the database
+// at every login and refresh, so a promotion or demotion applies at the next refresh at the
+// latest (access tokens live 15 minutes). An unknown or empty role is issued as RoleUser.
+func (u *AuthQueryUseCase) generateJWT(user *domain.User) (string, error) {
+	role := domain.RoleUser
+	if user.Role == domain.RoleAdmin {
+		role = domain.RoleAdmin
+	}
 	claims := jwt.MapClaims{
-		"sub":   userID,
-		"email": email,
+		"sub":   user.ID,
+		"email": user.Email,
+		"role":  string(role),
 		"iat":   time.Now().Unix(),
 		"exp":   time.Now().Add(15 * time.Minute).Unix(),
 	}
@@ -159,7 +167,7 @@ func (u *AuthQueryUseCase) generateJWT(userID string, email string) (string, err
 
 // VerifyToken parses and validates a bearer JWT issued by generateJWT, returning the
 // authenticated user ID (the "sub" claim). Used by the HTTP layer to enforce that a caller
-// can only act on their own userID-scoped resources (see requireOwnUser middleware).
+// can only act on their own sessions (see the requireUser middleware).
 // Verification is delegated to shared/authjwt, the single implementation also used by the
 // gateway and user-data-service; every failure (expiry included) maps to ErrInvalidToken.
 func (u *AuthQueryUseCase) VerifyToken(tokenString string) (string, error) {

@@ -1,5 +1,12 @@
 # ingestion-service endpoints
 
+Through the gateway the routes are under `/v1/ingestion` and are restricted to administrators:
+`Authorization: Bearer <access token>` whose `role` claim is `admin`, or
+`Authorization: Bearer <GATEWAY_AUTH_TOKEN>` for scripted calls. A valid `user` token answers
+`403 FORBIDDEN`; no, expired or invalid token answers `401` (see `gateway/ROUTES.md`). Promoting
+an account to `admin` is described in `services/auth-service/doc/endpoint.md`. The service
+itself checks no token: it relies on the gateway.
+
 ## `GET /health`
 
 Returns the runtime status of the service.
@@ -141,7 +148,7 @@ Status: `202 Accepted`
     }
   ],
   "dispatch_enabled": true,
-  "triggered_at_utc": "2026-04-24T10:00:00Z",
-  "completed_at_utc": "2026-04-24T10:00:02Z"
+  "triggered_at_utc": "YYYY-MM-DDThh:mm:ssZ",
+  "completed_at_utc": "YYYY-MM-DDThh:mm:ssZ"
 }
 ```

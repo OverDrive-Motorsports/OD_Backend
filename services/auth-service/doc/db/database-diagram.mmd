@@ -4,6 +4,7 @@ erDiagram
         string email UK
         string displayName
         string passwordHash
+        UserRole role
         datetime createdAt
         datetime updatedAt
     }
@@ -25,6 +26,11 @@ erDiagram
         datetime updatedAt
     }
 
+    USER_ROLE {
+        enum user
+        enum admin
+    }
+
     PROVIDER_TYPE {
         enum GOOGLE "Google"
         enum F1TV "F1TV"
@@ -32,4 +38,5 @@ erDiagram
 
     USER ||--o{ AUTH_SESSION : owns
     USER ||--o{ OAUTH_ACCOUNT : owns
+    USER }o--|| USER_ROLE : role
     OAUTH_ACCOUNT }o--|| PROVIDER_TYPE : provider

@@ -23,42 +23,24 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
 }
 ```
 
-### Retrieve User Sessions (`GET /{userID}/sessions`)
+### List the caller's sessions (`GET /sessions`)
+Requires `Authorization: Bearer <access token>`; the user comes from the token.
 #### Response:
 ```json
-{
-    "count": 1,
-    "sessions": [
-        {
-            "id": "4caffeeb-91b3-4112-a73e-f7f495383109",
-            "userID": "",
-            "refreshToken": "",
-            "expiresAt": "2026-08-24T21:50:09.496Z",
-            "createdAt": "2026-07-25T19:40:59.967Z"
-        }
-    ]
-}
+[
+    {
+        "id": "4caffeeb-91b3-4112-a73e-f7f495383109",
+        "createdAt": "YYYY-MM-DDThh:mm:ss.sssZ",
+        "expiresAt": "YYYY-MM-DDThh:mm:ss.sssZ"
+    }
+]
 ```
 
-### Retrieve Session for a Specific User (`GET /{userID}/session/{sessionID}`)
-#### Response:
-```json
-{
-   "id": "4caffeeb-91b3-4112-a73e-f7f495383109",
-   "userID": "",
-   "refreshToken": "",
-   "expiresAt": "2026-08-24T21:50:09.496Z",
-   "createdAt": "2026-07-25T19:40:59.967Z"
-}
-```
+### Get one of the caller's sessions (`GET /sessions/{sessionId}`)
+Same object as above; `404 SESSION_NOT_FOUND` for an unknown session or another user's.
 
-### Delete Session for a Specific User (`DELETE /{userID}/session/{sessionID}`)
-#### Response:
-```json
-{
-    "status": "ok"
-}
-```
+### Revoke one of the caller's sessions (`DELETE /sessions/{sessionId}`)
+`204 No Content`; `404 SESSION_NOT_FOUND` for an unknown session or another user's.
 
 ### Register User (`POST /register`)
 #### Body:
@@ -75,7 +57,7 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
     "token": "<token>",
     "refreshToken": "<refresh_token>",
     "sessionId": "<session_id>",
-    "expiresAt": "2026-08-12T15:45:02.918Z"
+    "expiresAt": "YYYY-MM-DDThh:mm:ss.sssZ"
 }
 ```
 
@@ -93,7 +75,7 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
     "token": "<token>",
     "refreshToken": "<refresh_token>",
     "sessionId": "<session_id>",
-    "expiresAt": "2026-08-12T15:45:02.918Z"
+    "expiresAt": "YYYY-MM-DDThh:mm:ss.sssZ"
 }
 ```
 
@@ -110,6 +92,6 @@ Database ownership: `auth-service` owns `AUTH_DATABASE_URL`, which should target
 {
     "token": "<token>",
     "refreshToken": "<refresh_token>",
-    "expiresAt": "2026-08-12T15:45:02.918Z"
+    "expiresAt": "YYYY-MM-DDThh:mm:ss.sssZ"
 }
 ```

@@ -1,5 +1,11 @@
 # race-data-service endpoints
 
+Through the gateway the public routes are under `/v1/race-data` and require the user's access
+token (`Authorization: Bearer <access token>`, any role); the gateway token is refused. Without
+a token: `401 UNAUTHORIZED`, expired: `401 TOKEN_EXPIRED`, otherwise invalid:
+`401 INVALID_TOKEN` (see `gateway/ROUTES.md`). The service itself checks no user token: it
+relies on the gateway.
+
 ## `GET /health`
 
 Returns the runtime status of the service.
@@ -51,7 +57,7 @@ as a bare JSON array, newest first. Built for the VR replay page: each
     "sessionId": "openf1:session:9472",
     "name": "Race",
     "type": "race",
-    "startTime": "2024-03-02T15:00:00Z",
+    "startTime": "YYYY-MM-DDThh:mm:ssZ",
     "seasonYear": 2024,
     "eventName": "Bahrain Grand Prix",
     "circuit": "Bahrain International Circuit"
@@ -203,12 +209,12 @@ curl http://localhost:3004/sessions/<SESSION_ID>/race/replay?driverNumber=63
 {
   "telemetry": {
     "63": [
-      { "speed": 312, "rpm": 11800, "gear": 7, "throttlePercent": 100, "brakePercent": 0, "drsActive": true, "lapNumber": 12, "x": 1024.5, "y": -302.1, "z": 12.3, "timestamp": "2026-03-08T15:12:04Z" }
+      { "speed": 312, "rpm": 11800, "gear": 7, "throttlePercent": 100, "brakePercent": 0, "drsActive": true, "lapNumber": 12, "x": 1024.5, "y": -302.1, "z": 12.3, "timestamp": "YYYY-MM-DDThh:mm:ssZ" }
     ]
   },
   "position": {
     "63": [
-      { "position": 1, "gapAhead": null, "gapBehind": null, "lapsCompleted": 12, "timestamp": "2026-03-08T15:12:04Z" }
+      { "position": 1, "gapAhead": null, "gapBehind": null, "lapsCompleted": 12, "timestamp": "YYYY-MM-DDThh:mm:ssZ" }
     ]
   },
   "radio": { "63": [] },
@@ -224,10 +230,10 @@ curl http://localhost:3004/sessions/<SESSION_ID>/race/replay?driverNumber=63
     ]
   },
   "raceControl": [
-    { "category": "Flag", "flag": "GREEN", "message": "TRACK CLEAR", "lapNumber": 1, "timestamp": "2026-03-08T15:00:00Z", "penality": null, "safetyCar": null }
+    { "category": "Flag", "flag": "GREEN", "message": "TRACK CLEAR", "lapNumber": 1, "timestamp": "YYYY-MM-DDThh:mm:ssZ", "penality": null, "safetyCar": null }
   ],
   "weather": [
-    { "timestamp": "2026-03-08T15:00:00Z", "airTemperature": 24.1, "trackTemperature": 31.5, "humidity": 48, "windSpeed": 1.2, "rainfall": false }
+    { "timestamp": "YYYY-MM-DDThh:mm:ssZ", "airTemperature": 24.1, "trackTemperature": 31.5, "humidity": 48, "windSpeed": 1.2, "rainfall": false }
   ]
 }
 ```

@@ -76,19 +76,30 @@ curl -fsS http://localhost:3000/health
 ```
 
 `http://localhost:3000/health` is the gateway's own liveness check - it doesn't
-require authentication (every other route does, see below).
+require authentication (data routes do, see below).
 
-## 3. Get the gateway's auth token
+## 3. Get your tokens
 
-Every route under `/v1/...` requires a `Authorization: Bearer <token>` header. In
-this dev setup, the token is the `GATEWAY_AUTH_TOKEN` value of the root `.env`:
+Data routes (`/v1/championship`, `/v1/race-data`, `/v1/presets`) need a **user access
+token**. Create an account and keep its token (the register and login routes are
+public; the token lasts 15 minutes, log in again to get a new one):
 
 ```bash
-TOKEN=$(grep '^GATEWAY_AUTH_TOKEN=' .env | cut -d= -f2-)
+curl -s -X POST http://localhost:3000/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"email":"dev@example.com","password":"dev-password","username":"Dev"}' > /dev/null
+TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"dev@example.com","password":"dev-password"}' | jq -r .token)
 ```
 
-If you ever change that value in `.env`, update this everywhere you see `$TOKEN`
-below and restart the gateway.
+Ingestion (`/v1/ingestion`) is reserved to administrators. From a script, use the
+`GATEWAY_AUTH_TOKEN` value of the root `.env` (never put it in a client app):
+
+```bash
+GATEWAY_TOKEN=$(grep '^GATEWAY_AUTH_TOKEN=' .env | cut -d= -f2-)
+```
+
+An account can also be promoted to `admin` (see `docs/security.md`); its next login then
+returns a token accepted on `/v1/ingestion`.
 
 ## 4. Load a real race into the database
 
@@ -104,7 +115,7 @@ dependency order automatically:
 
 ```bash
 curl -X POST http://localhost:3000/v1/ingestion/providers/openf1/ingestions \
-  -H "Authorization: Bearer $TOKEN" \
+  -H "Authorization: Bearer $GATEWAY_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
         "meeting_key": 1255,
@@ -141,7 +152,7 @@ for driver in $(curl -s -H "Authorization: Bearer $TOKEN" \
     | grep -o '"driverNumber":[0-9]*' | grep -o '[0-9]*'); do
   echo "ingesting driver $driver..."
   curl -X POST http://localhost:3000/v1/ingestion/providers/openf1/ingestions \
-    -H "Authorization: Bearer $TOKEN" \
+    -H "Authorization: Bearer $GATEWAY_TOKEN" \
     -H 'Content-Type: application/json' \
     -d "{\"meeting_key\":1255,\"session_key\":9998,\"driver_number\":$driver,\"resources\":[\"car_data\",\"location\"],\"dispatch\":true}"
 done
@@ -224,7 +235,10 @@ Data persists in a Docker volume (`overdrive-postgres-data`) between restarts -
 ## Troubleshooting
 
 - **A request to `/v1/...` returns `401`**: you forgot the `Authorization: Bearer $TOKEN`
-  header (`GATEWAY_AUTH_TOKEN` of the root `.env`), or the token is wrong.
+  header, or the token is wrong. `TOKEN_EXPIRED` means the 15 minutes are over: log in
+  again. The gateway token is refused on data routes (`INVALID_TOKEN`).
+- **`/v1/ingestion` returns `403 FORBIDDEN`**: you sent a user token; use
+  `$GATEWAY_TOKEN` or an `admin` account's token.
 - **`docker compose up` stops with `dependency failed to start`**: a required secret is
   missing or too short (`docker compose logs <service>` names it), or the Postgres password
   in `.env` no longer matches the existing volume - see "Upgrading an existing checkout".

@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## health.controller.go - Package httpadapter source file for services/championship-service/src/adapters/http.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## health.controller.go - Package httpadapter source file for services/championship-service/src/adapters/http.
+##
 */
+
 package httpadapter
 
 import (

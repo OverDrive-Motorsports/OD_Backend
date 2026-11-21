@@ -95,8 +95,8 @@ They do not mean that the services share one physical database.
 | UUID primary keys | `auth-service`, `user-data-service`, `championship-service`, part of `race-data-service` | Stable identifiers for business entities | `98c9f3fd-5305-4af5-b5c0-790c8fe3d4ff` |
 | Auto-increment `BigInt` primary keys | `championship-service`, `race-data-service` | Efficient storage for high-volume snapshot or sample rows | `45001` |
 | JSON payload columns | `user-data-service`, `championship-service`, `race-data-service` | Preserve provider payloads or dynamic configuration | `{"stream":"onboard","driverNumber":1}` |
-| `createdAt` timestamps | All 4 services | Track insertion time | `2026-04-14T10:00:00Z` |
-| `updatedAt` timestamps | `auth-service`, `user-data-service`, `championship-service`, part of `race-data-service` | Track record updates | `2026-04-14T10:15:00Z` |
+| `createdAt` timestamps | All 4 services | Track insertion time | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` timestamps | `auth-service`, `user-data-service`, `championship-service`, part of `race-data-service` | Track record updates | `YYYY-MM-DDThh:mm:ssZ` |
 | Composite uniqueness | All 4 services | Prevent duplicate business rows in scoped contexts | `(sessionId, driverNumber, lapNumber)` |
 
 <br>

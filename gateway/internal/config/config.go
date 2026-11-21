@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"overdrive/gateway/internal/core/domain"
 )
 
 type Config struct {
@@ -30,7 +32,7 @@ type Config struct {
 	RateLimitRPS        float64
 	RateLimitBurst      float64
 	TrustedProxies      []*net.IPNet
-	Routes              map[string][]*url.URL
+	Routes              []domain.Route
 	ServiceHealthRoutes map[string][]*url.URL
 }
 
@@ -54,6 +56,11 @@ func Load() (Config, error) {
 
 	authToken, err := getRequiredEnv("GATEWAY_AUTH_TOKEN")
 	if err != nil {
+		return Config{}, err
+	}
+	// The presented token is trimmed before comparison, so the configured one must be too.
+	authToken = strings.TrimSpace(authToken)
+	if err := validateGatewayToken(authToken); err != nil {
 		return Config{}, err
 	}
 
@@ -194,6 +201,19 @@ func parsePositiveFloat(key string) (float64, error) {
 	}
 
 	return value, nil
+}
+
+// minGatewayTokenBytes is the minimum length of GATEWAY_AUTH_TOKEN: it opens the admin routes,
+// so it must be as hard to guess as the other shared secrets (32 random bytes).
+const minGatewayTokenBytes = 32
+
+// validateGatewayToken refuses a GATEWAY_AUTH_TOKEN shorter than minGatewayTokenBytes, so a
+// weak admin credential stops the gateway at startup.
+func validateGatewayToken(token string) error {
+	if len(strings.TrimSpace(token)) < minGatewayTokenBytes {
+		return fmt.Errorf("GATEWAY_AUTH_TOKEN must be at least %d bytes (generate it with: openssl rand -hex 32)", minGatewayTokenBytes)
+	}
+	return nil
 }
 
 func getRequiredEnv(key string) (string, error) {

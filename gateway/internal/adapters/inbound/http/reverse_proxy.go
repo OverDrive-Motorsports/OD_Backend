@@ -12,6 +12,7 @@
 package httpinbound
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -26,14 +27,23 @@ import (
 )
 
 type ReverseProxy struct {
-	routePrefix string
-	targets     []*url.URL
-	counter     uint64
-	proxy       *httputil.ReverseProxy
+	routePrefix    string
+	upstreamPrefix string
+	targets        []*url.URL
+	counter        uint64
+	proxy          *httputil.ReverseProxy
 }
 
-func NewReverseProxy(routePrefix string, targets []*url.URL) (*ReverseProxy, error) {
+// NewReverseProxy forwards requests under routePrefix to targets, replacing routePrefix with
+// upstreamPrefix in the path (an empty upstreamPrefix strips it).
+func NewReverseProxy(routePrefix string, upstreamPrefix string, targets []*url.URL) (*ReverseProxy, error) {
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("route %q has no upstream target", routePrefix)
+	}
 	rp := &ReverseProxy{routePrefix: normalizePrefix(routePrefix), targets: targets}
+	if upstreamPrefix != "" {
+		rp.upstreamPrefix = normalizePrefix(upstreamPrefix)
+	}
 	rp.proxy = &httputil.ReverseProxy{
 		//lint:ignore SA1019 moving to Rewrite changes the X-Forwarded-* headers sent upstream; tracked separately.
 		Director:       rp.director,
@@ -57,7 +67,7 @@ func (p *ReverseProxy) director(req *http.Request) {
 	req.URL.Host = target.Host
 	req.Host = target.Host
 
-	trimmedPath := strings.TrimPrefix(req.URL.Path, p.routePrefix)
+	trimmedPath := p.upstreamPrefix + strings.TrimPrefix(req.URL.Path, p.routePrefix)
 	if trimmedPath == "" {
 		trimmedPath = "/"
 	}

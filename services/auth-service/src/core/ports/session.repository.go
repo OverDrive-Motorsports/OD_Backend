@@ -19,6 +19,7 @@ type SessionRepository interface {
 	GetUserSession(ctx context.Context, userID string, sessionID string) (*domain.AuthSession, error)
 	GetSessionByID(ctx context.Context, sessionID string) (*domain.AuthSession, error)
 	AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error)
+	// RemoveUserSession returns domain.ErrSessionNotFound when userID owns no such session.
 	RemoveUserSession(ctx context.Context, userID string, sessionID string) error
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, error)

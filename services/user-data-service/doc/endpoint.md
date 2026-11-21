@@ -19,8 +19,8 @@ backend only checks it is a JSON object of at most 256 KiB and never interprets 
   "name": "Race weekend",
   "isDefault": true,
   "data": { "widgets": [ { "type": "video", "position": [0, 1.2, -2] } ] },
-  "createdAt": "2026-11-01T10:00:00Z",
-  "updatedAt": "2026-11-01T10:05:00Z"
+  "createdAt": "YYYY-MM-DDThh:mm:ssZ",
+  "updatedAt": "YYYY-MM-DDThh:mm:ssZ"
 }
 ```
 
@@ -30,7 +30,7 @@ whitespace may be normalised.
 ### Authentication and ownership
 
 Every preset route requires `Authorization: Bearer <access token>`, the JWT returned by
-`POST /auth/login` (not the gateway token). The user is **only** taken from the token's `sub`
+`POST /v1/auth/login` (not the gateway token). The user is **only** taken from the token's `sub`
 claim: no route accepts a user ID in the path, query or body (an extra `userId` body field is
 rejected as an unknown field). A preset owned by another user answers `404`, exactly like a
 missing one.
@@ -41,8 +41,11 @@ missing one.
 | Expired access token | `401` | `TOKEN_EXPIRED` |
 | Any other invalid token | `401` | `INVALID_TOKEN` |
 
-Through the gateway the public paths are `/presets` and `/presets/{presetId}`; the gateway
-strips its `/presets` prefix, so the service itself serves them on `/` and `/{presetId}`.
+The service serves the routes under `/presets`. Through the gateway the public paths are
+`/v1/presets` and `/v1/presets/{presetId}` (and `/presets/...` during the transition); the
+gateway forwards them as `/presets/...`. `GET /presets/health` is therefore a preset lookup
+(`404 PRESET_NOT_FOUND`), never the service health. The collection also answers with a
+trailing slash (`/presets/`).
 
 ### Rules
 
@@ -99,11 +102,11 @@ Partial update; at least one field. An absent field (or `"data": null`) is left 
 ### Example (through the gateway)
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
-  -H "Authorization: Bearer $GATEWAY_AUTH_TOKEN" -H "Content-Type: application/json" \
+TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/login \
+  -H "Content-Type: application/json" \
   -d '{"email":"me@example.com","password":"..."}' | jq -r .token)
 
-curl -s -X POST http://localhost:3000/presets -H "Authorization: Bearer $TOKEN" \
+curl -s -X POST http://localhost:3000/v1/presets -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" -d '{"name":"Race weekend","data":{"widgets":[]}}'
-curl -s http://localhost:3000/presets -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:3000/v1/presets -H "Authorization: Bearer $TOKEN"
 ```

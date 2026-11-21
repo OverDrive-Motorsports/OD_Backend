@@ -4,40 +4,55 @@ This file lists routes exposed by the gateway and their upstream service mapping
 
 ## Auth Behavior
 
-Bearer auth is **mandatory** on every proxied route (`/health` and
-`/health/{service}` stay open for infra probes). Which bearer is expected depends on the prefix:
+Every proxied prefix has an access level (`gateway/internal/config/routes_*.go`). `/health` and
+`/health/{service}` stay open for infra probes.
 
-| Prefix | Expected `Authorization` |
-| --- | --- |
-| `/presets` | `Bearer <user access token>`, the JWT returned by `POST /auth/login`, verified with `AUTH_JWT_SECRET`. The gateway token is **refused** here. |
-| every other proxied prefix | `Bearer <GATEWAY_AUTH_TOKEN>` |
+| Access | Prefixes | Expected `Authorization` |
+| --- | --- | --- |
+| Public | `/v1/auth/login`, `/v1/auth/register`, `/v1/auth/refresh`, `/v1/auth/oauth/...` (and the same under `/auth`) | none |
+| User | the rest of `/v1/auth` (the session routes) and of `/auth`, `/v1/presets` (and `/presets`), `/v1/championship`, `/v1/race-data` | `Bearer <access token>`, the JWT returned by login, register, OAuth or refresh, verified with `AUTH_JWT_SECRET`. Any role. The gateway token is **refused**. |
+| Admin | `/v1/ingestion` | `Bearer <access token>` whose `role` claim is `admin`, or `Bearer <GATEWAY_AUTH_TOKEN>` for internal and scripted calls |
 
-- gateway-token prefixes: no, invalid or mismatched `Authorization` header → `401 UNAUTHORIZED`
-- `/presets`: the 401 code tells the client what to do, the same codes `user-data-service`
-  would answer itself — `UNAUTHORIZED` (no Bearer token), `TOKEN_EXPIRED` (call
-  `/auth/refresh`), `INVALID_TOKEN` (any other invalid token, including the gateway token:
-  log in again)
+Rejections carry the code that tells the client what to do, the same codes the services answer
+themselves:
 
-`/presets` needs the caller's identity, and the gateway token and the user JWT cannot travel
-in the same header, hence the per-prefix rule. The `Authorization` header is forwarded
-unchanged and `user-data-service` re-verifies the JWT itself.
+| Status | Code | When | Client action |
+| --- | --- | --- | --- |
+| `401` | `UNAUTHORIZED` | no `Authorization: Bearer ...` header | log in |
+| `401` | `TOKEN_EXPIRED` | access token past its `exp` | call `POST /v1/auth/refresh` |
+| `401` | `INVALID_TOKEN` | any other invalid token, including the gateway token on a user route | log in again |
+| `403` | `FORBIDDEN` | valid access token without the `admin` role on an admin route | none |
 
-Previously, requests with no `Authorization` header at all were let through
-unauthenticated, this was a known bypass for a public-facing API and has been fixed.
+The `Authorization` header is forwarded unchanged: `user-data-service` and the auth-service
+session routes re-verify the JWT and take the user ID from it. The access token lives 15
+minutes and its role is read from the database at each login and refresh, so a promotion or
+demotion applies at the next refresh at the latest.
 
-Gateway returns:
+Error body (shared `apierror` envelope):
 
 ```json
 {
-  "error": "unauthorized"
+  "error": { "code": "TOKEN_EXPIRED", "status": 401, "message": "token expired" }
 }
 ```
+
+### Versioning and transition
+
+`/auth` and `/presets` are also exposed as `/v1/auth` and `/v1/presets`, with the same
+upstream routes and rules. The unversioned paths stay during the transition announced to the
+clients and will then be removed; new clients use `/v1/...` only.
+
+### CORS
+
+The gateway sends no CORS headers and does not answer CORS preflights: the clients are the
+native AR and mobile apps. A browser client would need an explicit origin allow-list at the
+gateway first (see `docs/security.md`).
 
 ## Request Headers
 
 Client headers accepted by gateway:
 
-- `Authorization` (required): `Bearer <GATEWAY_AUTH_TOKEN>`, or `Bearer <user access token>` on `/presets`
+- `Authorization`: `Bearer <access token>` on user routes, `Bearer <access token with the admin role>` or `Bearer <GATEWAY_AUTH_TOKEN>` on admin routes, none on public routes (see Auth Behavior)
 - `Content-Type`: forwarded as received
 - `Accept`: forwarded as received
 
@@ -60,13 +75,14 @@ Forwarded/proxy headers added by gateway:
 
 ## Proxied Prefixes By Domain
 
-| Domain | Gateway Prefix | Service env target | Path rewrite |
-| --- | --- | --- | --- |
-| Auth | `/auth` | `AUTH_SERVICE_URLS` | prefix stripped |
-| User data | `/presets` | `USER_DATA_SERVICE_URLS` | prefix stripped (user JWT auth, see above) |
-| Championship v1 facade | `/v1/championship` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped |
-| Race data v1 facade | `/v1/race-data` | `RACE_DATA_SERVICE_URLS` | prefix stripped |
-| Ingestion | `/v1/ingestion` | `INGESTION_SERVICE_URLS` | prefix stripped |
+| Domain | Gateway Prefix | Service env target | Path rewrite | Access |
+| --- | --- | --- | --- | --- |
+| Auth, public | `/v1/auth/{login,register,refresh,oauth}`, same under `/auth` | `AUTH_SERVICE_URLS` | prefix stripped (`/v1/auth/login` reaches `/login`) | public |
+| Auth, rest (sessions) | `/v1/auth`, `/auth` | `AUTH_SERVICE_URLS` | prefix stripped | user |
+| User data | `/v1/presets`, `/presets` | `USER_DATA_SERVICE_URLS` | replaced by `/presets` (the service routes live under `/presets`) | user |
+| Championship v1 facade | `/v1/championship` | `CHAMPIONSHIP_SERVICE_URLS` | prefix stripped | user |
+| Race data v1 facade | `/v1/race-data` | `RACE_DATA_SERVICE_URLS` | prefix stripped | user |
+| Ingestion | `/v1/ingestion` | `INGESTION_SERVICE_URLS` | prefix stripped | admin |
 
 ## Championship V1 Public Endpoints
 
@@ -293,7 +309,8 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
 
 - Upstream service responses are passed through as-is (including status code and body).
 - Gateway-generated errors include:
-  - `401` missing or invalid `Authorization` header (mandatory on every `/v1/*` route)
+  - `401` missing, expired or invalid token on a user or admin route (see Auth Behavior)
+  - `403` valid access token without the `admin` role on `/v1/ingestion`
   - `429` rate limit exceeded
   - `400` invalid championship dataset/driverNumber parameter on v1 championship routes
   - `400` invalid race v1 parameter (`dataset`, `action`, `driverNumber`, `lapNumber`)
@@ -305,14 +322,38 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
 - Multiple URLs in one `*_SERVICE_URLS` variable are load-balanced with round-robin.
 - Rate limiting is currently in-memory; counters reset when gateway restarts.
 
-## User presets (`/presets`, user JWT)
+## Auth (`/v1/auth`, public routes are an allow-list)
+
+| Gateway route | Upstream route (`auth-service`) | Access |
+| --- | --- | --- |
+| `POST /v1/auth/register` | `POST /register` | public |
+| `POST /v1/auth/login` | `POST /login` | public |
+| `POST /v1/auth/refresh` | `POST /refresh` | public |
+| `GET /v1/auth/oauth/providers` | `GET /oauth/providers` | public |
+| `GET /v1/auth/oauth/providers/{providerId}/authorize` | `GET /oauth/providers/{providerId}/authorize` | public |
+| `POST /v1/auth/oauth/{providerId}/login` | `POST /oauth/{providerId}/login` | public |
+| `POST /v1/auth/oauth/{providerId}/register` | `POST /oauth/{providerId}/register` | public |
+| `GET /v1/auth/sessions` | `GET /sessions` | user |
+| `GET /v1/auth/sessions/{sessionId}` | `GET /sessions/{sessionId}` | user |
+| `DELETE /v1/auth/sessions/{sessionId}` | `DELETE /sessions/{sessionId}` | user |
+
+The same routes answer under `/auth/...` during the transition. The public routes are an
+allow-list: any other path under `/v1/auth` (including `/v1/auth/health` or an encoded slash
+such as `/v1/auth/sessions%2F...`) needs a user access token. Encoded dot segments under a
+public route (`/v1/auth/oauth/%2E%2E/sessions`) are forwarded as-is; auth-service's router
+answers them with a redirect and its session routes check the token themselves. Payloads and rules:
+`services/auth-service/doc/endpoint.md`.
+
+## User presets (`/v1/presets`, user JWT)
 
 | Gateway route | Upstream route (`user-data-service`) |
 | --- | --- |
-| `GET /presets` | `GET /` |
-| `POST /presets` | `POST /` |
-| `GET /presets/{presetId}` | `GET /{presetId}` |
-| `PATCH /presets/{presetId}` | `PATCH /{presetId}` |
-| `DELETE /presets/{presetId}` | `DELETE /{presetId}` |
+| `GET /v1/presets` | `GET /presets` |
+| `POST /v1/presets` | `POST /presets` |
+| `GET /v1/presets/{presetId}` | `GET /presets/{presetId}` |
+| `PATCH /v1/presets/{presetId}` | `PATCH /presets/{presetId}` |
+| `DELETE /v1/presets/{presetId}` | `DELETE /presets/{presetId}` |
 
+The same routes answer under `/presets/...` during the transition. The prefix is forwarded, so
+`GET /v1/presets/health` is a preset lookup (`404 PRESET_NOT_FOUND`), never the service health.
 Payloads and rules: `services/user-data-service/doc/endpoint.md`.

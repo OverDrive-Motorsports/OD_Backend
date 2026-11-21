@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## get_health.usecase.go - Package usecases source file for services/championship-service/src/core/usecases.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## get_health.usecase.go - Package usecases source file for services/championship-service/src/core/usecases.
+##
 */
+
 package usecases
 
 import "overdrive/services/championship-service/src/core/domain"

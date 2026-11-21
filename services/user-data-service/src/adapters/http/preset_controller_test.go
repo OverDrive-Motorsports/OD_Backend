@@ -91,7 +91,7 @@ func serve(usecase *fakePresetUseCase, method, path, token, body string) *httpte
 // and the usecase is never reached unauthenticated.
 func TestPresetRoutes_Authentication(t *testing.T) {
 	usecase := &fakePresetUseCase{}
-	for _, route := range [][2]string{{"GET", "/"}, {"POST", "/"}, {"GET", "/p1"}, {"PATCH", "/p1"}, {"DELETE", "/p1"}} {
+	for _, route := range [][2]string{{"GET", "/presets"}, {"GET", "/presets/"}, {"POST", "/presets"}, {"GET", "/presets/p1"}, {"PATCH", "/presets/p1"}, {"DELETE", "/presets/p1"}} {
 		for token, code := range map[string]string{"": "UNAUTHORIZED", "expired": "TOKEN_EXPIRED", "forged": "INVALID_TOKEN"} {
 			rec := serve(usecase, route[0], route[1], token, `{}`)
 			if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), code) {
@@ -107,13 +107,39 @@ func TestPresetRoutes_Authentication(t *testing.T) {
 	}
 }
 
+// TestPresetRoutes_PrefixIsKept proves the preset routes live under /presets only: GET
+// /presets/health is a preset lookup (404 PRESET_NOT_FOUND), not the service health, while
+// /health stays the health route; the collection answers with and without a trailing slash;
+// and the old stripped paths (/, /{presetId}) are gone.
+func TestPresetRoutes_PrefixIsKept(t *testing.T) {
+	usecase := &fakePresetUseCase{err: domain.ErrPresetNotFound}
+	rec := serve(usecase, "GET", "/presets/health", "alice-token", "")
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "PRESET_NOT_FOUND") || usecase.gotID != "health" {
+		t.Fatalf("GET /presets/health: status = %d body=%s id=%q", rec.Code, rec.Body.String(), usecase.gotID)
+	}
+	if rec := serve(&fakePresetUseCase{}, "GET", "/health", "", ""); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "PRESET") {
+		t.Fatalf("GET /health: status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	for _, path := range []string{"/presets", "/presets/"} {
+		if rec := serve(&fakePresetUseCase{}, "GET", path, "alice-token", ""); rec.Code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d", path, rec.Code)
+		}
+	}
+	for _, path := range []string{"/", "/p1"} {
+		usecase := &fakePresetUseCase{}
+		if rec := serve(usecase, "GET", path, "alice-token", ""); rec.Code != http.StatusNotFound || usecase.gotUserID != "" {
+			t.Fatalf("GET %s must not reach a preset route: status = %d", path, rec.Code)
+		}
+	}
+}
+
 // TestPresetRoutes_NormalCases proves each route answers its success status, forwards the user
 // ID taken from the token and the path ID, and passes the raw layout document through.
 func TestPresetRoutes_NormalCases(t *testing.T) {
 	preset := &domain.Preset{ID: "p1", Name: "Race view", IsDefault: true, Data: []byte(`{"widgets":[]}`)}
 
 	usecase := &fakePresetUseCase{presets: []domain.Preset{*preset}}
-	rec := serve(usecase, "GET", "/", "alice-token", "")
+	rec := serve(usecase, "GET", "/presets", "alice-token", "")
 	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Body.String(), "[") || usecase.gotUserID != "alice" {
 		t.Fatalf("list: status = %d user=%q body=%s", rec.Code, usecase.gotUserID, rec.Body.String())
 	}
@@ -124,24 +150,24 @@ func TestPresetRoutes_NormalCases(t *testing.T) {
 	}
 
 	usecase = &fakePresetUseCase{preset: preset}
-	if rec := serve(usecase, "GET", "/p1", "bob-token", ""); rec.Code != http.StatusOK || usecase.gotUserID != "bob" || usecase.gotID != "p1" {
+	if rec := serve(usecase, "GET", "/presets/p1", "bob-token", ""); rec.Code != http.StatusOK || usecase.gotUserID != "bob" || usecase.gotID != "p1" {
 		t.Fatalf("get: status = %d user=%q id=%q", rec.Code, usecase.gotUserID, usecase.gotID)
 	}
 
 	usecase = &fakePresetUseCase{preset: preset}
-	rec = serve(usecase, "POST", "/", "alice-token", `{"name":"Race view","isDefault":true,"data":{"widgets":[{"type":"video"}]}}`)
+	rec = serve(usecase, "POST", "/presets", "alice-token", `{"name":"Race view","isDefault":true,"data":{"widgets":[{"type":"video"}]}}`)
 	if rec.Code != http.StatusCreated || usecase.gotNew == nil || usecase.gotNew.Name != "Race view" || !usecase.gotNew.IsDefault || string(usecase.gotNew.Data) != `{"widgets":[{"type":"video"}]}` {
 		t.Fatalf("create: status = %d input=%+v", rec.Code, usecase.gotNew)
 	}
 
 	usecase = &fakePresetUseCase{preset: preset}
-	rec = serve(usecase, "PATCH", "/p1", "alice-token", `{"isDefault":true}`)
+	rec = serve(usecase, "PATCH", "/presets/p1", "alice-token", `{"isDefault":true}`)
 	if rec.Code != http.StatusOK || usecase.gotChanges == nil || usecase.gotChanges.IsDefault == nil || !*usecase.gotChanges.IsDefault || usecase.gotChanges.Name != nil || usecase.gotChanges.Data != nil {
 		t.Fatalf("update: status = %d changes=%+v", rec.Code, usecase.gotChanges)
 	}
 
 	usecase = &fakePresetUseCase{}
-	if rec := serve(usecase, "DELETE", "/p1", "alice-token", ""); rec.Code != http.StatusNoContent || rec.Body.Len() != 0 || usecase.gotID != "p1" {
+	if rec := serve(usecase, "DELETE", "/presets/p1", "alice-token", ""); rec.Code != http.StatusNoContent || rec.Body.Len() != 0 || usecase.gotID != "p1" {
 		t.Fatalf("delete: status = %d body=%q", rec.Code, rec.Body.String())
 	}
 }
@@ -159,14 +185,14 @@ func TestPresetRoutes_InvalidBodies(t *testing.T) {
 		"empty":           ``,
 	} {
 		usecase := &fakePresetUseCase{}
-		rec := serve(usecase, "POST", "/", "alice-token", body)
+		rec := serve(usecase, "POST", "/presets", "alice-token", body)
 		if rec.Code != http.StatusBadRequest || usecase.gotNew != nil {
 			t.Fatalf("%s: status = %d, usecase reached=%v", name, rec.Code, usecase.gotNew != nil)
 		}
 	}
 
 	usecase := &fakePresetUseCase{preset: &domain.Preset{ID: "p1"}}
-	serve(usecase, "PATCH", "/p1", "alice-token", `{"name":"x","data":null}`)
+	serve(usecase, "PATCH", "/presets/p1", "alice-token", `{"name":"x","data":null}`)
 	if usecase.gotChanges == nil || usecase.gotChanges.Data != nil {
 		t.Fatalf("expected data:null to be treated as absent, got %+v", usecase.gotChanges)
 	}
@@ -186,7 +212,7 @@ func TestPresetRoutes_ErrorMapping(t *testing.T) {
 		"internal":  {errors.New("pq: connection refused at 10.0.0.5"), http.StatusInternalServerError, "INTERNAL"},
 	}
 	for name, tc := range cases {
-		rec := serve(&fakePresetUseCase{err: tc.err}, "GET", "/p1", "alice-token", "")
+		rec := serve(&fakePresetUseCase{err: tc.err}, "GET", "/presets/p1", "alice-token", "")
 		body := rec.Body.String()
 		if rec.Code != tc.code || !strings.Contains(body, tc.want) || strings.Contains(body, "10.0.0.5") {
 			t.Fatalf("%s: status = %d body=%s", name, rec.Code, body)

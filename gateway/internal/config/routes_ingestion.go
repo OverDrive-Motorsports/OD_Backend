@@ -11,12 +11,18 @@
 
 package config
 
-import "net/url"
+import (
+	"net/url"
 
+	"overdrive/gateway/internal/core/domain"
+)
+
+// ingestionServiceRoutes exposes the ingestion trigger to administrators only (admin access
+// token, or the gateway token for scripted calls).
 func ingestionServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
-		proxied: map[string][]*url.URL{
-			"/v1/ingestion": targets.ingestion,
+		proxied: []domain.Route{
+			{Prefix: "/v1/ingestion", Targets: targets.ingestion, Access: domain.AccessAdmin},
 		},
 		health: map[string][]*url.URL{
 			"/health/ingestion": targets.ingestion,

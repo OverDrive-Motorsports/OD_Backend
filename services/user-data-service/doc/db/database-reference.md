@@ -22,8 +22,8 @@ It currently focuses on two domains:
 | `userId` | `String` | Yes | Indexed | Identifier of the connected user | `user_42` |
 | `providerId` | `String` | Yes | Indexed | Identifier of the external provider | `f1tv` |
 | `configJson` | `Json` | Yes | None | Provider-specific connection settings and secrets metadata | `{"region":"EU","accountEmail":"driver@example.com"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the provider link | `2026-04-14T10:00:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp of the provider link | `2026-04-14T10:15:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the provider link | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp of the provider link | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `UserPreset`
 
@@ -34,8 +34,8 @@ It currently focuses on two domains:
 | `name` | `String` | Yes | `varchar(50)` | Human-readable name of the preset | `Race Weekend Layout` |
 | `isDefault` | `Boolean` | Yes | Default `false` | Default layout of the user; at most one per user, enforced by the service (transaction + per-user advisory lock, see `doc/architecture.md`) | `true` |
 | `data` | `Json` | Yes | jsonb, JSON object ≤ 256 KiB (checked by the service) | Layout document produced by the client (widgets, positions, sizes, settings), stored as-is | `{"widgets":[{"type":"video","position":[0,1.2,-2]}]}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the preset | `2026-04-14T10:20:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp of the preset | `2026-04-14T10:40:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the preset | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp of the preset | `YYYY-MM-DDThh:mm:ssZ` |
 
 ## Constraints and indexes
 

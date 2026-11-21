@@ -25,6 +25,10 @@ var ErrEmailAlreadyRegistered = errors.New("email already registered")
 // resolve to a known session (or its owning user no longer exists).
 var ErrInvalidSession = errors.New("invalid session")
 
+// ErrSessionNotFound is returned by SessionRepository.RemoveUserSession when the session does
+// not exist or belongs to another user (both answer the same 404).
+var ErrSessionNotFound = errors.New("session not found")
+
 // ErrInvalidToken is returned by AuthQueryUseCase.Refresh/VerifyToken when the supplied
 // refresh/bearer token does not match or fails validation.
 var ErrInvalidToken = errors.New("invalid token")

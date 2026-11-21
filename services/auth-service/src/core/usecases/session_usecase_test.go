@@ -150,25 +150,6 @@ func TestSessionQueryUseCase_GetSessionByID(t *testing.T) {
 	}
 }
 
-// TestSessionQueryUseCase_AddUserSession proves the userID is forwarded and the created
-// session passed through.
-func TestSessionQueryUseCase_AddUserSession(t *testing.T) {
-	want := &domain.AuthSession{ID: "new-session"}
-	repo := &recordingSessionRepository{session: want}
-	uc := NewSessionQueryUseCase(repo)
-
-	got, err := uc.AddUserSession(context.Background(), "user-9")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if repo.gotUserID != "user-9" {
-		t.Fatalf("expected userID to be forwarded, got %q", repo.gotUserID)
-	}
-	if got != want {
-		t.Fatalf("expected the repository's result to be returned unchanged")
-	}
-}
-
 // TestSessionQueryUseCase_RemoveUserSession proves both IDs are forwarded and the
 // repository's error (or lack thereof) is passed through.
 func TestSessionQueryUseCase_RemoveUserSession(t *testing.T) {

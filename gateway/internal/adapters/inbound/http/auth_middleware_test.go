@@ -10,66 +10,60 @@
 package httpinbound
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"overdrive/gateway/internal/core/domain"
 )
 
-func TestRequireAuthorization(t *testing.T) {
-	nextCalled := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		nextCalled = true
-		w.WriteHeader(http.StatusOK)
-	})
-
+// TestRequireUserToken proves the middleware calls the next handler only when authorize accepts
+// the header, forwards the header unchanged to authorize, and maps each rejection reason to its
+// own status and code: UNAUTHORIZED, TOKEN_EXPIRED and INVALID_TOKEN (401), FORBIDDEN (403).
+// An unknown reason is treated as an invalid token (fail closed).
+func TestRequireUserToken(t *testing.T) {
 	tests := []struct {
 		name       string
-		header     string
-		authorize  func(string) bool
+		reason     error
 		wantStatus int
-		wantNext   bool
+		wantCode   string
 	}{
-		{
-			name:       "missing header is rejected",
-			header:     "",
-			authorize:  func(string) bool { return true },
-			wantStatus: http.StatusUnauthorized,
-			wantNext:   false,
-		},
-		{
-			name:       "invalid token is rejected",
-			header:     "Bearer bad-token",
-			authorize:  func(string) bool { return false },
-			wantStatus: http.StatusUnauthorized,
-			wantNext:   false,
-		},
-		{
-			name:       "valid token passes through",
-			header:     "Bearer good-token",
-			authorize:  func(string) bool { return true },
-			wantStatus: http.StatusOK,
-			wantNext:   true,
-		},
+		{"accepted", nil, http.StatusOK, ""},
+		{"missing token", domain.ErrMissingUserToken, http.StatusUnauthorized, `"UNAUTHORIZED"`},
+		{"expired token", domain.ErrUserTokenExpired, http.StatusUnauthorized, `"TOKEN_EXPIRED"`},
+		{"invalid token", domain.ErrInvalidUserToken, http.StatusUnauthorized, `"INVALID_TOKEN"`},
+		{"role not allowed", domain.ErrForbiddenRole, http.StatusForbidden, `"FORBIDDEN"`},
+		{"unknown reason", errors.New("boom"), http.StatusUnauthorized, `"INVALID_TOKEN"`},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			nextCalled = false
-			middleware := RequireAuthorization(tt.authorize, next)
+			nextCalled := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				nextCalled = true
+				w.WriteHeader(http.StatusOK)
+			})
+			var gotHeader string
+			authorize := func(header string) error {
+				gotHeader = header
+				return tt.reason
+			}
 
 			req := httptest.NewRequest(http.MethodGet, "/v1/some-route", nil)
-			if tt.header != "" {
-				req.Header.Set("Authorization", tt.header)
-			}
+			req.Header.Set("Authorization", "Bearer abc")
 			rec := httptest.NewRecorder()
+			RequireUserToken(authorize, next).ServeHTTP(rec, req)
 
-			middleware.ServeHTTP(rec, req)
-
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+			if rec.Code != tt.wantStatus || !strings.Contains(rec.Body.String(), tt.wantCode) {
+				t.Fatalf("status = %d body = %s, want %d %s", rec.Code, rec.Body.String(), tt.wantStatus, tt.wantCode)
 			}
-			if nextCalled != tt.wantNext {
-				t.Errorf("next called = %v, want %v", nextCalled, tt.wantNext)
+			if nextCalled != (tt.reason == nil) {
+				t.Fatalf("next called = %v, want %v", nextCalled, tt.reason == nil)
+			}
+			if gotHeader != "Bearer abc" {
+				t.Fatalf("authorize got header %q", gotHeader)
 			}
 		})
 	}

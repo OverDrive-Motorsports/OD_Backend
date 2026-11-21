@@ -80,7 +80,7 @@ func TestReverseProxy_QuotesPathInErrorLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}
-	proxy, err := NewReverseProxy("/v1/race-data", []*url.URL{deadURL})
+	proxy, err := NewReverseProxy("/v1/race-data", "", []*url.URL{deadURL})
 	if err != nil {
 		t.Fatalf("build proxy: %v", err)
 	}

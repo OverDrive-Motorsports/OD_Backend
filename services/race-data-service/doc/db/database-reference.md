@@ -36,7 +36,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `sessionId` | `String` | Yes | Unique with `driverNumber` and `lapNumber`, indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Unique with `sessionId` and `lapNumber`, indexed | Driver race number | `1` |
 | `lapNumber` | `Int` | Yes | Unique with `sessionId` and `driverNumber`, indexed | Lap number in the session | `27` |
-| `dateStartUtc` | `DateTime?` | No | Indexed with `sessionId` | Start time of the lap | `2026-05-03T19:41:12Z` |
+| `dateStartUtc` | `DateTime?` | No | Indexed with `sessionId` | Start time of the lap | `YYYY-MM-DDThh:mm:ssZ` |
 | `lapDurationSec` | `Float?` | No | None | Total lap duration in seconds | `87.241` |
 | `sector1Sec` | `Float?` | No | None | Sector 1 duration in seconds | `28.153` |
 | `sector2Sec` | `Float?` | No | None | Sector 2 duration in seconds | `29.012` |
@@ -46,7 +46,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `speedTrapKph` | `Int?` | No | None | Speed trap value in km/h | `329` |
 | `isPitOutLap` | `Boolean?` | No | None | Indicates whether the lap started from pit exit | `false` |
 | `raw` | `Json` | Yes | None | Raw provider payload for the lap | `{"compound":"MEDIUM","deleted":false}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:42:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `RaceTelemetrySample`
 
@@ -55,7 +55,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the telemetry sample | `45001` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `sessionId` and `dateUtc` | Driver race number | `1` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `2026-05-03T19:41:12.450Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `YYYY-MM-DDThh:mm:ss.sssZ` |
 | `speedKph` | `Int?` | No | None | Current speed in km/h | `312` |
 | `rpm` | `Int?` | No | None | Engine RPM value | `11850` |
 | `gear` | `Int?` | No | None | Current gear | `8` |
@@ -63,7 +63,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `brakePct` | `Float?` | No | None | Brake percentage | `0.0` |
 | `drsState` | `Int?` | No | None | Encoded DRS state | `1` |
 | `raw` | `Json` | Yes | None | Raw telemetry payload | `{"source":"car_data"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:41:12.500Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RaceLocationSample`
 
@@ -72,12 +72,12 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the location sample | `88012` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `sessionId` and `dateUtc` | Driver race number | `1` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `2026-05-03T19:41:12.450Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `YYYY-MM-DDThh:mm:ss.sssZ` |
 | `x` | `Float?` | No | None | X coordinate on track map | `124.52` |
 | `y` | `Float?` | No | None | Y coordinate on track map | `-52.11` |
 | `z` | `Float?` | No | None | Z coordinate or elevation value | `0.73` |
 | `raw` | `Json` | Yes | None | Raw provider location payload | `{"trackStatus":"green"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:41:12.500Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RacePositionSample`
 
@@ -86,11 +86,11 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the position sample | `2200` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `sessionId` and `dateUtc` | Driver race number | `1` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `2026-05-03T19:41:13Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `lapNumber` | `Int?` | No | None | Lap number at sample time | `27` |
 | `position` | `Int?` | No | Indexed with `sessionId` | Track position or race rank | `1` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"interval":"LEADER"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:41:13.010Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RaceIntervalSample`
 
@@ -99,11 +99,11 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the interval sample | `3300` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `sessionId` and `dateUtc` | Driver race number | `11` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `2026-05-03T19:41:13Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `gapToLeader` | `String?` | No | `varchar(40)` | Gap from this driver to the race leader | `+4.231` |
 | `intervalToFrontDriver` | `String?` | No | `varchar(40)` | Gap to the driver immediately ahead | `+0.842` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"status":"running"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:41:13.020Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RaceStint`
 
@@ -118,7 +118,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `compound` | `String?` | No | `varchar(40)` | Tyre compound used during the stint | `HARD` |
 | `tyreAgeLapsStart` | `Int?` | No | None | Tyre age at the start of the stint | `3` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"newTyre":false}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T20:00:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `RacePitStop`
 
@@ -128,10 +128,10 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `dateUtc` | Driver race number | `16` |
 | `lapNumber` | `Int?` | No | Indexed with `sessionId` | Lap on which the pit stop occurred | `20` |
-| `dateUtc` | `DateTime?` | No | Indexed with `driverNumber` | Timestamp of the stop | `2026-05-03T19:58:20Z` |
+| `dateUtc` | `DateTime?` | No | Indexed with `driverNumber` | Timestamp of the stop | `YYYY-MM-DDThh:mm:ssZ` |
 | `pitDurationSec` | `Float?` | No | None | Duration of the pit stop in seconds | `2.34` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"stopped":true}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:58:21Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `RaceControlEvent`
 
@@ -139,7 +139,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | --- | --- | --- | --- | --- | --- |
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the race control event | `301` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Event timestamp in UTC | `2026-05-03T20:15:00Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Event timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `lapNumber` | `Int?` | No | None | Lap associated with the event | `41` |
 | `driverNumber` | `Int?` | No | None | Driver concerned by the event when applicable | `4` |
 | `category` | `String?` | No | `varchar(60)`, indexed with `sessionId` | Main category of the event | `incident` |
@@ -147,7 +147,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `scope` | `String?` | No | `varchar(80)` | Scope or area affected by the event | `sector-2` |
 | `message` | `String?` | No | None | Human-readable race control message | `Car 4 noted for track limits` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"messageId":991}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T20:15:00.500Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RaceWeatherSample`
 
@@ -155,7 +155,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | --- | --- | --- | --- | --- | --- |
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the weather sample | `700` |
 | `sessionId` | `String` | Yes | Indexed with `dateUtc` | Session identifier | `session_2026_miami_race` |
-| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `2026-05-03T19:41:00Z` |
+| `dateUtc` | `DateTime` | Yes | Indexed | Sample timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `airTempC` | `Float?` | No | None | Air temperature in Celsius | `28.4` |
 | `trackTempC` | `Float?` | No | None | Track temperature in Celsius | `41.7` |
 | `humidityPct` | `Float?` | No | None | Humidity percentage | `68.0` |
@@ -164,7 +164,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `windDirectionDeg` | `Int?` | No | None | Wind direction in degrees | `220` |
 | `rainfallMm` | `Float?` | No | None | Rainfall value in millimeters | `0.0` |
 | `raw` | `Json` | Yes | None | Raw weather payload | `{"trackStatus":"dry"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T19:41:00.100Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `RaceHighlight`
 
@@ -183,12 +183,12 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | --- | --- | --- | --- | --- | --- |
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the overtake event | `44` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
-| `dateUtc` | `DateTime?` | No | Indexed with `sessionId` | Event timestamp in UTC | `2026-05-03T20:12:14Z` |
+| `dateUtc` | `DateTime?` | No | Indexed with `sessionId` | Event timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `lapNumber` | `Int?` | No | Indexed with `sessionId` | Lap of the overtake | `39` |
 | `overtakingDriverNumber` | `Int?` | No | None | Driver making the pass | `1` |
 | `overtakenDriverNumber` | `Int?` | No | None | Driver being overtaken | `16` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"corner":"Turn 11"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T20:12:14.100Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ss.sssZ` |
 
 ### `TeamRadioMessage`
 
@@ -197,11 +197,11 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the radio message | `78` |
 | `sessionId` | `String` | Yes | Indexed | Session identifier | `session_2026_miami_race` |
 | `driverNumber` | `Int` | Yes | Indexed with `sessionId` and `dateUtc` | Driver race number | `44` |
-| `dateUtc` | `DateTime?` | No | Indexed | Radio timestamp in UTC | `2026-05-03T20:05:20Z` |
+| `dateUtc` | `DateTime?` | No | Indexed | Radio timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `recordingUrl` | `String?` | No | `varchar(500)` | URL of the radio recording | `https://media.example.com/radio/44/clip-12.mp3` |
 | `transcript` | `String?` | No | None | Optional text transcription of the message | `Tyres are gone, mate.` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"channel":"team_radio"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T20:05:21Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `SessionDriverBroadcast`
 
@@ -211,8 +211,8 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `sessionId` | `String` | Yes | Unique with `driverId`, indexed | Session identifier | `session_2026_miami_race` |
 | `driverId` | `String` | Yes | Unique with `sessionId`, indexed | Internal driver identifier used by the app | `driver_1` |
 | `broadcastUrl` | `String` | Yes | `varchar(255)` | Video or stream URL for the driver's onboard feed | `https://stream.example.com/onboard/1` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T18:50:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-05-03T18:55:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `RaceArchive`
 
@@ -221,7 +221,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `id` | `String` | Yes | Primary key, UUID, default generated | Unique identifier of the archive | `98c9f3fd-5305-4af5-b5c0-790c8fe3d4ff` |
 | `sessionId` | `String` | Yes | Indexed with `generatedAt` | Session identifier covered by the archive | `session_2026_miami_race` |
 | `mode` | `ArchiveMode` | Yes | Default `full` | Archive generation mode | `driver_focused` |
-| `generatedAt` | `DateTime` | Yes | Default `now()` | Timestamp when the archive was generated | `2026-05-03T22:00:00Z` |
+| `generatedAt` | `DateTime` | Yes | Default `now()` | Timestamp when the archive was generated | `YYYY-MM-DDThh:mm:ssZ` |
 | `sourceMeetingKey` | `Int?` | No | Indexed with `sourceSessionKey` | Upstream meeting identifier | `1205` |
 | `sourceSessionKey` | `Int?` | No | Indexed with `sourceMeetingKey` | Upstream session identifier | `8892` |
 | `sourceDriverNumber` | `Int?` | No | None | Optional driver number for driver-focused archives | `1` |
@@ -239,7 +239,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `chunkIndex` | `Int` | Yes | Default `0`, unique with `archiveId` and `dataset` | Position of the chunk inside the dataset | `0` |
 | `rowCount` | `Int` | Yes | Default `0` | Number of rows included in the chunk | `1000` |
 | `rows` | `Json` | Yes | None | Chunk payload containing exported rows | `[{"driverNumber":1,"speedKph":312}]` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T22:00:01Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ## Constraints and indexes
 
