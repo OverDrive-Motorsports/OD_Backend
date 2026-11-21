@@ -76,7 +76,7 @@ func TestReverseProxy_RewritesPathAndStripsPrefix(t *testing.T) {
 		t.Fatalf("parse upstream url: %v", err)
 	}
 
-	proxy, err := NewReverseProxy("/v1/race-data", []*url.URL{upstreamURL})
+	proxy, err := NewReverseProxy("/v1/race-data", "", []*url.URL{upstreamURL})
 	if err != nil {
 		t.Fatalf("build proxy: %v", err)
 	}
@@ -98,6 +98,48 @@ func TestReverseProxy_RewritesPathAndStripsPrefix(t *testing.T) {
 	}
 }
 
+// TestReverseProxy_ReplacesPrefixWithUpstreamPrefix proves a route with an upstream prefix
+// forwards that prefix instead of stripping everything: the versioned and the transition
+// public prefixes both reach the service's own path, the bare prefix and its trailing slash are
+// kept apart, and a proxy without any target is refused at construction.
+func TestReverseProxy_ReplacesPrefixWithUpstreamPrefix(t *testing.T) {
+	var receivedPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	upstreamURL, _ := url.Parse(upstream.URL)
+
+	cases := []struct {
+		routePrefix, upstreamPrefix, path, want string
+	}{
+		{"/v1/presets", "/presets", "/v1/presets/abc", "/presets/abc"},
+		{"/presets", "/presets", "/presets/abc", "/presets/abc"},
+		{"/presets", "/presets", "/presets", "/presets"},
+		{"/presets", "/presets/", "/presets/", "/presets/"},
+		{"/v1/auth/sessions", "/sessions", "/v1/auth/sessions/s-1", "/sessions/s-1"},
+		{"/v1/auth", "", "/v1/auth/login", "/login"},
+		{"/v1/auth", "", "/v1/auth", "/"},
+	}
+	for _, tc := range cases {
+		proxy, err := NewReverseProxy(tc.routePrefix, tc.upstreamPrefix, []*url.URL{upstreamURL})
+		if err != nil {
+			t.Fatalf("build proxy: %v", err)
+		}
+		receivedPath = ""
+		rec := httptest.NewRecorder()
+		proxy.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if rec.Code != http.StatusOK || receivedPath != tc.want {
+			t.Fatalf("%s via %s->%q: status = %d, upstream path %q, want %q", tc.path, tc.routePrefix, tc.upstreamPrefix, rec.Code, receivedPath, tc.want)
+		}
+	}
+
+	if _, err := NewReverseProxy("/v1/presets", "/presets", nil); err == nil {
+		t.Fatal("expected an error for a route without upstream target")
+	}
+}
+
 // TestReverseProxy_ReturnsUpstreamUnavailableOnDial failure proves that a
 // dead upstream results in a 502 gateway error, not a hang or a bare 500.
 func TestReverseProxy_ReturnsUpstreamUnavailableOnDialFailure(t *testing.T) {
@@ -106,7 +148,7 @@ func TestReverseProxy_ReturnsUpstreamUnavailableOnDialFailure(t *testing.T) {
 		t.Fatalf("parse url: %v", err)
 	}
 
-	proxy, err := NewReverseProxy("/v1/race-data", []*url.URL{deadURL})
+	proxy, err := NewReverseProxy("/v1/race-data", "", []*url.URL{deadURL})
 	if err != nil {
 		t.Fatalf("build proxy: %v", err)
 	}

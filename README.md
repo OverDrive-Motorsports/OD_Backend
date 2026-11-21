@@ -83,10 +83,11 @@ The active Docker Compose stack runs the full backend:
 - PostgreSQL
 
 `gateway` requires all five services to be healthy before starting, so every proxied
-prefix (`/auth`, `/presets`, `/v1/championship`,
-`/v1/race-data`, `/v1/ingestion`) is reachable once the stack is up.
-`/presets` (user-data-service) authenticates with the user's access token from
-`POST /auth/login`, not the gateway token - see `gateway/ROUTES.md`.
+prefix (`/v1/auth`, `/v1/presets`, `/v1/championship`, `/v1/race-data`,
+`/v1/ingestion`, plus `/auth` and `/presets` during the transition) is reachable once the
+stack is up. Authentication routes are public; data, presets and sessions need the user's
+access token from `POST /v1/auth/login`; ingestion needs an `admin` access token or the
+gateway token - see `gateway/ROUTES.md`.
 
 ## Default ports
 
@@ -113,7 +114,7 @@ URLs). Upgrading a checkout that already has a database: see "Upgrading an exist
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`, every service's database URL | `POSTGRES_PASSWORD` must be set |
-| `GATEWAY_AUTH_TOKEN` | `gateway` | bearer token required on every `/v1/...` route |
+| `GATEWAY_AUTH_TOKEN` | `gateway` | **required**, at least 32 bytes - bearer token for internal and scripted calls, accepted on `/v1/ingestion` only; never shipped in a client |
 | `GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST` | `gateway` | rate limiter tuning |
 | `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
 | `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder - the three refuse to start otherwise |

@@ -1,12 +1,11 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## get_health.usecase.go - Use case returning the auth-service health status.	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## get_health.usecase.go - Use case returning the auth-service health status.	##
 */
+
 package usecases
 
 import "overdrive/services/auth-service/src/core/domain"

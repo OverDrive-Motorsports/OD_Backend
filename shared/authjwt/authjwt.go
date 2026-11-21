@@ -75,27 +75,59 @@ func NewVerifier(secret string) (*Verifier, error) {
 	return &Verifier{secret: []byte(secret)}, nil
 }
 
+// Roles carried by the `role` claim of an access token. A token without the claim (issued
+// before roles existed) is a RoleUser token; any other value is rejected as invalid.
+const (
+	RoleUser  = "user"
+	RoleAdmin = "admin"
+)
+
+// Claims is what a verified access token says about its holder.
+type Claims struct {
+	UserID string
+	Role   string
+}
+
 // Verify validates the token signature (HS256 only - any other algorithm, including `none`,
 // is rejected), its expiry, and returns the authenticated user ID from the `sub` claim.
 func (v *Verifier) Verify(tokenString string) (string, error) {
+	claims, err := v.VerifyClaims(tokenString)
+	if err != nil {
+		return "", err
+	}
+	return claims.UserID, nil
+}
+
+// VerifyClaims validates the token like Verify and also returns its role (RoleUser when the
+// `role` claim is absent). An unknown role makes the token invalid, so a typo can never be
+// read as a privilege.
+func (v *Verifier) VerifyClaims(tokenString string) (Claims, error) {
 	token, err := jwt.Parse(tokenString, func(*jwt.Token) (any, error) {
 		return v.secret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			return "", ErrTokenExpired
+			return Claims{}, ErrTokenExpired
 		}
-		return "", ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
-	claims, ok := token.Claims.(jwt.MapClaims)
+	mapClaims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
-	userID, ok := claims["sub"].(string)
+	userID, ok := mapClaims["sub"].(string)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return "", ErrInvalidToken
+		return Claims{}, ErrInvalidToken
 	}
-	return userID, nil
+	role := RoleUser
+	if raw, present := mapClaims["role"]; present {
+		value, ok := raw.(string)
+		if !ok || (value != RoleUser && value != RoleAdmin) {
+			return Claims{}, ErrInvalidToken
+		}
+		role = value
+	}
+	return Claims{UserID: userID, Role: role}, nil
 }
 
 // BearerToken extracts the token from an `Authorization: Bearer <token>` header value
@@ -114,9 +146,18 @@ func BearerToken(header string) (token string, ok bool) {
 // The error is ErrMissingToken, ErrTokenExpired or ErrInvalidToken, so every caller (gateway,
 // services) answers the same 401 code for the same situation.
 func (v *Verifier) VerifyBearerHeader(header string) (string, error) {
+	claims, err := v.VerifyBearerHeaderClaims(header)
+	if err != nil {
+		return "", err
+	}
+	return claims.UserID, nil
+}
+
+// VerifyBearerHeaderClaims is VerifyBearerHeader returning the token's claims (role included).
+func (v *Verifier) VerifyBearerHeaderClaims(header string) (Claims, error) {
 	token, ok := BearerToken(header)
 	if !ok {
-		return "", ErrMissingToken
+		return Claims{}, ErrMissingToken
 	}
-	return v.Verify(token)
+	return v.VerifyClaims(token)
 }

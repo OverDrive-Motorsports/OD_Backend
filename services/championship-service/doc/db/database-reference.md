@@ -62,7 +62,7 @@ This database stores championship catalog data, competition structure, event sch
 | `code` | `String` | Yes | Unique, `varchar(20)` | Stable business code of the provider | `f1tv` |
 | `name` | `String` | Yes | `varchar(50)` | Human-readable provider name | `Formula 1 TV` |
 | `status` | `ProviderStatus` | Yes | Default `active` | Operational state of the provider | `active` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the provider record | `2026-04-14T08:00:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp of the provider record | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `Championship`
 
@@ -74,8 +74,8 @@ This database stores championship catalog data, competition structure, event sch
 | `name` | `String` | Yes | `varchar(80)` | Display name of the championship | `Formula 1 World Championship` |
 | `category` | `String?` | No | `varchar(40)` | Optional classification or category label | `single-seater` |
 | `isActive` | `Boolean` | Yes | Default `true` | Indicates whether the championship is active in the platform | `true` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:05:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-04-14T09:00:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `Event`
 
@@ -92,11 +92,11 @@ This database stores championship catalog data, competition structure, event sch
 | `countryCode` | `String?` | No | `varchar(3)` | ISO-like short country code | `USA` |
 | `circuitName` | `String?` | No | `varchar(120)` | Name of the circuit | `Miami International Autodrome` |
 | `externalKey` | `String?` | No | `varchar(64)` | Optional provider-side identifier of the event | `miami-2026` |
-| `startTimeUtc` | `DateTime` | Yes | None | Event start timestamp in UTC | `2026-05-01T14:00:00Z` |
-| `endTimeUtc` | `DateTime` | Yes | None | Event end timestamp in UTC | `2026-05-03T20:00:00Z` |
+| `startTimeUtc` | `DateTime` | Yes | None | Event start timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
+| `endTimeUtc` | `DateTime` | Yes | None | Event end timestamp in UTC | `YYYY-MM-DDThh:mm:ssZ` |
 | `status` | `EventStatus` | Yes | None | Lifecycle status of the event | `scheduled` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:10:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-04-14T08:30:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `Session`
 
@@ -109,10 +109,10 @@ This database stores championship catalog data, competition structure, event sch
 | `name` | `String?` | No | `varchar(80)` | Optional display label of the session | `Grand Prix` |
 | `externalKey` | `String?` | No | `varchar(64)` | Optional provider-side identifier of the session | `race-main` |
 | `broadcastUrl` | `String?` | No | `varchar(255)` | Optional stream or broadcast link | `https://stream.example.com/f1/miami/race` |
-| `startedAtUtc` | `DateTime` | Yes | None | Planned or actual start time in UTC | `2026-05-03T19:00:00Z` |
-| `endedAtUtc` | `DateTime?` | No | None | Planned or actual end time in UTC | `2026-05-03T21:00:00Z` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:15:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-04-14T08:45:00Z` |
+| `startedAtUtc` | `DateTime` | Yes | None | Planned or actual start time in UTC | `YYYY-MM-DDThh:mm:ssZ` |
+| `endedAtUtc` | `DateTime?` | No | None | Planned or actual end time in UTC | `YYYY-MM-DDThh:mm:ssZ` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `Team`
 
@@ -139,8 +139,8 @@ This database stores championship catalog data, competition structure, event sch
 | `number` | `Int` | Yes | None | Racing number of the driver | `1` |
 | `countryCode` | `String?` | No | `varchar(3)` | Driver nationality code | `NLD` |
 | `externalKey` | `String?` | No | `varchar(64)` | Optional provider-side identifier | `driver-1` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-04-14T08:20:00Z` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `2026-04-14T08:50:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
+| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `SessionResultRow`
 
@@ -153,7 +153,7 @@ This database stores championship catalog data, competition structure, event sch
 | `points` | `Float?` | No | None | Points awarded for the session result | `25.0` |
 | `status` | `String?` | No | `varchar(40)` | Classification status or finish reason | `Finished` |
 | `raw` | `Json` | Yes | None | Raw provider payload kept for traceability | `{"classified":true,"laps":57}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T21:05:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `StartingGridRow`
 
@@ -164,7 +164,7 @@ This database stores championship catalog data, competition structure, event sch
 | `driverNumber` | `Int` | Yes | Unique with `sessionId` | Driver race number | `1` |
 | `gridPosition` | `Int?` | No | Indexed with `sessionId` | Starting position on the grid | `1` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"q3Time":"1:27.241"}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T18:00:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `DriverChampionshipStanding`
 
@@ -178,7 +178,7 @@ This database stores championship catalog data, competition structure, event sch
 | `pointsCurrent` | `Float?` | No | None | Driver points after the session | `110.0` |
 | `pointsStart` | `Float?` | No | None | Driver points before the session | `85.0` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"delta":"+1","wins":3}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T21:10:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `TeamChampionshipStanding`
 
@@ -193,7 +193,7 @@ This database stores championship catalog data, competition structure, event sch
 | `pointsCurrent` | `Float?` | No | None | Team points after the session | `210.0` |
 | `pointsStart` | `Float?` | No | None | Team points before the session | `185.0` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"podiums":6}` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `2026-05-03T21:12:00Z` |
+| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ## Constraints and indexes
 

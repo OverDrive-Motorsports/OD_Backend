@@ -14,9 +14,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
-	"overdrive/gateway/internal/adapters/outbound/auth"
-	"overdrive/gateway/internal/core/usecases"
+	"overdrive/gateway/internal/core/domain"
 )
 
 // TestSecurityHeaders_OnGatewayAndProxiedResponses proves the hardening headers are on the
@@ -31,12 +31,7 @@ func TestSecurityHeaders_OnGatewayAndProxiedResponses(t *testing.T) {
 	defer upstream.Close()
 	upstreamURL, _ := url.Parse(upstream.URL)
 
-	handler, err := NewHandler(
-		map[string][]*url.URL{"/v1/race-data": {upstreamURL}}, map[string][]*url.URL{}, 1000, 1000, nil,
-		usecases.NewCheckHealthUseCase(),
-		usecases.NewAuthorizeRequestUseCase(auth.NewStaticTokenValidator("static-token")),
-		usecases.NewAuthorizeUserRequestUseCase(nil),
-	)
+	handler, err := newTestHandler(t, []domain.Route{{Prefix: "/v1/race-data", Targets: []*url.URL{upstreamURL}, Access: domain.AccessUser}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +48,7 @@ func TestSecurityHeaders_OnGatewayAndProxiedResponses(t *testing.T) {
 	for name, rec := range map[string]*httptest.ResponseRecorder{
 		"gateway 401":     serve("/v1/race-data/championships", ""),
 		"gateway /health": serve("/health", ""),
-		"proxied 200":     serve("/v1/race-data/championships", "Bearer static-token"),
+		"proxied 200":     serve("/v1/race-data/championships", "Bearer "+signTestJWT(t, "user", time.Minute)),
 	} {
 		for header, want := range securityHeaders {
 			if got := rec.Header().Values(header); len(got) != 1 || got[0] != want {

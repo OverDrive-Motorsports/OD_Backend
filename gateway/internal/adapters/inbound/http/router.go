@@ -12,37 +12,30 @@
 package httpinbound
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"overdrive/gateway/internal/core/domain"
 	"overdrive/gateway/internal/core/usecases"
 	"strings"
 )
 
-// userTokenRoutePrefixes are the per-user routes: the client authenticates with its own
-// access token (JWT issued by auth-service) instead of the shared gateway token, because the
-// upstream service needs the caller's identity and both cannot travel in one Authorization
-// header. Every other proxied prefix keeps the shared gateway token.
-var userTokenRoutePrefixes = map[string]struct{}{
-	"/presets": {},
-}
-
 func NewHandler(
-	routes map[string][]*url.URL,
+	routes []domain.Route,
 	serviceHealthRoutes map[string][]*url.URL,
 	rateLimitRPS float64,
 	rateLimitBurst float64,
 	trustedProxies []*net.IPNet,
 	healthUseCase usecases.CheckHealthUseCase,
-	authorizeUseCase usecases.AuthorizeRequestUseCase,
 	userAuthorizeUseCase usecases.AuthorizeUserRequestUseCase,
+	adminAuthorizeUseCase usecases.AuthorizeAdminRequestUseCase,
 ) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	// /health and /health/{service} are intentionally left open (no auth
 	// required) so infra/orchestrator liveness probes keep working. Every
-	// other route below requires a valid Authorization header: the shared
-	// gateway token, or a user JWT on userTokenRoutePrefixes.
+	// proxied route below carries its own access policy (domain.RouteAccess).
 	healthHandler := NewHealthHandler(healthUseCase)
 	mux.Handle("/health", http.HandlerFunc(healthHandler.HandleHealth))
 
@@ -52,8 +45,15 @@ func NewHandler(
 		mux.Handle(routePath, http.HandlerFunc(serviceHealthHandler.HandleHealth))
 	}
 
-	for prefix, targets := range routes {
-		proxyHandler, err := NewReverseProxy(prefix, targets)
+	seen := make(map[string]struct{}, len(routes))
+	for _, route := range routes {
+		prefix := normalizePrefix(route.Prefix)
+		if _, duplicate := seen[prefix]; duplicate {
+			return nil, fmt.Errorf("route %q is declared twice", prefix)
+		}
+		seen[prefix] = struct{}{}
+
+		proxyHandler, err := NewReverseProxy(prefix, route.UpstreamPrefix, route.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -69,9 +69,16 @@ func NewHandler(
 			serviceHandler = ValidateRaceParameters(serviceHandler)
 		}
 
-		protected := RequireAuthorization(authorizeUseCase.Execute, serviceHandler)
-		if _, perUser := userTokenRoutePrefixes[prefix]; perUser {
+		var protected http.Handler
+		switch route.Access {
+		case domain.AccessPublic:
+			protected = serviceHandler
+		case domain.AccessUser:
 			protected = RequireUserToken(userAuthorizeUseCase.Execute, serviceHandler)
+		case domain.AccessAdmin:
+			protected = RequireUserToken(adminAuthorizeUseCase.Execute, serviceHandler)
+		default:
+			return nil, fmt.Errorf("route %q has no access policy", prefix)
 		}
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)

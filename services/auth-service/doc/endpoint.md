@@ -1,5 +1,34 @@
 # auth-service endpoints
 
+Through the gateway these routes are under `/v1/auth` (and `/auth` during the transition):
+`POST /v1/auth/login` reaches `POST /login`, `GET /v1/auth/sessions` reaches `GET /sessions`.
+Login, register, refresh and the OAuth routes are public; the session routes need the user's
+access token (see `gateway/ROUTES.md`).
+
+## Access token
+
+The `token` returned by login, register, OAuth and refresh is an HS256 JWT valid 15 minutes:
+
+| Claim | Description |
+| --- | --- |
+| `sub` | User ID. The only source of the caller's identity in every service. |
+| `role` | `user` or `admin`, copied from `User.role` at each login and refresh. |
+| `email`, `iat`, `exp` | Email, issue and expiry times. |
+
+### Roles
+
+Accounts are created as `user`. `admin` opens the administration routes of the gateway
+(`/v1/ingestion`); there is no API to change a role. Promote or demote by hand on the auth
+database:
+
+```sql
+UPDATE "User" SET "role" = 'admin' WHERE "email" = 'operator@example.com';
+UPDATE "User" SET "role" = 'user'  WHERE "email" = 'operator@example.com';
+```
+
+The change applies at the account's next login or refresh (at most 15 minutes for a token
+already issued).
+
 ## Endpoint
 
 `GET /health`
@@ -105,3 +134,50 @@ Status: `200 OK`, same body as `POST /login`.
 | `403` | The provider does not report the email as verified. |
 | `404` | Unknown provider, or (login) no account linked to this identity. |
 | `409` | (register) Identity already linked, or the email belongs to an existing account. |
+
+## Sessions
+
+The caller's own refresh sessions (one per login). Every route requires
+`Authorization: Bearer <access token>` and acts on the token's user only: no route takes a user
+ID. A session of another user answers `404`, like a missing one. Responses never carry the
+refresh token or its hash.
+
+### Endpoint
+
+`GET /sessions`
+
+### Returned Message
+
+Status: `200 OK`, a bare array (empty when the user has no session):
+
+```json
+[{ "id": "8d6c...", "createdAt": "YYYY-MM-DDThh:mm:ssZ", "expiresAt": "YYYY-MM-DDThh:mm:ssZ" }]
+```
+
+### Endpoint
+
+`GET /sessions/{sessionId}`
+
+### Returned Message
+
+Status: `200 OK`, one session object as above.
+
+### Endpoint
+
+`DELETE /sessions/{sessionId}`
+
+Revokes the session: its refresh token stops working. The current access token stays valid until
+it expires.
+
+### Returned Message
+
+Status: `204 No Content`, empty body.
+
+### Error Messages
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `401` | `UNAUTHORIZED` | No `Authorization: Bearer` header. |
+| `401` | `INVALID_TOKEN` | Invalid or expired access token (the gateway answers `TOKEN_EXPIRED` first for an expired one). |
+| `404` | `SESSION_NOT_FOUND` | Unknown session, or one that belongs to another user. |
+| `500` | `INTERNAL` | Database failure. |

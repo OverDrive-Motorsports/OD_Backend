@@ -11,17 +11,23 @@
 
 package config
 
-import "net/url"
+import (
+	"net/url"
+
+	"overdrive/gateway/internal/core/domain"
+)
 
 type serviceRoutes struct {
-	proxied map[string][]*url.URL
+	proxied []domain.Route
 	health  map[string][]*url.URL
 }
 
-func buildRoutes(targets upstreamTargets) map[string][]*url.URL {
-	return mergeRouteGroups(allServiceRouteGroups(targets), func(group serviceRoutes) map[string][]*url.URL {
-		return group.proxied
-	})
+func buildRoutes(targets upstreamTargets) []domain.Route {
+	var routes []domain.Route
+	for _, group := range allServiceRouteGroups(targets) {
+		routes = append(routes, group.proxied...)
+	}
+	return routes
 }
 
 func buildServiceHealthRoutes(targets upstreamTargets) map[string][]*url.URL {

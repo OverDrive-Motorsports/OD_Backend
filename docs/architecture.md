@@ -24,19 +24,23 @@ handful of real `curl` calls as worked examples. For "how do I run this," see
 
 | Gateway prefix | Service | Auth expected by the gateway |
 | --- | --- | --- |
-| `/auth` | `auth-service` (login, register, refresh, sessions) | gateway token |
-| `/presets` | `user-data-service` (the user's AR/VR layouts) | **user access token** (JWT) |
-| `/v1/championship` | `championship-service` (catalog, standings) | gateway token |
-| `/v1/race-data` | `race-data-service` (race, telemetry, replay) | gateway token |
-| `/v1/ingestion` | `ingestion-service` (OpenF1 import) | gateway token |
+| `/v1/auth/{login,register,refresh,oauth}` | `auth-service` (login, register, refresh, OAuth) | none (public) |
+| `/v1/auth` (everything else: the caller's own sessions) | `auth-service` | user access token (JWT) |
+| `/v1/presets` | `user-data-service` (the user's AR/VR layouts) | user access token (JWT) |
+| `/v1/championship` | `championship-service` (catalog, standings) | user access token (JWT) |
+| `/v1/race-data` | `race-data-service` (race, telemetry, replay) | user access token (JWT) |
+| `/v1/ingestion` | `ingestion-service` (OpenF1 import) | access token with the `admin` role, or the gateway token |
+
+`/auth` and `/presets` still answer unversioned during the transition to `/v1`.
 
 - **`gateway`** is the only thing a client should talk to. It does auth, rate
   limiting, request logging, path/parameter validation, and reverse-proxies to the
   right upstream service, **stripping its prefix** (`/v1/championship/championships`
-  reaches championship-service as `/championships`). It has no database and no
-  business logic of its own.
+  reaches championship-service as `/championships`), except where a route declares an
+  upstream prefix (`/v1/presets/...` reaches user-data-service as `/presets/...`).
+  It has no database and no business logic of its own.
 - **`auth-service`** owns users and their sessions, and issues the access tokens
-  (HS256 JWT, `sub` = user ID, 15 min) and refresh tokens.
+  (HS256 JWT, `sub` = user ID, `role` = `user` or `admin`, 15 min) and refresh tokens.
 - **`user-data-service`** stores per-user data (today: layout presets). It is the only
   service that re-verifies the user's JWT itself and scopes every query to that user.
 - **`championship-service`** and **`race-data-service`** each own a private Postgres
@@ -57,7 +61,9 @@ The examples below assume:
 
 ```bash
 export GW=http://localhost:3000
-export TOKEN=$(grep GATEWAY_AUTH_TOKEN .env | cut -d= -f2)
+# a user access token (15 minutes), from the public login route
+export TOKEN=$(curl -sS -X POST $GW/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","password":"..."}' | jq -r .token)
 ```
 
 ## Example 1 - a simple read: `GET /v1/championship/championships`
@@ -69,10 +75,11 @@ curl -H "Authorization: Bearer $TOKEN" $GW/v1/championship/championships
 1. **Gateway receives the request** on `:3000`. `RateLimit` middleware checks the
    client hasn't exceeded its token bucket. `RequestLogger` wraps the rest of the
    chain to log method/path/status/duration at the end.
-2. **`RequireAuthorization`** checks the `Authorization` header against
-   `GATEWAY_AUTH_TOKEN`. Missing or wrong → `401` with the shared error envelope
-   (`{"error":{"code":"UNAUTHORIZED","status":401,"message":"unauthorized"}}`),
-   and the request stops here.
+2. **`RequireUserToken`** checks the `Authorization` header carries a valid user
+   access token (`/v1/championship` has the user access level in
+   `routes_championship.go`). A missing token answers `401 UNAUTHORIZED`, an expired one `401
+   TOKEN_EXPIRED`, anything else (the gateway token included) `401 INVALID_TOKEN`,
+   with the shared error envelope, and the request stops here.
 3. The path matches the `/v1/championship` prefix, registered in
    `gateway/internal/config/routes_championship.go` and pointing at
    `CHAMPIONSHIP_SERVICE_URLS`. `ValidateChampionshipDataset` (edge validation for
@@ -148,13 +155,16 @@ long-poll could land on a replica that never sees the event.
 ## Example 4 - ingestion: `POST /v1/ingestion/providers/openf1/ingestions`
 
 ```bash
-curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+# an admin access token, or GATEWAY_AUTH_TOKEN from a script
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
   -d '{"meeting_key":1255,"session_key":9998,"resources":["race_control"],"dispatch":true}' \
   $GW/v1/ingestion/providers/openf1/ingestions
 ```
 
-1. Gateway: same auth/rate-limit as always; `/v1/ingestion` has no extra parameter
-   validation, so the body is forwarded as-is to `ingestion-service`.
+1. Gateway: `/v1/ingestion` is admin-only. A `user` access token answers `403
+   FORBIDDEN`; an access token with the `admin` role, or the gateway token, passes.
+   There is no extra parameter validation, so the body is forwarded as-is to
+   `ingestion-service`.
 2. `ingestion-service`'s usecase (`ingest_openf1.usecase.go`) calls the OpenF1
    provider adapter to fetch the raw rows of each requested resource (all of them
    when `resources` is omitted), maps them from OpenF1's shape into internal
@@ -223,27 +233,22 @@ gateway still forwards `Flush()` through its logging middleware
 (`statusRecorder.Flush()`, covered by `flush_passthrough_test.go`), so a streaming
 endpoint would work through it if one is added.
 
-## Example 6 - per-user data: `POST /presets`
+## Example 6 - per-user data: `POST /v1/presets`
 
 ```bash
-# 1. log in (gateway token on /auth) and keep the user's access token
-JWT=$(curl -sS -X POST $GW/auth/login -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"me@example.com","password":"..."}' | jq -r .token)
-
-# 2. call /presets with the user's token - not the gateway token
-curl -X POST $GW/presets -H "Authorization: Bearer $JWT" \
+curl -X POST $GW/v1/presets -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" -d '{"name":"Race view","data":{"widgets":[]}}'
 ```
 
-1. The gateway sees the `/presets` prefix, listed in `userTokenRoutePrefixes`
-   (`router.go`), and uses **`RequireUserToken`** instead of the gateway-token
-   check: the header must carry a valid access token, verified with
-   `shared/authjwt` and `AUTH_JWT_SECRET`. The 401 code tells the client what to do:
-   `UNAUTHORIZED` (no token), `TOKEN_EXPIRED` (call `/auth/refresh`),
-   `INVALID_TOKEN` (log in again). The gateway token is refused here.
-2. The prefix is stripped and `POST /` reaches `user-data-service` with the
-   `Authorization` header unchanged.
+1. The gateway sees the `/v1/presets` prefix, declared with the user access level
+   in `routes_user_data.go`, and uses **`RequireUserToken`**: the header must carry
+   a valid access token, verified with `shared/authjwt` and `AUTH_JWT_SECRET`. The
+   401 code tells the client what to do: `UNAUTHORIZED` (no token), `TOKEN_EXPIRED`
+   (call `/v1/auth/refresh`), `INVALID_TOKEN` (log in again).
+2. The route's upstream prefix is `/presets`, so `POST /presets` reaches
+   `user-data-service` with the `Authorization` header unchanged. The service
+   registers its routes under `/presets`, so no public path can reach its own
+   `/health` or any other route.
 3. `user-data-service` **re-verifies** the token (`requireUser` middleware) and takes
    the user ID **only** from its `sub` claim - no route accepts a user ID from the
    client. Every repository query is scoped to that user, so another user's preset
@@ -293,17 +298,21 @@ Known exceptions, kept for now and listed in the backlog:
 
 ## Auth and rate limiting, in one place
 
-- Every proxied route requires an `Authorization: Bearer ...` header. `/presets`
-  expects the **user's access token**; every other prefix (including `/auth`)
-  expects `GATEWAY_AUTH_TOKEN`. `/health` and `/health/{service}` are the only
-  routes left open, for infra liveness probes.
-- `GATEWAY_AUTH_TOKEN` identifies the client application, not a user. Per-user data
-  is only ever protected by the user's access token.
+- Each proxied prefix declares its access level (`domain.RouteAccess`, in
+  `gateway/internal/config/routes_*.go`): **public** (only the `/v1/auth` login,
+  register, refresh and OAuth routes, an allow-list), **user** (data, presets, sessions: any valid access token) or
+  **admin** (`/v1/ingestion`: access token with the `admin` role, or the gateway
+  token). `/health` and `/health/{service}` are also open, for infra liveness probes.
+  A route without an access level stops the gateway at startup.
+- The `role` claim (`user` or `admin`) is issued by auth-service from `User.role`;
+  admins are promoted by hand in SQL (`docs/security.md`).
+- `GATEWAY_AUTH_TOKEN` identifies no user: it is for internal and scripted calls,
+  opens the admin routes only, and is never shipped in a client.
 - Rate limiting is an in-memory token bucket per client
   (`GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST`), reset whenever the
   gateway restarts. Exceeding it returns `429 RATE_LIMIT_EXCEEDED`.
-- Apart from user-data-service's token check, none of this exists a second time
-  inside the services: they rely on the gateway. Calling a service's port directly
+- Apart from the token checks of user-data-service and of the auth-service session
+  routes, none of this exists a second time inside the services: they rely on the gateway. Calling a service's port directly
   (e.g. `curl http://localhost:3003/championships`, bypassing `:3000`) skips auth,
   rate limiting and parameter validation. The Compose file publishes those ports for
   local debugging only; they must not be reachable from outside a private network

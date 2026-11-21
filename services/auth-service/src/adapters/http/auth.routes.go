@@ -1,3 +1,12 @@
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## auth.routes.go - Registers the public login, registration, refresh and OAuth routes.
+##
+*/
+
 package httpadapter
 
 import "net/http"

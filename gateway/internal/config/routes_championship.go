@@ -11,12 +11,16 @@
 
 package config
 
-import "net/url"
+import (
+	"net/url"
+
+	"overdrive/gateway/internal/core/domain"
+)
 
 func championshipServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
-		proxied: map[string][]*url.URL{
-			"/v1/championship": targets.championship,
+		proxied: []domain.Route{
+			{Prefix: "/v1/championship", Targets: targets.championship, Access: domain.AccessUser},
 		},
 		health: map[string][]*url.URL{
 			"/health/championship": targets.championship,

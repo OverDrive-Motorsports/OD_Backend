@@ -50,6 +50,9 @@ func (r *SessionRepository) GetUserSession(ctx context.Context, userID string, s
 		db.AuthSession.ID.Equals(sessionID),
 		db.AuthSession.UserID.Equals(userID),
 	).Exec(ctx)
+	if errors.Is(err, db.ErrNotFound) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -100,13 +103,20 @@ func (r *SessionRepository) AddUserSession(ctx context.Context, userID string) (
 	return &session, nil
 }
 
+// RemoveUserSession deletes the session only when it belongs to userID, and returns
+// domain.ErrSessionNotFound when nothing was deleted.
 func (r *SessionRepository) RemoveUserSession(ctx context.Context, userID string, sessionID string) error {
-	_, err := r.client.AuthSession.FindMany(
+	result, err := r.client.AuthSession.FindMany(
 		db.AuthSession.UserID.Equals(userID),
 		db.AuthSession.ID.Equals(sessionID),
 	).Delete().Exec(ctx)
-
-	return err
+	if err != nil {
+		return err
+	}
+	if result.Count == 0 {
+		return domain.ErrSessionNotFound
+	}
+	return nil
 }
 
 func (r *SessionRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -299,6 +309,7 @@ func mapUser(row *db.UserModel) domain.User {
 		DisplayName:  row.DisplayName,
 		PasswordHash: passwordHash,
 		UsesOAuth:    usesOAuth,
+		Role:         domain.UserRole(row.Role),
 		CreatedAt:    row.CreatedAt,
 		UpdatedAt:    row.UpdatedAt,
 	}

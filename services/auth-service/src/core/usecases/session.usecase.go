@@ -36,10 +36,6 @@ func (u *SessionQueryUseCase) GetSessionByID(ctx context.Context, sessionID stri
 	return u.repository.GetSessionByID(ctx, sessionID)
 }
 
-func (u *SessionQueryUseCase) AddUserSession(ctx context.Context, userID string) (*domain.AuthSession, error) {
-	return u.repository.AddUserSession(ctx, userID)
-}
-
 func (u *SessionQueryUseCase) RemoveUserSession(ctx context.Context, userID string, sessionID string) error {
 	return u.repository.RemoveUserSession(ctx, userID, sessionID)
 }

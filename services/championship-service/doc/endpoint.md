@@ -1,5 +1,11 @@
 # championship-service endpoints
 
+Through the gateway the public routes are under `/v1/championship` and require the user's
+access token (`Authorization: Bearer <access token>`, any role); the gateway token is refused.
+Without a token: `401 UNAUTHORIZED`, expired: `401 TOKEN_EXPIRED`, otherwise invalid:
+`401 INVALID_TOKEN` (see `gateway/ROUTES.md`). The service itself checks no user token: it
+relies on the gateway.
+
 ## `GET /health`
 
 Returns the runtime status of the service.

@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## health.controller.go - HTTP controller exposing the auth-service health endpoint.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## health.controller.go - HTTP controller exposing the auth-service health endpoint.
+##
 */
+
 package httpadapter
 
 import (

@@ -41,17 +41,23 @@ func TestNewUserTokenValidator_RequiresSecret(t *testing.T) {
 	}
 }
 
-// TestUserTokenValidator_ValidateUserBearerHeader proves each rejection maps to the domain
-// reason the gateway turns into a distinct 401 code - and that the static gateway token is not
-// a valid user token.
+// TestUserTokenValidator_ValidateUserBearerHeader proves a valid token yields its role (user by
+// default, admin when the claim says so), each rejection maps to the domain reason the gateway
+// turns into a distinct 401 code, an unknown role is an invalid token, and the static gateway
+// token is not a valid user token.
 func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
 	validator, err := NewUserTokenValidator(validatorSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validator.ValidateUserBearerHeader("Bearer " + signUserToken(t, validatorSecret, time.Now().Add(time.Minute))); err != nil {
-		t.Fatalf("expected a valid user JWT to be accepted, got %v", err)
+	if role, err := validator.ValidateUserBearerHeader("Bearer " + signUserToken(t, validatorSecret, time.Now().Add(time.Minute))); err != nil || role != domain.RoleUser {
+		t.Fatalf("expected a valid user JWT to be accepted with the user role, got %q, %v", role, err)
 	}
+	adminToken, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "admin-1", "role": "admin", "exp": time.Now().Add(time.Minute).Unix()}).SignedString([]byte(validatorSecret))
+	if role, err := validator.ValidateUserBearerHeader("Bearer " + adminToken); err != nil || role != domain.RoleAdmin {
+		t.Fatalf("expected the admin role to be returned, got %q, %v", role, err)
+	}
+	unknownRole, _ := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "user-1", "role": "root", "exp": time.Now().Add(time.Minute).Unix()}).SignedString([]byte(validatorSecret))
 	cases := map[string]struct {
 		header string
 		want   error
@@ -61,13 +67,14 @@ func TestUserTokenValidator_ValidateUserBearerHeader(t *testing.T) {
 		"expired":      {"Bearer " + signUserToken(t, validatorSecret, time.Now().Add(-time.Minute)), domain.ErrUserTokenExpired},
 		"wrong secret": {"Bearer " + signUserToken(t, "another-secret-long-enough-for-hs256-keys", time.Now().Add(time.Minute)), domain.ErrInvalidUserToken},
 		"static token": {"Bearer gateway-static-token", domain.ErrInvalidUserToken},
+		"unknown role": {"Bearer " + unknownRole, domain.ErrInvalidUserToken},
 	}
 	for name, tc := range cases {
-		if err := validator.ValidateUserBearerHeader(tc.header); !errors.Is(err, tc.want) {
+		if _, err := validator.ValidateUserBearerHeader(tc.header); !errors.Is(err, tc.want) {
 			t.Fatalf("%s: expected %v, got %v", name, tc.want, err)
 		}
 	}
-	if err := (UserTokenValidator{}).ValidateUserBearerHeader("Bearer x"); !errors.Is(err, domain.ErrInvalidUserToken) {
+	if _, err := (UserTokenValidator{}).ValidateUserBearerHeader("Bearer x"); !errors.Is(err, domain.ErrInvalidUserToken) {
 		t.Fatalf("zero validator: expected ErrInvalidUserToken, got %v", err)
 	}
 }

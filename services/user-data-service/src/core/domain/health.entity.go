@@ -1,13 +1,12 @@
-/*
-*
-
-	##
-	## OverDrive 2026
-	## All Technical rights reserved
-	##
-	## health.entity.go - Domain entity representing the user-data-service health response payload.
-	##
+/**
+##
+## OverDrive 2026
+## All Technical rights reserved
+##
+## health.entity.go - Domain entity representing the user-data-service health response payload.
+##
 */
+
 package domain
 
 type HealthStatus struct {
