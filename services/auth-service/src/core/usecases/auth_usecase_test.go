@@ -548,3 +548,26 @@ func TestRefresh_GetUserByIDFailure(t *testing.T) {
 		t.Fatalf("expected the repository error to propagate")
 	}
 }
+
+// TestLogin_OAuthOnlyAccountRefusesPassword proves a password login on an account created by
+// an OAuth provider (no password hash) is refused with the same ErrInvalidCredentials as a
+// wrong password, whatever the password, the empty one included, and opens no session.
+func TestLogin_OAuthOnlyAccountRefusesPassword(t *testing.T) {
+	repo := &fakeSessionRepository{
+		usersByEmail: map[string]*domain.User{
+			"oauth@example.com": {ID: "oauth-user", Email: "oauth@example.com", PasswordHash: "", UsesOAuth: true},
+		},
+		addUserSessionErr: errors.New("a session must not be opened"),
+	}
+	uc := NewAuthQueryUseCase(repo, testJWTSecret)
+
+	for _, password := range []string{"", "any-password"} {
+		resp, err := uc.Login(context.Background(), "oauth@example.com", password)
+		if err != domain.ErrInvalidCredentials {
+			t.Fatalf("password %q: err = %v, want the ErrInvalidCredentials sentinel", password, err)
+		}
+		if resp != nil {
+			t.Fatalf("password %q: unexpected response %+v", password, resp)
+		}
+	}
+}
