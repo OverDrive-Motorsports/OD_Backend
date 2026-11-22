@@ -1,0 +1,90 @@
+# Development override: run every Go binary from the mounted sources instead of
+# the production images, in golang:1.27 (no image rebuild; restart a service
+# after a change: docker compose restart <service>).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Requires Compose 2.24+ (`!reset`). auth, championship and race-data need
+# their generated Prisma client: run
+#   go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
+# in the service directory once after a clone or a schema change.
+#
+# Each command builds then execs the binary so it is PID 1 and receives SIGTERM
+# (go run does not forward it). -buildvcs=false: the mounted repo belongs to the
+# host user, git refuses it as root.
+
+x-dev: &dev
+  image: golang:1.27
+  build: !reset null
+  working_dir: /app
+  volumes:
+    - .:/app
+
+x-dev-healthcheck: &dev-healthcheck
+  test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
+
+services:
+  auth-service:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go build -buildvcs=false -o /tmp/auth-service ./services/auth-service && exec /tmp/auth-service
+    healthcheck: *dev-healthcheck
+
+  user-data-service:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+      HOME: /tmp
+      GOPATH: /tmp/go
+      GOMODCACHE: /tmp/go/pkg/mod
+    # Generates its Prisma client at start: as the host user, so the files are not root-owned.
+    user: "${UID:-1000}:${GID:-1000}"
+    command:
+      - sh
+      - -c
+      - cd services/user-data-service && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma && cd /app && go build -buildvcs=false -o /tmp/user-data-service ./services/user-data-service && exec /tmp/user-data-service
+    healthcheck: *dev-healthcheck
+
+  championship-service:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go build -buildvcs=false -o /tmp/championship-service ./services/championship-service && exec /tmp/championship-service
+    healthcheck: *dev-healthcheck
+
+  race-data-service:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go build -buildvcs=false -o /tmp/race-data-service ./services/race-data-service && exec /tmp/race-data-service
+    healthcheck: *dev-healthcheck
+
+  ingestion-service:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go build -buildvcs=false -o /tmp/ingestion-service ./services/ingestion-service && exec /tmp/ingestion-service
+    healthcheck: *dev-healthcheck
+
+  gateway:
+    <<: *dev
+    environment:
+      GOCACHE: /tmp/go-build
+    command:
+      - sh
+      - -c
+      - go build -buildvcs=false -o /tmp/gateway ./gateway && exec /tmp/gateway
+    healthcheck: *dev-healthcheck

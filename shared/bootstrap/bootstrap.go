@@ -27,7 +27,7 @@ type Config struct {
 
 // LoadConfig loads configuration and validates the values required by the service.
 func LoadConfig(serviceName string, description string) (Config, error) {
-	if err := loadDotEnv(serviceName); err != nil {
+	if err := LoadEnvFiles(serviceName); err != nil {
 		return Config{}, err
 	}
 
@@ -63,23 +63,16 @@ func getRequiredEnv(key string) (string, error) {
 	return value, nil
 }
 
-// loadDotEnv loads the root and service-specific .env files when they exist.
-func loadDotEnv(serviceName string) error {
-	loaded := false
-
+// LoadEnvFiles loads the root and service-specific .env files when they exist. Both are
+// optional: in a container the variables come from the environment, and LoadConfig then checks
+// the required ones. A file that exists but cannot be read or parsed is still an error.
+func LoadEnvFiles(serviceName string) error {
 	for _, path := range []string{".env", filepath.Join("services", serviceName, ".env")} {
-		if err := applyDotEnvFile(path); err == nil {
-			loaded = true
-		} else if !errors.Is(err, os.ErrNotExist) {
+		if err := applyDotEnvFile(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
-
-	if loaded {
-		return nil
-	}
-
-	return fmt.Errorf("unable to find .env for %s", serviceName)
+	return nil
 }
 
 // applyDotEnvFile reads key/value pairs from a .env file into the process environment.

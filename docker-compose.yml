@@ -1,3 +1,26 @@
+# OverDrive stack. The services run from their production images (one
+# Dockerfile per binary, built here from the repository root); configuration
+# comes from the root .env only (Compose interpolation), no .env file enters an
+# image.
+#
+#   docker compose up -d --build
+#
+# The *-dbsync jobs push each Prisma schema before its service starts; they run
+# the mounted sources in golang:1.27 (schema tooling, not part of the images).
+#
+# For development from the mounted sources (no image rebuild), add the
+# override: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+x-go-service: &go-service
+  # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+  stop_grace_period: 45s
+
+x-healthcheck: &healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 20
+  start_period: 60s
+
 services:
   postgres:
     image: postgres:16.16-alpine
@@ -85,116 +108,87 @@ services:
       - .:/app
     restart: "no"
 
+  # ---------------------------------------------------------------------------
+  # Services, from their production images (one Dockerfile per binary, built
+  # from the repository root). Only the gateway is published on every
+  # interface; the others bind 127.0.0.1 for local debugging.
+  # ---------------------------------------------------------------------------
   auth-service:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/auth-service:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       auth-dbsync:
         condition: service_completed_successfully
-    working_dir: /app
     environment:
       HTTP_PORT: "3001"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       AUTH_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_auth?schema=public
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
-      GOCACHE: /tmp/go-build
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - go build -buildvcs=false -o /tmp/auth-service ./services/auth-service && exec /tmp/auth-service
-    volumes:
-      - .:/app
+      # Empty = the Google sign-in is disabled.
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URL: ${GOOGLE_OAUTH_REDIRECT_URL:-}
     ports:
       - "127.0.0.1:3001:3001"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/auth-service", "healthcheck"]
 
   user-data-service:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/user-data-service:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: services/user-data-service/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       user-data-dbsync:
         condition: service_completed_successfully
-    working_dir: /app
     environment:
       HTTP_PORT: "3002"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       USER_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_user_data?schema=public
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
-      GOCACHE: /tmp/go-build
-      HOME: /tmp
-      GOPATH: /tmp/go
-      GOMODCACHE: /tmp/go/pkg/mod
-    user: "${UID:-1000}:${GID:-1000}"
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - cd services/user-data-service && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma && cd /app && go build -buildvcs=false -o /tmp/user-data-service ./services/user-data-service && exec /tmp/user-data-service
-    volumes:
-      - .:/app
     ports:
       - "127.0.0.1:3002:3002"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/user-data-service", "healthcheck"]
 
   championship-service:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/championship-service:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: services/championship-service/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
       championship-dbsync:
         condition: service_completed_successfully
-    working_dir: /app
     environment:
       HTTP_PORT: "3003"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       CHAMPIONSHIP_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_championship?schema=public
       INTERNAL_INGESTION_TOKEN: ${INTERNAL_INGESTION_TOKEN}
-      GOCACHE: /tmp/go-build
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - go build -buildvcs=false -o /tmp/championship-service ./services/championship-service && exec /tmp/championship-service
-    volumes:
-      - .:/app
     ports:
       - "127.0.0.1:3003:3003"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/championship-service", "healthcheck"]
 
   race-data-service:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/race-data-service:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: services/race-data-service/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
@@ -202,45 +196,32 @@ services:
         condition: service_completed_successfully
       championship-service:
         condition: service_healthy
-    working_dir: /app
     environment:
       HTTP_PORT: "3004"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       RACE_DATA_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/overdrive_race_data?schema=public
       CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
       INTERNAL_INGESTION_TOKEN: ${INTERNAL_INGESTION_TOKEN}
-      GOCACHE: /tmp/go-build
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - go build -buildvcs=false -o /tmp/race-data-service ./services/race-data-service && exec /tmp/race-data-service
-    volumes:
-      - .:/app
     ports:
       - "127.0.0.1:3004:3004"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/race-data-service", "healthcheck"]
 
   ingestion-service:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/ingestion-service:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: services/ingestion-service/Dockerfile
     depends_on:
       championship-service:
         condition: service_healthy
       race-data-service:
         condition: service_healthy
-    working_dir: /app
     environment:
       HTTP_PORT: "3005"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       OPENF1_BASE_URL: https://api.openf1.org/v1
       OPENF1_TIMEOUT: 30s
       OPENF1_RETRY_COUNT: "2"
@@ -250,29 +231,18 @@ services:
       CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
       RACE_DATA_SERVICE_URL: http://race-data-service:3004
       INTERNAL_INGESTION_TOKEN: ${INTERNAL_INGESTION_TOKEN}
-      GOCACHE: /tmp/go-build
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - go build -buildvcs=false -o /tmp/ingestion-service ./services/ingestion-service && exec /tmp/ingestion-service
-    volumes:
-      - .:/app
     ports:
       - "127.0.0.1:3005:3005"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/ingestion-service", "healthcheck"]
 
   gateway:
-    image: golang:1.27
-    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
-    stop_grace_period: 45s
+    <<: *go-service
+    image: overdrive/gateway:${OVERDRIVE_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
     depends_on:
       auth-service:
         condition: service_healthy
@@ -284,10 +254,9 @@ services:
         condition: service_healthy
       ingestion-service:
         condition: service_healthy
-    working_dir: /app
     environment:
       HTTP_PORT: "3000"
-      APP_VERSION: dev
+      APP_VERSION: ${APP_VERSION:-dev}
       GATEWAY_AUTH_TOKEN: ${GATEWAY_AUTH_TOKEN}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS}
@@ -298,24 +267,11 @@ services:
       CHAMPIONSHIP_SERVICE_URLS: http://championship-service:3003
       RACE_DATA_SERVICE_URLS: http://race-data-service:3004
       INGESTION_SERVICE_URLS: http://ingestion-service:3005
-      GOCACHE: /tmp/go-build
-    command:
-      - sh
-      - -c
-      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
-      # forward it): the service then drains in-flight requests before exiting.
-      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
-      - go build -buildvcs=false -o /tmp/gateway ./gateway && exec /tmp/gateway
-    volumes:
-      - .:/app
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HTTP_PORT}/health || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 60s
+      <<: *healthcheck
+      test: ["CMD", "/usr/local/bin/gateway", "healthcheck"]
 
 volumes:
   overdrive-postgres-data:

@@ -225,6 +225,9 @@ func getRequiredEnv(key string) (string, error) {
 	return value, nil
 }
 
+// loadDotEnv loads gateway/.env (or .env when started from gateway/) when it exists. The file
+// is optional: in a container the variables come from the environment, and Load then checks the
+// required ones. A file that exists but cannot be read or parsed is still an error.
 func loadDotEnv() error {
 	paths := []string{filepath.Join("gateway", ".env")}
 
@@ -232,22 +235,15 @@ func loadDotEnv() error {
 		paths = append(paths, ".env")
 	}
 
-	loadedAtLeastOne := false
 	for _, path := range paths {
-		if err := applyDotEnvFile(path); err == nil {
-			loadedAtLeastOne = true
-			break
-		} else if errors.Is(err, os.ErrNotExist) {
-			continue
-		} else {
+		err := applyDotEnvFile(path)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}
-
-	if !loadedAtLeastOne {
-		return fmt.Errorf("unable to find gateway .env (expected %s)", strings.Join(paths, " or "))
-	}
-
 	return nil
 }
 

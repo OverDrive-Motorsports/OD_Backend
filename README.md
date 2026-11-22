@@ -72,6 +72,10 @@ Every service exposes:
 
 - `GET /health`
 
+Every binary also accepts one argument, `healthcheck`: it probes its own `/health` on
+`HTTP_PORT` and exits non-zero when unhealthy (the container health check of the images, which
+have no shell nor curl).
+
 The active Docker Compose stack runs the full backend:
 
 - `auth-service`
@@ -102,7 +106,8 @@ Only the gateway port is published to the network. The service ports and Postgre
 bound to `127.0.0.1`: reachable from your machine for debugging, not from another one.
 
 Each service also has a `.env.template` to run it alone outside Docker (`go run`); it holds no
-secret value. Local `.env` files are ignored by git.
+secret value. Local `.env` files are ignored by git. They are optional: a binary reads them when
+present, then requires its variables from the environment (the images ship no `.env`).
 
 ## Root environment file
 
@@ -119,6 +124,8 @@ URLs). Upgrading a checkout that already has a database: see "Upgrading an exist
 | `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
 | `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder - the three refuse to start otherwise |
 | `INTERNAL_INGESTION_TOKEN` | `ingestion-service`, `championship-service`, `race-data-service` | **required**, at least 32 bytes - protects `POST /internal/ingestion/batches` (sent by the ingestion dispatcher in `X-Internal-Token`) |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URL` | `auth-service` | optional: Google sign-in, disabled when empty |
+| `OVERDRIVE_IMAGE_TAG` | Compose | optional: tag of the built images (default `local`) |
 
 ## Database setup
 
@@ -131,10 +138,18 @@ Start only PostgreSQL:
 docker compose up -d postgres
 ```
 
-Start the whole stack (schema sync jobs run first, then the services):
+Start the whole stack (schema sync jobs run first, then the services, from their production
+images built from the repository):
 
 ```bash
-docker compose up -d
+docker compose up -d --build
+```
+
+Develop from the mounted sources instead (each binary built with `go build` in `golang:1.27`,
+no image rebuild; `docker compose restart <service>` after a change):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
 Useful endpoints once the stack is up:
@@ -217,7 +232,7 @@ modules (`gateway`, the five `services/*`, `shared/apierror`, `shared/authjwt`,
 | --- | --- |
 | `lint` | `gofmt -l` must report nothing (excluding generated `resources/db`), then `go vet`, `staticcheck`, `gosec` (generated code excluded) and `govulncheck` on `./...` |
 | `test` | `tools/coverage.sh <module>`: `go test ./... -race` with coverage, failing below the module's minimum in `tools/coverage-thresholds.txt`; plus the database integration tests of the four Prisma services against a `postgres:16` service container (`tools/integration-test.sh <service>`) |
-| `build` | `go build ./...` in the workspace, then again with `GOWORK=off`: each `go.mod` declares its real dependencies and the `replace` directives for `shared/*`, so a module builds on its own |
+| `build` | `go build ./...` in the workspace, then again with `GOWORK=off`: each `go.mod` declares its real dependencies and the `replace` directives for `shared/*`, so a module builds on its own; then the production image of every binary (`docker build -f <module>/Dockerfile .`), checked to run as `nonroot` with no Go source nor `.env` inside |
 
 An accepted analyzer finding carries an inline `//lint:ignore <check> <reason>` (staticcheck) or
 `// #nosec <rule> -- <reason>` (gosec). Analyzer versions are pinned in `ci.yml`.

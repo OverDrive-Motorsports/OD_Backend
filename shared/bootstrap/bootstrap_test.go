@@ -113,15 +113,29 @@ func TestLoadConfig_EnvironmentWinsOverFiles(t *testing.T) {
 	}
 }
 
-// TestLoadConfig_NoEnvFile pins the current behaviour: without any .env file the service
-// refuses to start, even when the environment already holds every variable.
+// TestLoadConfig_NoEnvFile proves the .env files are optional: without any, the service starts
+// from the environment alone (production images ship no .env).
 func TestLoadConfig_NoEnvFile(t *testing.T) {
 	isolateConfig(t)
 	t.Setenv("HTTP_PORT", "3001")
 
+	cfg, err := LoadConfig("auth-service", "auth")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.HTTPPort != "3001" {
+		t.Fatalf("HTTP_PORT = %q, want the environment value 3001", cfg.HTTPPort)
+	}
+}
+
+// TestLoadConfig_NoEnvFileMissingVariable proves that without a .env file the required
+// variables are still checked, and the error names the missing one.
+func TestLoadConfig_NoEnvFileMissingVariable(t *testing.T) {
+	isolateConfig(t)
+
 	_, err := LoadConfig("auth-service", "auth")
-	if err == nil || !strings.Contains(err.Error(), "unable to find .env for auth-service") {
-		t.Fatalf("err = %v, want the missing .env error", err)
+	if err == nil || !strings.Contains(err.Error(), "HTTP_PORT is required") {
+		t.Fatalf("err = %v, want the HTTP_PORT requirement", err)
 	}
 }
 
