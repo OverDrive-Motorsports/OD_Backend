@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -46,7 +47,7 @@ func TestClient_Fetch_Success(t *testing.T) {
 	server := httptest.NewServer(jsonHandler(t, http.StatusOK, []map[string]any{{"driver_number": 63}}, nil))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	rows, err := c.Fetch(context.Background(), "drivers", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -63,7 +64,7 @@ func TestClient_Fetch_UnsupportedResource(t *testing.T) {
 	server := httptest.NewServer(jsonHandler(t, http.StatusOK, []map[string]any{}, func(r *http.Request) { requested = true }))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	_, err := c.Fetch(context.Background(), "not-a-real-resource", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if !errors.Is(err, domain.ErrUnsupportedResource) {
 		t.Fatalf("expected domain.ErrUnsupportedResource, got %v", err)
@@ -77,7 +78,7 @@ func TestClient_Fetch_UnsupportedResource(t *testing.T) {
 // session_key, driver-scoped resources include driver_number only when supplied, and an
 // unsupported resource returns the domain sentinel.
 func TestClient_BuildURL(t *testing.T) {
-	c := NewClient("https://api.openf1.org/v1/", time.Second, 0, time.Millisecond)
+	c := NewClient("https://api.openf1.org/v1/", time.Second, 0, time.Millisecond, ClientOptions{})
 
 	t.Run("meetings has meeting_key only", func(t *testing.T) {
 		endpoint, err := c.buildURL("meetings", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
@@ -139,7 +140,7 @@ func TestClient_FetchWithRetry_SucceedsFirstTry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 2, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 2, time.Millisecond, ClientOptions{})
 	rows, err := c.fetchWithRetry(context.Background(), server.URL+"/x")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -167,7 +168,7 @@ func TestClient_FetchWithRetry_SucceedsAfterRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 2, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 2, time.Millisecond, ClientOptions{})
 	rows, err := c.fetchWithRetry(context.Background(), server.URL+"/x")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -191,7 +192,7 @@ func TestClient_FetchWithRetry_ExhaustedSurfacesFinalError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 2, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 2, time.Millisecond, ClientOptions{})
 	_, err := c.fetchWithRetry(context.Background(), server.URL+"/x")
 	if err == nil {
 		t.Fatal("expected an error once retries are exhausted")
@@ -211,7 +212,7 @@ func TestClient_FetchOnce_StatusHandling(t *testing.T) {
 	t.Run("2xx decodes rows", func(t *testing.T) {
 		server := httptest.NewServer(jsonHandler(t, http.StatusOK, []map[string]any{{"a": 1}}, nil))
 		defer server.Close()
-		c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+		c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 
 		rows, err := c.fetchOnce(context.Background(), server.URL+"/x")
 		if err != nil {
@@ -228,7 +229,7 @@ func TestClient_FetchOnce_StatusHandling(t *testing.T) {
 			_, _ = w.Write([]byte("not found"))
 		}))
 		defer server.Close()
-		c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+		c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 
 		_, err := c.fetchOnce(context.Background(), server.URL+"/x")
 		if err == nil || !strings.Contains(err.Error(), "status 404") {
@@ -242,7 +243,7 @@ func TestClient_FetchOnce_StatusHandling(t *testing.T) {
 			_, _ = w.Write([]byte("boom"))
 		}))
 		defer server.Close()
-		c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+		c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 
 		_, err := c.fetchOnce(context.Background(), server.URL+"/x")
 		if err == nil || !strings.Contains(err.Error(), "upstream status 500") {
@@ -309,7 +310,7 @@ func TestClient_FetchStartingGrid_DirectSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	rows, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -333,7 +334,7 @@ func TestClient_FetchStartingGrid_NonNotFoundErrorIsNotFallenBack(t *testing.T) 
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	_, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err == nil {
 		t.Fatal("expected an error")
@@ -357,7 +358,7 @@ func TestClient_FetchStartingGrid_FallsBackToPrecedingQualifying(t *testing.T) {
 	fake := newStartingGridServer(t, http.StatusNotFound, sessions, 9995, fallbackRows)
 	defer fake.server.Close()
 
-	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	rows, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -386,7 +387,7 @@ func TestClient_FetchStartingGrid_SprintFallsBackToSprintQualifying(t *testing.T
 	fake := newStartingGridServer(t, http.StatusNotFound, sessions, 9993, fallbackRows)
 	defer fake.server.Close()
 
-	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	rows, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -406,7 +407,7 @@ func TestClient_FetchStartingGrid_NoQualifyingFoundReturnsWrappedError(t *testin
 	fake := newStartingGridServer(t, http.StatusNotFound, sessions, 0, nil)
 	defer fake.server.Close()
 
-	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	_, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err == nil {
 		t.Fatal("expected an error")
@@ -426,7 +427,7 @@ func TestClient_FetchStartingGrid_SessionNotFoundInMeeting(t *testing.T) {
 	fake := newStartingGridServer(t, http.StatusNotFound, sessions, 0, nil)
 	defer fake.server.Close()
 
-	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond)
+	c := NewClient(fake.server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
 	_, err := c.Fetch(context.Background(), "starting_grid", domain.OpenF1IngestionRequest{MeetingKey: 1141, SessionKey: 9998})
 	if err == nil || !strings.Contains(err.Error(), "fallback lookup failed") {
 		t.Fatalf("expected a wrapped fallback lookup error, got %v", err)
@@ -457,5 +458,155 @@ func TestIntValue(t *testing.T) {
 				t.Fatalf("intValue(%v) = %d, want %d", tc.value, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestClient_Fetch_RateLimitHonoursRetryAfter proves a 429 is retried after its Retry-After
+// without consuming the normal retries (here zero), and the next answer is returned.
+func TestClient_Fetch_RateLimitHonoursRetryAfter(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"a":1}]`))
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
+
+	start := time.Now()
+	rows, err := c.Fetch(context.Background(), "laps", domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 2})
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows=%v err=%v, want the second answer", rows, err)
+	}
+	if elapsed := time.Since(start); elapsed < 900*time.Millisecond {
+		t.Fatalf("retried after %s, want the 1 s Retry-After", elapsed)
+	}
+}
+
+// TestClient_Fetch_ClientErrorNotRetried proves a 4xx other than 429/408 fails at once instead
+// of being retried.
+func TestClient_Fetch_ClientErrorNotRetried(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 3, time.Millisecond, ClientOptions{})
+
+	if _, err := c.Fetch(context.Background(), "laps", domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 2}); err == nil {
+		t.Fatal("expected an error")
+	}
+	if hits != 1 {
+		t.Fatalf("server hit %d times, want 1", hits)
+	}
+}
+
+// TestClient_Fetch_OversizedResponse proves a response over MaxResponseBytes fails with
+// domain.ErrResponseTooLarge and is not retried.
+func TestClient_Fetch_OversizedResponse(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write([]byte(`[{"a":"` + strings.Repeat("x", 4096) + `"}]`))
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 3, time.Millisecond, ClientOptions{MaxResponseBytes: 1024})
+
+	_, err := c.Fetch(context.Background(), "laps", domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 2})
+	if !errors.Is(err, domain.ErrResponseTooLarge) || hits != 1 {
+		t.Fatalf("err=%v hits=%d, want ErrResponseTooLarge after one call", err, hits)
+	}
+}
+
+// TestClient_Pacing proves consecutive requests are spaced by at least MinInterval.
+func TestClient_Pacing(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(t, http.StatusOK, []map[string]any{}, nil))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{MinInterval: 200 * time.Millisecond})
+
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		if _, err := c.fetchOnce(context.Background(), server.URL+"/x"); err != nil {
+			t.Fatalf("fetch: %v", err)
+		}
+	}
+	if elapsed := time.Since(start); elapsed < 400*time.Millisecond {
+		t.Fatalf("3 paced calls took %s, want at least 2 intervals", elapsed)
+	}
+}
+
+// TestClient_ListDriverNumbers proves the driver list is read from /drivers for the session,
+// deduplicated and sorted, ignoring rows without a driver number.
+func TestClient_ListDriverNumbers(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Path + "?" + r.URL.RawQuery
+		_, _ = w.Write([]byte(`[{"driver_number":44},{"driver_number":1},{"driver_number":44},{"name":"x"}]`))
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
+
+	drivers, err := c.ListDriverNumbers(context.Background(), domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 9998})
+	if err != nil || fmt.Sprint(drivers) != "[1 44]" {
+		t.Fatalf("drivers=%v err=%v", drivers, err)
+	}
+	if gotQuery != "/drivers?session_key=9998" {
+		t.Fatalf("query = %q", gotQuery)
+	}
+}
+
+// TestParseRetryAfter covers seconds, HTTP dates, the cap and invalid values.
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, 3, 8, 15, 0, 0, 0, time.UTC)
+	cases := map[string]time.Duration{
+		"":                              0,
+		"5":                             5 * time.Second,
+		"600":                           maxRetryAfter,
+		"-3":                            0,
+		"soon":                          0,
+		"Sun, 08 Mar 2026 15:00:10 GMT": 10 * time.Second,
+	}
+	for value, want := range cases {
+		if got := parseRetryAfter(value, now); got != want {
+			t.Errorf("parseRetryAfter(%q) = %s, want %s", value, got, want)
+		}
+	}
+}
+
+// TestClient_Fetch_NotFoundIsEmpty proves OpenF1's 404 "No results found" is returned as no rows
+// (an empty resource), not as a failure, and is not retried.
+func TestClient_Fetch_NotFoundIsEmpty(t *testing.T) {
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"detail":"No results found."}`))
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 3, time.Millisecond, ClientOptions{})
+
+	rows, err := c.Fetch(context.Background(), "overtakes", domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 2})
+	if err != nil || rows == nil || len(rows) != 0 || hits != 1 {
+		t.Fatalf("rows=%v err=%v hits=%d, want no rows, no error, one call", rows, err, hits)
+	}
+}
+
+// TestClient_ListDriverNumbers_NotFoundIsEmpty proves a 404 on /drivers (session without
+// drivers) is an empty list, not an error.
+func TestClient_ListDriverNumbers_NotFoundIsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	c := NewClient(server.URL, time.Second, 0, time.Millisecond, ClientOptions{})
+
+	drivers, err := c.ListDriverNumbers(context.Background(), domain.OpenF1IngestionRequest{MeetingKey: 1, SessionKey: 2})
+	if err != nil || len(drivers) != 0 {
+		t.Fatalf("drivers=%v err=%v, want empty and no error", drivers, err)
 	}
 }

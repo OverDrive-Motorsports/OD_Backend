@@ -80,6 +80,9 @@ func NewHandler(
 		default:
 			return nil, fmt.Errorf("route %q has no access policy", prefix)
 		}
+		if route.SlowWrite.Timeout > 0 {
+			protected = ExtendWriteDeadline(route.SlowWrite, protected)
+		}
 		mux.Handle(prefix, protected)
 		mux.Handle(prefix+"/", protected)
 	}

@@ -10,6 +10,7 @@
 package httpadapter
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -21,6 +22,9 @@ import (
 // raceControlLongPollTimeout bounds how long POST /race/control blocks before
 // returning an empty array, forcing the client to re-POST (long-polling contract).
 const raceControlLongPollTimeout = 30 * time.Second
+
+// raceControlRetryAfterSeconds is the Retry-After sent when the long poll is full.
+const raceControlRetryAfterSeconds = "5"
 
 type RaceLiveController struct {
 	usecase ports.RaceLiveUseCase
@@ -161,7 +165,16 @@ func (c *RaceLiveController) PostRaceControl(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	events, err := c.usecase.WaitForRaceControl(r.Context(), sessionID, raceControlLongPollTimeout)
-	if err != nil {
+	switch {
+	case errors.Is(err, domain.ErrRaceControlBusy):
+		w.Header().Set("Retry-After", raceControlRetryAfterSeconds)
+		apierror.Write(w, r.URL.Path, apierror.ServiceUnavailable("too many clients are waiting for race control events, retry later", err))
+		return
+	case errors.Is(err, domain.ErrShuttingDown):
+		w.Header().Set("Retry-After", "1")
+		apierror.Write(w, r.URL.Path, apierror.ServiceUnavailable("service is restarting, retry", err))
+		return
+	case err != nil:
 		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load race control data", err))
 		return
 	}

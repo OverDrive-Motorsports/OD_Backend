@@ -11,7 +11,6 @@ package prismaadapter
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	db "overdrive/services/race-data-service/resources/db"
@@ -29,8 +28,8 @@ func NewTelemetryRepository(client *db.PrismaClient) *TelemetryRepository {
 
 // GetSpeed returns every speed sample for a driver, oldest first, optionally
 // scoped to a lap.
-func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
-	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
+func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetrySpeed, error) {
+	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber, page)
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +48,8 @@ func (r *TelemetryRepository) GetSpeed(ctx context.Context, sessionID string, dr
 
 // GetEngine returns every engine sample for a driver, oldest first, optionally
 // scoped to a lap.
-func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
-	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber)
+func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryEngine, error) {
+	rows, err := r.telemetrySamples(ctx, sessionID, driverNumber, lapNumber, page)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +73,7 @@ func (r *TelemetryRepository) GetEngine(ctx context.Context, sessionID string, d
 }
 
 // ListLocation returns spatial samples for a driver, optionally scoped to a lap.
-func (r *TelemetryRepository) ListLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryLocation, error) {
+func (r *TelemetryRepository) ListLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryLocation, error) {
 	params := []db.RaceLocationSampleWhereParam{
 		db.RaceLocationSample.SessionID.Equals(sessionID),
 		db.RaceLocationSample.DriverNumber.Equals(driverNumber),
@@ -92,7 +91,10 @@ func (r *TelemetryRepository) ListLocation(ctx context.Context, sessionID string
 			db.RaceLocationSample.DateUtc.Lt(db.DateTime(end)),
 		)
 	}
-	rows, err := r.client.RaceLocationSample.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RaceLocationSample.FindMany(params...).OrderBy(
+		db.RaceLocationSample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceLocationSample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +110,6 @@ func (r *TelemetryRepository) ListLocation(ctx context.Context, sessionID string
 			Timestamp: time.Time(row.DateUtc),
 		})
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Timestamp.Before(items[j].Timestamp) })
 	return items, nil
 }
 
@@ -135,9 +136,9 @@ func (r *TelemetryRepository) GetIntervals(ctx context.Context, sessionID string
 	return result, nil
 }
 
-// telemetrySamples loads a driver's telemetry samples, oldest first, optionally
-// scoped to a single lap's time window.
-func (r *TelemetryRepository) telemetrySamples(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]db.RaceTelemetrySampleModel, error) {
+// telemetrySamples loads one page of a driver's telemetry samples, oldest first (ties broken by
+// id so pages never overlap), optionally scoped to a single lap's time window.
+func (r *TelemetryRepository) telemetrySamples(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]db.RaceTelemetrySampleModel, error) {
 	params := []db.RaceTelemetrySampleWhereParam{
 		db.RaceTelemetrySample.SessionID.Equals(sessionID),
 		db.RaceTelemetrySample.DriverNumber.Equals(driverNumber),
@@ -155,7 +156,10 @@ func (r *TelemetryRepository) telemetrySamples(ctx context.Context, sessionID st
 			db.RaceTelemetrySample.DateUtc.Lt(db.DateTime(end)),
 		)
 	}
-	rows, err := r.client.RaceTelemetrySample.FindMany(params...).OrderBy(db.RaceTelemetrySample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
+	rows, err := r.client.RaceTelemetrySample.FindMany(params...).OrderBy(
+		db.RaceTelemetrySample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceTelemetrySample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

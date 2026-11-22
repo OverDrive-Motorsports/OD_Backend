@@ -11,6 +11,7 @@ package prismaadapter
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -31,26 +32,64 @@ func NewRaceStreamRepository(client *db.PrismaClient) *RaceStreamRepository {
 	return &RaceStreamRepository{client: client}
 }
 
-// ListTelemetryFrames returns telemetry samples oldest-first, optionally
-// scoped to a single driver.
+// replayDriverNumbersQuery lists the drivers with driver-scoped samples in a session. It is raw
+// SQL because prisma-client-go has no DISTINCT; each branch is served by a (sessionId, ...) index.
+const replayDriverNumbersQuery = `SELECT DISTINCT d."driverNumber" FROM (` +
+	`SELECT "driverNumber" FROM "RaceTelemetrySample" WHERE "sessionId" = $1` +
+	` UNION SELECT "driverNumber" FROM "RacePositionSample" WHERE "sessionId" = $1` +
+	` UNION SELECT "driverNumber" FROM "TeamRadioMessage" WHERE "sessionId" = $1` +
+	` UNION SELECT "driverNumber" FROM "RacePitStop" WHERE "sessionId" = $1` +
+	` UNION SELECT "driverNumber" FROM "RaceStint" WHERE "sessionId" = $1` +
+	` UNION SELECT "driverNumber" FROM "RaceLap" WHERE "sessionId" = $1` +
+	`) AS d ORDER BY d."driverNumber"`
+
+// ListReplayDriverNumbers returns every driver with at least one driver-scoped sample.
+func (r *RaceStreamRepository) ListReplayDriverNumbers(ctx context.Context, sessionID string) ([]int, error) {
+	var rows []struct {
+		DriverNumber int `json:"driverNumber"`
+	}
+	if err := r.client.Prisma.QueryRaw(replayDriverNumbersQuery, sessionID).Exec(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list replay drivers: %w", err)
+	}
+	drivers := make([]int, 0, len(rows))
+	for _, row := range rows {
+		drivers = append(drivers, row.DriverNumber)
+	}
+	return drivers, nil
+}
+
+// ListTelemetryFrames returns one driver's telemetry samples oldest-first, inside window.
 //
-// x/y/z and lapNumber are not columns on RaceTelemetrySample — x/y/z live on
+// x/y/z and lapNumber are not columns on RaceTelemetrySample - x/y/z live on
 // RaceLocationSample (sampled independently, its own timestamps) and
 // lapNumber is derived from RaceLap's recorded start times (OpenF1's
 // `position` resource has no lap_number field at all, so RacePositionSample
-// can't be used for this — verified against
+// can't be used for this - verified against
 // ingestion-service/src/adapters/providers/openf1/mapper.go's mapPosition).
 // Rather than a per-row lookup (one extra DB round trip per telemetry
 // sample), both tables are fetched once per call and matched via a
 // forward-only pointer walk against the already-ascending-sorted results.
-func (r *RaceStreamRepository) ListTelemetryFrames(ctx context.Context, sessionID string, driverNumber *int) ([]domain.RaceReplayTelemetryFrame, error) {
-	telemetryParams := []db.RaceTelemetrySampleWhereParam{db.RaceTelemetrySample.SessionID.Equals(sessionID)}
-	locationParams := []db.RaceLocationSampleWhereParam{db.RaceLocationSample.SessionID.Equals(sessionID)}
-	lapParams := []db.RaceLapWhereParam{db.RaceLap.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		telemetryParams = append(telemetryParams, db.RaceTelemetrySample.DriverNumber.Equals(*driverNumber))
-		locationParams = append(locationParams, db.RaceLocationSample.DriverNumber.Equals(*driverNumber))
-		lapParams = append(lapParams, db.RaceLap.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListTelemetryFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]domain.RaceReplayTelemetryFrame, error) {
+	telemetryParams := []db.RaceTelemetrySampleWhereParam{
+		db.RaceTelemetrySample.SessionID.Equals(sessionID),
+		db.RaceTelemetrySample.DriverNumber.Equals(driverNumber),
+	}
+	locationParams := []db.RaceLocationSampleWhereParam{
+		db.RaceLocationSample.SessionID.Equals(sessionID),
+		db.RaceLocationSample.DriverNumber.Equals(driverNumber),
+	}
+	lapParams := []db.RaceLapWhereParam{
+		db.RaceLap.SessionID.Equals(sessionID),
+		db.RaceLap.DriverNumber.Equals(driverNumber),
+	}
+	if window.From != nil {
+		telemetryParams = append(telemetryParams, db.RaceTelemetrySample.DateUtc.Gte(db.DateTime(*window.From)))
+		// The nearest location of the first samples may sit just before the window.
+		locationParams = append(locationParams, db.RaceLocationSample.DateUtc.Gte(db.DateTime(window.From.Add(-locationMatchMargin))))
+	}
+	if window.To != nil {
+		telemetryParams = append(telemetryParams, db.RaceTelemetrySample.DateUtc.Lte(db.DateTime(*window.To)))
+		locationParams = append(locationParams, db.RaceLocationSample.DateUtc.Lte(db.DateTime(window.To.Add(locationMatchMargin))))
 	}
 
 	rows, err := r.client.RaceTelemetrySample.FindMany(telemetryParams...).OrderBy(db.RaceTelemetrySample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
@@ -98,9 +137,13 @@ func (r *RaceStreamRepository) ListTelemetryFrames(ctx context.Context, sessionI
 	return items, nil
 }
 
+// locationMatchMargin widens the location query around a time window so the samples at its
+// edges still find their nearest location (location is sampled at about 4 Hz).
+const locationMatchMargin = 2 * time.Second
+
 // nearestLocation advances idx through locationRows (sorted ascending by
 // DateUtc) to the sample whose timestamp is closest to t, then returns its
-// x/y/z. idx is only ever moved forward, never reset — see ListTelemetryFrames.
+// x/y/z. idx is only ever moved forward, never reset - see ListTelemetryFrames.
 func nearestLocation(rows []db.RaceLocationSampleModel, idx *int, t time.Time) (float64, float64, float64) {
 	if len(rows) == 0 {
 		return 0, 0, 0
@@ -115,7 +158,7 @@ func nearestLocation(rows []db.RaceLocationSampleModel, idx *int, t time.Time) (
 }
 
 // currentLapNumber advances idx through lapRows (sorted ascending by
-// lapNumber) to the last lap whose recorded start time is at or before t —
+// lapNumber) to the last lap whose recorded start time is at or before t -
 // i.e. the lap actually in progress at t. Unlike location, lap number is a
 // monotonic step function, not a continuous signal: "nearest by absolute
 // distance" would occasionally jump to the next lap early (right before its
@@ -149,17 +192,22 @@ func absDuration(d time.Duration) time.Duration {
 	return d
 }
 
-// ListPositionFrames returns position samples oldest-first, optionally scoped
-// to a single driver. Unlike RaceLiveRepository.ListPositions (which returns
+// ListPositionFrames returns one driver's position samples oldest-first, inside window. Unlike RaceLiveRepository.ListPositions (which returns
 // only the LATEST sample per driver, enriched with gapToLeader/gapAhead from
 // the intervals dataset), this returns every historical sample for replay and
-// intentionally leaves the gap fields empty — recomputing gaps per tick would
+// intentionally leaves the gap fields empty - recomputing gaps per tick would
 // require an extra interval lookup per sample, which isn't worth it for a V1
 // replay. Use GET /sessions/{sessionId}/race/position for gap-enriched data.
-func (r *RaceStreamRepository) ListPositionFrames(ctx context.Context, sessionID string, driverNumber *int) ([]domain.RacePosition, error) {
-	params := []db.RacePositionSampleWhereParam{db.RacePositionSample.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		params = append(params, db.RacePositionSample.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListPositionFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]domain.RacePosition, error) {
+	params := []db.RacePositionSampleWhereParam{
+		db.RacePositionSample.SessionID.Equals(sessionID),
+		db.RacePositionSample.DriverNumber.Equals(driverNumber),
+	}
+	if window.From != nil {
+		params = append(params, db.RacePositionSample.DateUtc.Gte(db.DateTime(*window.From)))
+	}
+	if window.To != nil {
+		params = append(params, db.RacePositionSample.DateUtc.Lte(db.DateTime(*window.To)))
 	}
 	rows, err := r.client.RacePositionSample.FindMany(params...).OrderBy(db.RacePositionSample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
 	if err != nil {
@@ -183,10 +231,15 @@ func (r *RaceStreamRepository) ListPositionFrames(ctx context.Context, sessionID
 // session. Not filtered by driver: flags/safety car/track status apply
 // track-wide, so they are always included in the stream regardless of the
 // `driverNumber` query param.
-func (r *RaceStreamRepository) ListRaceControlFrames(ctx context.Context, sessionID string) ([]domain.RaceControlEvent, error) {
-	rows, err := r.client.RaceControlEvent.FindMany(
-		db.RaceControlEvent.SessionID.Equals(sessionID),
-	).OrderBy(db.RaceControlEvent.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
+func (r *RaceStreamRepository) ListRaceControlFrames(ctx context.Context, sessionID string, window domain.TimeWindow) ([]domain.RaceControlEvent, error) {
+	params := []db.RaceControlEventWhereParam{db.RaceControlEvent.SessionID.Equals(sessionID)}
+	if window.From != nil {
+		params = append(params, db.RaceControlEvent.DateUtc.Gte(db.DateTime(*window.From)))
+	}
+	if window.To != nil {
+		params = append(params, db.RaceControlEvent.DateUtc.Lte(db.DateTime(*window.To)))
+	}
+	rows, err := r.client.RaceControlEvent.FindMany(params...).OrderBy(db.RaceControlEvent.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +282,17 @@ func safetyCarFromScope(scope string, category string) *string {
 }
 
 // ListWeatherFrames returns all weather samples for a session, oldest first.
-// Never filtered by driver — weather is track-wide, matching
+// Never filtered by driver - weather is track-wide, matching
 // GET /race/weather not taking a driverNumber param either.
-func (r *RaceStreamRepository) ListWeatherFrames(ctx context.Context, sessionID string) ([]domain.RaceWeatherSample, error) {
-	rows, err := r.client.RaceWeatherSample.FindMany(
-		db.RaceWeatherSample.SessionID.Equals(sessionID),
-	).OrderBy(db.RaceWeatherSample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
+func (r *RaceStreamRepository) ListWeatherFrames(ctx context.Context, sessionID string, window domain.TimeWindow) ([]domain.RaceWeatherSample, error) {
+	params := []db.RaceWeatherSampleWhereParam{db.RaceWeatherSample.SessionID.Equals(sessionID)}
+	if window.From != nil {
+		params = append(params, db.RaceWeatherSample.DateUtc.Gte(db.DateTime(*window.From)))
+	}
+	if window.To != nil {
+		params = append(params, db.RaceWeatherSample.DateUtc.Lte(db.DateTime(*window.To)))
+	}
+	rows, err := r.client.RaceWeatherSample.FindMany(params...).OrderBy(db.RaceWeatherSample.DateUtc.Order(db.SortOrderAsc)).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -262,13 +320,13 @@ func (r *RaceStreamRepository) ListWeatherFrames(ctx context.Context, sessionID 
 }
 
 // ListRadioFrames returns team radio messages oldest-first, optionally
-// scoped to a single driver. dateUtc is nullable on TeamRadioMessage — a
+// scoped to a single driver. dateUtc is nullable on TeamRadioMessage - a
 // message with no recorded timestamp cannot be placed on the replay
 // timeline, so it is skipped rather than guessed at.
-func (r *RaceStreamRepository) ListRadioFrames(ctx context.Context, sessionID string, driverNumber *int) ([]domain.RaceRadioMessage, error) {
-	params := []db.TeamRadioMessageWhereParam{db.TeamRadioMessage.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		params = append(params, db.TeamRadioMessage.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListRadioFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]domain.RaceRadioMessage, error) {
+	params := []db.TeamRadioMessageWhereParam{
+		db.TeamRadioMessage.SessionID.Equals(sessionID),
+		db.TeamRadioMessage.DriverNumber.Equals(driverNumber),
 	}
 	rows, err := r.client.TeamRadioMessage.FindMany(params...).Exec(ctx)
 	if err != nil {
@@ -277,7 +335,7 @@ func (r *RaceStreamRepository) ListRadioFrames(ctx context.Context, sessionID st
 	items := make([]domain.RaceRadioMessage, 0, len(rows))
 	for _, row := range rows {
 		dateUtc, ok := row.DateUtc()
-		if !ok {
+		if !ok || !window.Contains(time.Time(dateUtc)) {
 			continue
 		}
 		item := domain.RaceRadioMessage{DriverNumber: row.DriverNumber, Timestamp: time.Time(dateUtc)}
@@ -291,13 +349,13 @@ func (r *RaceStreamRepository) ListRadioFrames(ctx context.Context, sessionID st
 }
 
 // ListPitStopFrames returns pit stops oldest-first, optionally scoped to a
-// single driver. dateUtc is nullable on RacePitStop — a pit stop with no
+// single driver. dateUtc is nullable on RacePitStop - a pit stop with no
 // recorded timestamp cannot be placed on the replay timeline, so it is
 // skipped rather than guessed at.
-func (r *RaceStreamRepository) ListPitStopFrames(ctx context.Context, sessionID string, driverNumber *int) ([]ports.RaceReplayPitStopFrame, error) {
-	params := []db.RacePitStopWhereParam{db.RacePitStop.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		params = append(params, db.RacePitStop.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListPitStopFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]ports.RaceReplayPitStopFrame, error) {
+	params := []db.RacePitStopWhereParam{
+		db.RacePitStop.SessionID.Equals(sessionID),
+		db.RacePitStop.DriverNumber.Equals(driverNumber),
 	}
 	rows, err := r.client.RacePitStop.FindMany(params...).Exec(ctx)
 	if err != nil {
@@ -306,7 +364,7 @@ func (r *RaceStreamRepository) ListPitStopFrames(ctx context.Context, sessionID 
 	items := make([]ports.RaceReplayPitStopFrame, 0, len(rows))
 	for _, row := range rows {
 		dateUtc, ok := row.DateUtc()
-		if !ok {
+		if !ok || !window.Contains(time.Time(dateUtc)) {
 			continue
 		}
 		lapNumber, _ := row.LapNumber()
@@ -327,7 +385,7 @@ func (r *RaceStreamRepository) ListPitStopFrames(ctx context.Context, sessionID 
 // ListStintFrames returns stints, optionally scoped to a single driver, each
 // paired with an APPROXIMATED timestamp anchored to the start of its
 // lapStart lap. RaceStint has no timestamp column at all in the schema (only
-// stintNumber/lapStart/lapEnd/compound/tyreAgeLapsStart) — see
+// stintNumber/lapStart/lapEnd/compound/tyreAgeLapsStart) - see
 // ports.RaceReplayStintFrame for why this approximation was chosen. Stints
 // missing lapStart, or whose lapStart lap has no recorded dateStartUtc, are
 // skipped from the stream entirely rather than placed with a guessed time.
@@ -337,12 +395,14 @@ func (r *RaceStreamRepository) ListPitStopFrames(ctx context.Context, sessionID 
 // this stays O(1) DB round trips regardless of stint count, following the
 // same "fetch once, index in memory" approach as nearestLocation/
 // currentLapNumber above for telemetry.
-func (r *RaceStreamRepository) ListStintFrames(ctx context.Context, sessionID string, driverNumber *int) ([]ports.RaceReplayStintFrame, error) {
-	stintParams := []db.RaceStintWhereParam{db.RaceStint.SessionID.Equals(sessionID)}
-	lapParams := []db.RaceLapWhereParam{db.RaceLap.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		stintParams = append(stintParams, db.RaceStint.DriverNumber.Equals(*driverNumber))
-		lapParams = append(lapParams, db.RaceLap.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListStintFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]ports.RaceReplayStintFrame, error) {
+	stintParams := []db.RaceStintWhereParam{
+		db.RaceStint.SessionID.Equals(sessionID),
+		db.RaceStint.DriverNumber.Equals(driverNumber),
+	}
+	lapParams := []db.RaceLapWhereParam{
+		db.RaceLap.SessionID.Equals(sessionID),
+		db.RaceLap.DriverNumber.Equals(driverNumber),
 	}
 
 	stintRows, err := r.client.RaceStint.FindMany(stintParams...).Exec(ctx)
@@ -379,7 +439,7 @@ func (r *RaceStreamRepository) ListStintFrames(ctx context.Context, sessionID st
 			continue
 		}
 		anchor, exists := byNumber[lapStart]
-		if !exists {
+		if !exists || !window.Contains(anchor) {
 			continue
 		}
 		stintNumber, _ := row.StintNumber()
@@ -408,10 +468,10 @@ func (r *RaceStreamRepository) ListStintFrames(ctx context.Context, sessionID st
 // has actually finished, so the event fires then rather than at lap start.
 // Laps missing dateStartUtc or lapDurationSec (both nullable in the schema)
 // are skipped rather than emitted with a guessed or zero timestamp.
-func (r *RaceStreamRepository) ListLapFrames(ctx context.Context, sessionID string, driverNumber *int) ([]ports.RaceReplayLapFrame, error) {
-	params := []db.RaceLapWhereParam{db.RaceLap.SessionID.Equals(sessionID)}
-	if driverNumber != nil {
-		params = append(params, db.RaceLap.DriverNumber.Equals(*driverNumber))
+func (r *RaceStreamRepository) ListLapFrames(ctx context.Context, sessionID string, driverNumber int, window domain.TimeWindow) ([]ports.RaceReplayLapFrame, error) {
+	params := []db.RaceLapWhereParam{
+		db.RaceLap.SessionID.Equals(sessionID),
+		db.RaceLap.DriverNumber.Equals(driverNumber),
 	}
 	rows, err := r.client.RaceLap.FindMany(params...).Exec(ctx)
 	if err != nil {
@@ -425,6 +485,9 @@ func (r *RaceStreamRepository) ListLapFrames(ctx context.Context, sessionID stri
 			continue
 		}
 		completedAt := time.Time(startedAt).Add(time.Duration(duration * float64(time.Second)))
+		if !window.Contains(completedAt) {
+			continue
+		}
 		payload := domain.RaceReplayLapEvent{
 			DriverNumber: row.DriverNumber,
 			LapNumber:    row.LapNumber,

@@ -87,6 +87,8 @@ services:
 
   auth-service:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,7 +104,10 @@ services:
     command:
       - sh
       - -c
-      - go run ./services/auth-service
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - go build -buildvcs=false -o /tmp/auth-service ./services/auth-service && exec /tmp/auth-service
     volumes:
       - .:/app
     ports:
@@ -116,6 +121,8 @@ services:
 
   user-data-service:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       postgres:
         condition: service_healthy
@@ -135,7 +142,10 @@ services:
     command:
       - sh
       - -c
-      - cd services/user-data-service && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma && cd /app && go run ./services/user-data-service
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - cd services/user-data-service && go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma && cd /app && go build -buildvcs=false -o /tmp/user-data-service ./services/user-data-service && exec /tmp/user-data-service
     volumes:
       - .:/app
     ports:
@@ -149,6 +159,8 @@ services:
 
   championship-service:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,7 +176,10 @@ services:
     command:
       - sh
       - -c
-      - go run ./services/championship-service
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - go build -buildvcs=false -o /tmp/championship-service ./services/championship-service && exec /tmp/championship-service
     volumes:
       - .:/app
     ports:
@@ -178,6 +193,8 @@ services:
 
   race-data-service:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       postgres:
         condition: service_healthy
@@ -196,7 +213,10 @@ services:
     command:
       - sh
       - -c
-      - go run ./services/race-data-service
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - go build -buildvcs=false -o /tmp/race-data-service ./services/race-data-service && exec /tmp/race-data-service
     volumes:
       - .:/app
     ports:
@@ -210,6 +230,8 @@ services:
 
   ingestion-service:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       championship-service:
         condition: service_healthy
@@ -220,9 +242,10 @@ services:
       HTTP_PORT: "3005"
       APP_VERSION: dev
       OPENF1_BASE_URL: https://api.openf1.org/v1
-      OPENF1_TIMEOUT: 10s
+      OPENF1_TIMEOUT: 30s
       OPENF1_RETRY_COUNT: "2"
       OPENF1_RETRY_DELAY: 500ms
+      OPENF1_MIN_REQUEST_INTERVAL: 350ms
       DISPATCH_TIMEOUT: 10m
       CHAMPIONSHIP_SERVICE_URL: http://championship-service:3003
       RACE_DATA_SERVICE_URL: http://race-data-service:3004
@@ -231,7 +254,10 @@ services:
     command:
       - sh
       - -c
-      - go run ./services/ingestion-service
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - go build -buildvcs=false -o /tmp/ingestion-service ./services/ingestion-service && exec /tmp/ingestion-service
     volumes:
       - .:/app
     ports:
@@ -245,6 +271,8 @@ services:
 
   gateway:
     image: golang:1.27
+    # Above SHUTDOWN_TIMEOUT (35 s default) so the graceful shutdown completes before SIGKILL.
+    stop_grace_period: 45s
     depends_on:
       auth-service:
         condition: service_healthy
@@ -274,7 +302,10 @@ services:
     command:
       - sh
       - -c
-      - go run ./gateway
+      # Build then exec the binary so it is PID 1 and receives SIGTERM (go run does not
+      # forward it): the service then drains in-flight requests before exiting.
+      # -buildvcs=false: the mounted repo belongs to the host user, git refuses it as root.
+      - go build -buildvcs=false -o /tmp/gateway ./gateway && exec /tmp/gateway
     volumes:
       - .:/app
     ports:

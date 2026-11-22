@@ -19,6 +19,11 @@ root `.env`, compared in constant time). Missing or wrong token: `401`
 `{"error":{"code":"UNAUTHORIZED","status":401,"message":"invalid internal token"}}`, returned
 before the body is read. The service refuses to start without a token of at least 32 bytes.
 
+The body is limited to 256 MiB: a larger batch answers `413 PAYLOAD_TOO_LARGE`. The route may
+read its body for up to 5 minutes and answer within 15 minutes (storage of a large batch), the
+server defaults being 30 s and 60 s. A stored batch drops the cached replays of its session
+(see the replay route); if that fails the batch answers `500 INTERNAL_ERROR` and must be resent.
+
 Accepted dataset names:
 
 - `lap_timing`
@@ -78,6 +83,25 @@ as a bare JSON array, newest first. Built for the VR replay page: each
   (`GET /championships/{code}/sessions`, one call); the replay check is a
   single indexed `EXISTS` query on the local sample tables, so the cost does not
   depend on how many samples a session holds.
+
+### Pagination of the sample lists
+
+The routes returning raw sample lists take two optional query parameters:
+
+- `limit` - rows per page, `1` to `50000`; default `50000`.
+- `offset` - rows to skip, `0` or more; default `0`.
+
+When more rows exist, the response carries `X-Next-Offset: <offset of the next page>`; its
+absence means the last page. The response shape does not change. An invalid `limit` or `offset`
+is `400 VALIDATION_ERROR`. In the `{count, data}` envelopes of the dataset routes, `count` is
+the number of rows in this page. Rows are in a stable order (time then id for samples, lap number for
+laps, id otherwise), so consecutive pages never overlap.
+
+Paged routes: `GET /sessions/{sessionId}/datasets/{dataset}` (local datasets; the datasets
+proxied from championship-service are not paged), `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}`
+(except `result`), and `/telemetry/speed`, `/telemetry/engine`, `/telemetry/location`. One
+driver's car data or location for a whole race fits in one page; a session-wide list of every
+driver does not.
 
 ### Session routes
 
@@ -145,7 +169,7 @@ gateway, championship-service, race-data-service, and ingestion-service (see
 - `GET /sessions/{sessionId}/race/laps` (query: `driverNumber`, `lapNumber`) - returns a single `{driverNumber, laps, bestLap, averageLap}` object when `driverNumber` is given, otherwise a bare array of that object per driver. `bestLap`/`averageLap` are always computed from ALL of that driver's laps, even when `lapNumber` narrows the returned `laps` list.
 - `GET /sessions/{sessionId}/race/stints` (query: `driverNumber`) - bare array
 - `GET /sessions/{sessionId}/race/pitstops` (query: `driverNumber`) - bare array
-- `POST /sessions/{sessionId}/race/control` - **long-poll**: blocks (up to a bounded server-side timeout) until a new race control event batch is ingested for the session, returns it as a bare array, then closes. The client must re-POST to receive the next event. Implemented via an in-memory, single-process pub/sub (`src/core/usecases/race_control_broadcaster.go`) - **this only works correctly with a single race-data-service instance**; horizontal scaling requires swapping in a shared/external broker.
+- `POST /sessions/{sessionId}/race/control` - **long-poll**: blocks (up to 30 s) until a new race control event batch is ingested for the session, returns it as a bare array (`[]` on timeout), then closes. The client must re-POST to receive the next event. It works across several race-data-service instances: an ingested batch is stored in the `RaceControlNotification` table, which every instance polls every second, so a waiter on any instance is woken within about a second (`src/core/usecases/shared_race_control_broadcaster.go`). Each instance holds at most `RACE_CONTROL_MAX_WAITERS` waiters (default 2000) and `RACE_CONTROL_MAX_WAITERS_PER_SESSION` per session (default 500); beyond that the route answers `503 SERVICE_UNAVAILABLE` with `Retry-After: 5`. During a graceful shutdown the waiters are released at once with `[]`, and new ones get `503` with `Retry-After: 1`.
 - `GET /sessions/{sessionId}/race/weather` - bare array, no filters
 - `GET /sessions/{sessionId}/race/radio` (query: `driverNumber`) - bare array
 
@@ -165,9 +189,33 @@ fetch it in a single request instead of calling every snapshot endpoint in
 a loop.
 
 It is a **replay of already-ingested historical data**, not a live feed -
-there is no in-progress race in this dev setup. All rows for a
-finished/stored session are returned as soon as they're assembled; there is
-no pacing, streaming, or partial-response behavior.
+there is no in-progress race in this dev setup. There is no pacing.
+
+The object is **streamed**: it is written dataset by dataset and driver by
+driver as the samples are read, so the service never holds more than one
+driver's samples of one dataset in memory, whatever the session size. The
+status (`200`) is sent with the first part; a failure after that aborts the
+connection, so a client never receives a truncated body that parses as
+complete JSON. The route may take up to 10 minutes to send the dump (the
+server default is 60 s).
+
+Limits and cache:
+
+- At most `REPLAY_MAX_CONCURRENT` replays (default 4) are built from the
+  sample tables at once per instance; beyond that the route answers
+  `503 SERVICE_UNAVAILABLE` with `Retry-After: 10`. Replays served from the
+  cache hold one chunk in memory each and have their own cap,
+  `REPLAY_CACHE_MAX_CONCURRENT` (default 32), with the same `503` beyond it.
+- A full dump (no `driverNumber`, no time window) is recorded into
+  `RaceArchive` / `RaceDatasetChunk` while it is streamed, and the next
+  requests (full, or one driver) are served from it without reading the
+  sample tables. When two full replays are recorded at once, the first to
+  finish is kept and the other copy is dropped; a complete archive is only
+  deleted by an ingestion. Any ingested batch for the session (even one that
+  fails part way) deletes its archives, so a replay never serves stale samples.
+  An archive takes about the size of the dump in the database (tens of MB for
+  a race) and stays until the next ingestion of the session. A dump served from the cache has the
+  same keys and values, but the field order inside a sample object may differ.
 
 Query params:
 
@@ -177,6 +225,11 @@ Query params:
   have data). `raceControl` and `weather` are track-wide and are always
   included in full regardless of this filter (matching `POST /race/control`
   and `GET /race/weather`, neither of which takes a `driverNumber` either).
+- `fromUtc`, `toUtc` (optional RFC 3339 timestamps, inclusive, for example
+  `YYYY-MM-DDThh:mm:ssZ`) - keep only the samples inside the window, in every
+  dataset (stints by their anchor time, laps by their completion time). An
+  invalid value, or `fromUtc` after `toUtc`, is `400 VALIDATION_ERROR`. A
+  windowed replay is always read from the sample tables, never cached.
 
 `sessionId` is validated against championship-service the same way as every
 other `/race/*`/`/telemetry/*` route; unknown sessions return `404`.
@@ -238,12 +291,13 @@ curl http://localhost:3004/sessions/<SESSION_ID>/race/replay?driverNumber=63
 }
 ```
 
-Implementation: `src/adapters/http/race_replay_stream.controller.go`
-(request parsing + JSON response, no streaming machinery),
-`src/core/usecases/race_replay_stream.usecase.go` (groups each dataset's
-already-sorted rows by driver number), `src/adapters/repository/prisma/
-race_stream.repository.go` (oldest-first Prisma reads, including the `stint`
-lap-start anchoring and `lap` completion-time derivation). The gateway's
+Implementation: `src/adapters/http/race_replay_stream.controller.go` and
+`replay_json_writer.go` (query parsing, streamed JSON object),
+`src/core/usecases/race_replay_stream.usecase.go` (dump parts in order,
+concurrency cap, cache recording and serving), `src/adapters/repository/prisma/
+race_stream.repository.go` (oldest-first per-driver Prisma reads, including the
+`stint` lap-start anchoring and `lap` completion-time derivation) and
+`replay_cache.repository.go` (the cache tables). The gateway's
 `race_parameter_middleware.go` allow-list accepts `replay` as one of the
 6-segment `/race/{action}` routes - see `gateway/ROUTES.md`.
 
@@ -252,20 +306,20 @@ lap-start anchoring and `lap` completion-time derivation). The gateway's
 `battery` is intentionally **absent** from `/telemetry/engine` - no data source
 is currently ingested for it.
 
-- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` (query: `lapNumber`) - bare array of every sample, oldest first (whole session, or a single lap when `lapNumber` is given), same shape family as `/telemetry/location` - not an aggregated `{currentSpeed, topSpeed, averageSpeed}` object.
-- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` (query: `lapNumber`) - bare array of every sample, oldest first, not just the latest one. `drsActive` is a best-effort heuristic (`drsState >= 10`) since OpenF1 encodes DRS as a numeric state code, not a boolean
-- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` (query: `lapNumber`) - bare array
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` (query: `lapNumber`, `limit`, `offset`) - bare array of every sample, oldest first (whole session, or a single lap when `lapNumber` is given), same shape family as `/telemetry/location` - not an aggregated `{currentSpeed, topSpeed, averageSpeed}` object.
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` (query: `lapNumber`, `limit`, `offset`) - bare array of every sample, oldest first, not just the latest one. `drsActive` is a best-effort heuristic (`drsState >= 10`) since OpenF1 encodes DRS as a numeric state code, not a boolean
+- `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` (query: `lapNumber`, `limit`, `offset`) - bare array, oldest first
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/intervals` - single object (latest interval sample)
 
-### Reserved tables
+### Cache and reserved tables
 
-The Prisma schema also contains archive and highlight-oriented tables:
-
-- `RaceArchive`
-- `RaceDatasetChunk`
-- `RaceHighlight`
-
-These are reserved for future precomputed archive/highlight workflows. They are not populated by the current OpenF1 ingestion endpoint - in particular the replay catalog does **not** rely on `RaceArchive`, it checks the sample tables the replay actually reads.
+- `RaceArchive` / `RaceDatasetChunk` hold the replay cache (one archive per
+  session, one chunk per dataset and driver). They are written by the replay
+  route, not by the ingestion. The replay catalog does **not** rely on them,
+  it checks the sample tables the replay actually reads.
+- `RaceControlNotification` holds the race control batches shared by the
+  instances; rows are deleted after 5 minutes.
+- `RaceHighlight` is reserved for a future highlight workflow and is never written.
 
 ### Example
 

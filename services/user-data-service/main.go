@@ -10,9 +10,8 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	"log"
-	"net/http"
 	"os"
 	db "overdrive/services/user-data-service/resources/db"
 	httpadapter "overdrive/services/user-data-service/src/adapters/http"
@@ -20,28 +19,40 @@ import (
 	"overdrive/services/user-data-service/src/core/usecases"
 	"overdrive/shared/authjwt"
 	"overdrive/shared/bootstrap"
-	"time"
 )
 
+// main runs the service and exits non-zero when it fails to start or to stop cleanly.
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run wires the dependencies and serves until SIGINT/SIGTERM. Returning instead of calling
+// log.Fatal lets the deferred cleanup (database disconnect) run on every exit path.
+func run() error {
 	cfg, err := bootstrap.LoadConfig(
 		"user-data-service",
 		"User profile, preferences, and saved data service.",
 	)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	shutdownTimeout, err := bootstrap.ShutdownTimeout()
+	if err != nil {
+		return err
 	}
 
 	// AUTH_JWT_SECRET verifies the users' access tokens (issued by auth-service). Without it no
 	// preset request can be authenticated, so the service refuses to start.
 	verifier, err := authjwt.NewVerifier(os.Getenv("AUTH_JWT_SECRET"))
 	if err != nil {
-		log.Fatalf("AUTH_JWT_SECRET: %v (generate one with: openssl rand -hex 32)", err)
+		return fmt.Errorf("AUTH_JWT_SECRET: %w (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()
 	if err := client.Prisma.Connect(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer func() {
 		if err := client.Prisma.Disconnect(); err != nil {
@@ -56,15 +67,13 @@ func main() {
 	presetUsecase := usecases.NewPresetUseCase(presetRepository)
 	presetController := httpadapter.NewPresetController(presetUsecase)
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(controller, presetController, verifier),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(controller, presetController, verifier), bootstrap.DefaultServerLimits())
 
 	log.Printf("%s listening on :%s", cfg.ServiceName, cfg.HTTPPort)
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := bootstrap.Serve(server, shutdownTimeout); err != nil {
+		return err
 	}
+	log.Printf("%s stopped", cfg.ServiceName)
+	return nil
 }

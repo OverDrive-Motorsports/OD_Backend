@@ -37,7 +37,7 @@ func (c *AuthController) Login(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 	session, err := c.usecase.Login(r.Context(), body.Email, body.Password)
@@ -60,7 +60,7 @@ func (c *AuthController) Register(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 
@@ -102,7 +102,7 @@ func (c *AuthController) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 	var body oauthCallbackBody
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 
@@ -124,7 +124,7 @@ func (c *AuthController) OAuthRegister(w http.ResponseWriter, r *http.Request) {
 	var body oauthRegisterBody
 
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 
@@ -147,7 +147,7 @@ func (c *AuthController) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 

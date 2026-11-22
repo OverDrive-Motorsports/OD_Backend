@@ -68,7 +68,7 @@ func (c *PresetController) Get(w http.ResponseWriter, r *http.Request) {
 func (c *PresetController) Create(w http.ResponseWriter, r *http.Request) {
 	var body createPresetBody
 	if err := decodeBody(r, &body); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid preset body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid preset body", err))
 		return
 	}
 	preset, err := c.usecase.Create(r.Context(), userIDFrom(r), domain.NewPreset{Name: body.Name, IsDefault: body.IsDefault, Data: body.Data})
@@ -83,7 +83,7 @@ func (c *PresetController) Create(w http.ResponseWriter, r *http.Request) {
 func (c *PresetController) Update(w http.ResponseWriter, r *http.Request) {
 	var body updatePresetBody
 	if err := decodeBody(r, &body); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid preset body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid preset body", err))
 		return
 	}
 	preset, err := c.usecase.Update(r.Context(), userIDFrom(r), r.PathValue("presetId"), domain.PresetChanges{Name: body.Name, IsDefault: body.IsDefault, Data: body.Data})

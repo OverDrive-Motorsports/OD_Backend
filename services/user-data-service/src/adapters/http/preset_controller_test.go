@@ -173,15 +173,25 @@ func TestPresetRoutes_NormalCases(t *testing.T) {
 }
 
 // TestPresetRoutes_InvalidBodies proves malformed JSON, unknown fields (including a
-// client-supplied userId), trailing data and oversized bodies are 400 before the usecase runs,
-// and `"data": null` is treated as absent.
+// client-supplied userId) and trailing data are 400, an oversized body is 413, all before the
+// usecase runs, and `"data": null` is treated as absent.
 func TestPresetRoutes_InvalidBodies(t *testing.T) {
 	huge := `{"name":"x","data":{"blob":"` + strings.Repeat("a", int(presetBodyLimitBytes)) + `"}}`
+	for _, method := range []struct{ verb, path string }{{"POST", "/presets"}, {"PATCH", "/presets/p1"}} {
+		usecase := &fakePresetUseCase{}
+		rec := serve(usecase, method.verb, method.path, "alice-token", huge)
+		if rec.Code != http.StatusRequestEntityTooLarge || usecase.gotNew != nil || usecase.gotID != "" {
+			t.Fatalf("%s oversized: status = %d, want 413 before the usecase", method.verb, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "PAYLOAD_TOO_LARGE") {
+			t.Fatalf("%s oversized: body = %s", method.verb, rec.Body.String())
+		}
+	}
+
 	for name, body := range map[string]string{
 		"malformed":       `{"name":`,
 		"userId injected": `{"name":"x","data":{},"userId":"bob"}`,
 		"trailing data":   `{"name":"x","data":{}}{}`,
-		"oversized":       huge,
 		"empty":           ``,
 	} {
 		usecase := &fakePresetUseCase{}

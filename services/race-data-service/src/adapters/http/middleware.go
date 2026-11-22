@@ -14,11 +14,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"overdrive/shared/apierror"
 )
 
 const internalIngestionBodyLimitBytes int64 = 256 << 20
+
+// Internal ingestion batches are large and their storage can take minutes: the route gets its
+// own deadlines instead of the server defaults (see bootstrap.ExtendDeadlines).
+const (
+	internalIngestionReadTimeout  = 5 * time.Minute
+	internalIngestionWriteTimeout = 15 * time.Minute
+)
 
 // withSecurityHeaders applies baseline HTTP hardening headers to every response.
 func withSecurityHeaders(next http.Handler) http.Handler {

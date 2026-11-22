@@ -50,6 +50,12 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
+// Unwrap exposes the underlying ResponseWriter to http.ResponseController, so a handler behind
+// the logger can still extend its write deadline (ExtendWriteDeadline) or flush.
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

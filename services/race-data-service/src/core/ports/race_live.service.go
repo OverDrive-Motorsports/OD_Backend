@@ -29,11 +29,32 @@ type RaceLiveUseCase interface {
 	SessionExists(ctx context.Context, sessionID string) (bool, error)
 }
 
-// RaceControlBroadcaster is an in-memory, single-instance pub/sub used to implement
-// the long-polling contract of POST /sessions/{sessionId}/race/control. It assumes
-// a single race-data-service instance (no horizontal scale, no external broker such
-// as Redis) — see accept_ingestion_batch.usecase.go and race_control_broadcaster.go.
+// RaceControlBroadcaster backs the long-polling contract of POST
+// /sessions/{sessionId}/race/control: Publish announces a race control batch for a session,
+// Wait blocks one client until the next batch for that session (or its timeout). Production
+// uses usecases.SharedRaceControlBroadcaster, which publishes through Postgres so a waiter on
+// any race-data-service instance is woken; tests use the in-memory usecases.RaceControlBroadcaster.
 type RaceControlBroadcaster interface {
 	Publish(sessionID string, events []domain.RaceControlEvent)
-	Wait(ctx context.Context, sessionID string, timeout time.Duration) []domain.RaceControlEvent
+	// Wait returns domain.ErrRaceControlBusy when the waiter caps are reached and
+	// domain.ErrShuttingDown during shutdown; a timeout or a cancelled context returns (nil, nil).
+	Wait(ctx context.Context, sessionID string, timeout time.Duration) ([]domain.RaceControlEvent, error)
+}
+
+// RaceControlNotification is one published race control batch as stored for every instance.
+type RaceControlNotification struct {
+	ID        int64
+	SessionID string
+	Events    []domain.RaceControlEvent
+}
+
+// RaceControlNotificationStore is the shared table the instances publish race control batches
+// to and poll them from (no extra infrastructure: it lives in the race-data database).
+type RaceControlNotificationStore interface {
+	// Insert stores a batch, stamped with the database clock.
+	Insert(ctx context.Context, sessionID string, events []domain.RaceControlEvent) error
+	// ListRecent returns the batches stored during the last window (database clock), oldest first.
+	ListRecent(ctx context.Context, window time.Duration) ([]RaceControlNotification, error)
+	// DeleteOlderThan removes the batches stored more than age ago.
+	DeleteOlderThan(ctx context.Context, age time.Duration) error
 }

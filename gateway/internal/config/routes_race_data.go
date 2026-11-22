@@ -13,6 +13,7 @@ package config
 
 import (
 	"net/url"
+	"time"
 
 	"overdrive/gateway/internal/core/domain"
 )
@@ -20,7 +21,13 @@ import (
 func raceDataServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
 		proxied: []domain.Route{
-			{Prefix: "/v1/race-data", Targets: targets.raceData, Access: domain.AccessUser},
+			{
+				Prefix:  "/v1/race-data",
+				Targets: targets.raceData,
+				Access:  domain.AccessUser,
+				// The replay dump is streamed and can take minutes on a slow client.
+				SlowWrite: domain.SlowWrite{PathSuffix: "/race/replay", Timeout: 10 * time.Minute},
+			},
 		},
 		health: map[string][]*url.URL{
 			"/health/race-data": targets.raceData,

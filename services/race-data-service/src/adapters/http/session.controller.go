@@ -142,7 +142,11 @@ func (c *SessionController) ListSessionTeams(w http.ResponseWriter, r *http.Requ
 // single side; it is reported as an internal failure unless it is specifically an unknown
 // dataset name, which is a client validation error.
 func (c *SessionController) GetSessionDataset(w http.ResponseWriter, r *http.Request) {
-	payload, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), r.PathValue("dataset"))
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	payload, next, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), r.PathValue("dataset"), page)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, classifyDatasetErr(err, "failed to load session dataset"))
 		return
@@ -151,6 +155,7 @@ func (c *SessionController) GetSessionDataset(w http.ResponseWriter, r *http.Req
 		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
+	setNextOffset(w, next)
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -184,7 +189,7 @@ func (c *SessionController) GetSessionBroadcast(w http.ResponseWriter, r *http.R
 
 // GetSessionWeather returns the requested session weather payload for the supplied identifiers.
 func (c *SessionController) GetSessionWeather(w http.ResponseWriter, r *http.Request) {
-	payload, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), "weather")
+	payload, next, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), "weather", domain.DefaultPage())
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load session weather", err))
 		return
@@ -193,6 +198,7 @@ func (c *SessionController) GetSessionWeather(w http.ResponseWriter, r *http.Req
 		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
+	setNextOffset(w, next)
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -255,11 +261,16 @@ func (c *SessionController) GetDriverDataset(w http.ResponseWriter, r *http.Requ
 		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
 		return
 	}
-	payload, err := c.usecase.GetDriverDataset(r.Context(), r.PathValue("sessionId"), driverNumber, r.PathValue("dataset"))
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	payload, next, err := c.usecase.GetDriverDataset(r.Context(), r.PathValue("sessionId"), driverNumber, r.PathValue("dataset"), page)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, classifyDatasetErr(err, "failed to load driver dataset"))
 		return
 	}
+	setNextOffset(w, next)
 	if payload == nil {
 		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return

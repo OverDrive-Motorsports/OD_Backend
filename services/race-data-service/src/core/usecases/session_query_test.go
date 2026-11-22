@@ -14,6 +14,7 @@ import (
 	"errors"
 	"testing"
 
+	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
 )
 
@@ -91,13 +92,13 @@ type fakeSessionQueryRepository struct {
 	broadcastErr             error
 }
 
-func (f *fakeSessionQueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string) ([]map[string]any, error) {
+func (f *fakeSessionQueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) ([]map[string]any, error) {
 	if f.datasetErr != nil {
 		return nil, f.datasetErr
 	}
 	return f.datasetsBySessionDataset[dataset], nil
 }
-func (f *fakeSessionQueryRepository) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) ([]map[string]any, error) {
+func (f *fakeSessionQueryRepository) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) ([]map[string]any, error) {
 	return f.driverDataset, f.driverDatasetErr
 }
 func (f *fakeSessionQueryRepository) GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error) {
@@ -268,7 +269,7 @@ func TestSessionQueryUseCase_GetSessionDataset_RemoteDataset(t *testing.T) {
 	repo := &fakeSessionQueryRepository{}
 	uc := sq(client, repo)
 
-	got, err := uc.GetSessionDataset(context.Background(), "s1", "starting_grid")
+	got, _, err := uc.GetSessionDataset(context.Background(), "s1", "starting_grid", domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -290,7 +291,7 @@ func TestSessionQueryUseCase_GetSessionDataset_LocalDataset(t *testing.T) {
 	}}
 	uc := sq(client, repo)
 
-	got, err := uc.GetSessionDataset(context.Background(), "s1", "laps")
+	got, _, err := uc.GetSessionDataset(context.Background(), "s1", "laps", domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -307,7 +308,7 @@ func TestSessionQueryUseCase_GetSessionDataset_LocalDataset(t *testing.T) {
 // before either the remote or local dataset path is taken.
 func TestSessionQueryUseCase_GetSessionDataset_UnknownSession(t *testing.T) {
 	uc := sq(&fakeChampionshipClientForSessionQuery{session: nil}, &fakeSessionQueryRepository{})
-	got, err := uc.GetSessionDataset(context.Background(), "missing", "laps")
+	got, _, err := uc.GetSessionDataset(context.Background(), "missing", "laps", domain.DefaultPage())
 	if err != nil || got != nil {
 		t.Fatalf("expected nil, nil got %v %v", got, err)
 	}
@@ -379,7 +380,7 @@ func TestSessionQueryUseCase_GetDriverDataset_ResultSpecialCase(t *testing.T) {
 	}
 	uc := sq(client, &fakeSessionQueryRepository{})
 
-	got, err := uc.GetDriverDataset(context.Background(), "s1", 44, "result")
+	got, _, err := uc.GetDriverDataset(context.Background(), "s1", 44, "result", domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -404,7 +405,7 @@ func TestSessionQueryUseCase_GetDriverDataset_ResultSpecialCase_NilUpstream(t *t
 	}
 	uc := sq(client, &fakeSessionQueryRepository{})
 
-	got, err := uc.GetDriverDataset(context.Background(), "s1", 44, "result")
+	got, _, err := uc.GetDriverDataset(context.Background(), "s1", 44, "result", domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -424,7 +425,7 @@ func TestSessionQueryUseCase_GetDriverDataset_LocalDataset(t *testing.T) {
 	repo := &fakeSessionQueryRepository{driverDataset: []map[string]any{{"driver_number": 44, "speed": 300}}}
 	uc := sq(client, repo)
 
-	got, err := uc.GetDriverDataset(context.Background(), "s1", 44, "speed")
+	got, _, err := uc.GetDriverDataset(context.Background(), "s1", 44, "speed", domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -615,5 +616,22 @@ func TestEnrichDriverRow_UnknownDriverNumberOrMissingLookup(t *testing.T) {
 	enrichDriverRow(row3, lookup)
 	if row3["driver_name"] != "already set" {
 		t.Fatalf("expected an existing driver_name to be preserved, got %+v", row3)
+	}
+}
+
+// TestSessionQueryUseCase_GetSessionDataset_TrimsToPage proves a local dataset is cut to the
+// page, its count matches the returned rows, and the next offset is returned.
+func TestSessionQueryUseCase_GetSessionDataset_TrimsToPage(t *testing.T) {
+	repo := &fakeSessionQueryRepository{datasetsBySessionDataset: map[string][]map[string]any{
+		"laps": {{"lap_number": 1}, {"lap_number": 2}, {"lap_number": 3}},
+	}}
+	uc := NewSessionQueryUseCase(repo, &fakeChampionshipClientForSessionQuery{session: &ports.ChampionshipSessionRef{ID: "s1"}})
+
+	got, next, err := uc.GetSessionDataset(context.Background(), "s1", "laps", domain.Page{Limit: 2})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if got["count"] != 2 || next == nil || *next != 2 {
+		t.Fatalf("count=%v next=%v, want 2 and next offset 2", got["count"], next)
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"overdrive/services/race-data-service/src/core/ports"
+	"overdrive/shared/bootstrap"
 )
 
 type Client struct {
@@ -162,6 +163,11 @@ func (c *Client) GetSessionBroadcast(ctx context.Context, sessionID string) (map
 	return payload, nil
 }
 
+// maxResponseBytes bounds a championship-service response: its largest payloads (session
+// datasets, catalog lists) are well under a megabyte, so anything beyond this is refused instead
+// of being decoded into memory.
+const maxResponseBytes int64 = 32 << 20
+
 // getJSON implements the get json workflow for this package.
 func (c *Client) getJSON(ctx context.Context, path string, target any) (bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
@@ -179,8 +185,8 @@ func (c *Client) getJSON(ctx context.Context, path string, target any) (bool, er
 	if resp.StatusCode >= http.StatusBadRequest {
 		return false, fmt.Errorf("championship-service GET %s returned %d", path, resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-		return false, err
+	if err := json.NewDecoder(bootstrap.LimitResponse(resp.Body, maxResponseBytes)).Decode(target); err != nil {
+		return false, fmt.Errorf("championship-service GET %s: %w", path, err)
 	}
 	return true, nil
 }

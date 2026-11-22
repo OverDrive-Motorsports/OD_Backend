@@ -31,6 +31,7 @@ const (
 	CodeUpstreamUnavailable Code = "UPSTREAM_UNAVAILABLE"
 	CodeServiceUnavailable  Code = "SERVICE_UNAVAILABLE"
 	CodeUpstreamTimeout     Code = "UPSTREAM_TIMEOUT"
+	CodePayloadTooLarge     Code = "PAYLOAD_TOO_LARGE"
 )
 
 // HTTP statuses used by this package. Kept as named constants so call sites never hardcode numbers.
@@ -41,6 +42,7 @@ const (
 	StatusNotFound            Status = 404
 	StatusMethodNotAllowed    Status = 405
 	StatusConflict            Status = 409
+	StatusPayloadTooLarge     Status = 413
 	StatusTooManyRequests     Status = 429
 	StatusInternalServerError Status = 500
 	StatusBadGateway          Status = 502
@@ -138,9 +140,15 @@ func UpstreamUnavailable(message string, err error) *Error {
 	return New(CodeUpstreamUnavailable, StatusBadGateway, message, err)
 }
 
-// ServiceUnavailable reports a failed healthcheck for the current service (503).
+// ServiceUnavailable reports that the current service cannot take the request right now: a
+// failed healthcheck, or a capacity limit reached (long poll waiters, concurrent replays) (503).
 func ServiceUnavailable(message string, err error) *Error {
 	return New(CodeServiceUnavailable, StatusServiceUnavailable, message, err)
+}
+
+// PayloadTooLarge reports a request body over the route's size limit (413).
+func PayloadTooLarge(message string, err error) *Error {
+	return New(CodePayloadTooLarge, StatusPayloadTooLarge, message, err)
 }
 
 // UpstreamTimeout reports a timed out call to an upstream service (504).

@@ -19,8 +19,13 @@ import (
 	"strings"
 	"time"
 
+	"overdrive/shared/bootstrap"
 	contracts "overdrive/shared/contracts/ingestion"
 )
+
+// maxAckBytes bounds the acknowledgement read back from a receiving service: an ack is a few
+// hundred bytes, so a larger body is a fault and is refused instead of being buffered.
+const maxAckBytes int64 = 1 << 20
 
 // internalTokenHeader carries the service-to-service secret checked by the receiving services.
 const internalTokenHeader = "X-Internal-Token"
@@ -79,8 +84,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, service string, batch contrac
 	}
 
 	var ack contracts.DispatchAck
-	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
-		return contracts.DispatchAck{}, err
+	if err := json.NewDecoder(bootstrap.LimitResponse(resp.Body, maxAckBytes)).Decode(&ack); err != nil {
+		return contracts.DispatchAck{}, fmt.Errorf("decode %s acknowledgement: %w", service, err)
 	}
 
 	return ack, nil

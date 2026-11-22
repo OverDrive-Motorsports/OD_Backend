@@ -141,6 +141,18 @@ model RacePitStop {
   @@index([sessionId, lapNumber])
 }
 
+// One race control batch published by an instance, read back by every instance to wake its
+// long poll waiters (POST /sessions/{sessionId}/race/control). Rows are short-lived: they are
+// deleted a few minutes after creation.
+model RaceControlNotification {
+  id        BigInt   @id @default(autoincrement())
+  sessionId String
+  events    Json
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model RaceControlEvent {
   id           BigInt   @id @default(autoincrement())
   sessionId    String
@@ -252,13 +264,15 @@ model RaceArchive {
 }
 
 model RaceDatasetChunk {
-  id         BigInt   @id @default(autoincrement())
-  archiveId  String
-  dataset    String   @db.VarChar(50)
-  chunkIndex Int      @default(0)
-  rowCount   Int      @default(0)
-  rows       Json
-  createdAt  DateTime @default(now())
+  id           BigInt   @id @default(autoincrement())
+  archiveId    String
+  dataset      String   @db.VarChar(50)
+  // Driver whose samples the chunk holds; null for a track-wide dataset (race control, weather).
+  driverNumber Int?
+  chunkIndex   Int      @default(0)
+  rowCount     Int      @default(0)
+  rows         Json
+  createdAt    DateTime @default(now())
 
   archive RaceArchive @relation(fields: [archiveId], references: [id], onDelete: Cascade)
 

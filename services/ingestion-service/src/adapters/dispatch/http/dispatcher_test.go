@@ -12,12 +12,14 @@ package httpdispatcher
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"overdrive/shared/bootstrap"
 	contracts "overdrive/shared/contracts/ingestion"
 )
 
@@ -87,5 +89,21 @@ func TestDispatcher_Dispatch_UpstreamErrorStatusPropagates(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "400") {
 		t.Fatalf("expected the error to mention the status code, got %v", err)
+	}
+}
+
+// TestDispatcher_Dispatch_OversizedAck proves an acknowledgement larger than maxAckBytes is
+// refused with bootstrap.ErrResponseTooLarge instead of being buffered.
+func TestDispatcher_Dispatch_OversizedAck(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"service":"` + strings.Repeat("a", int(maxAckBytes)) + `"}`))
+	}))
+	defer server.Close()
+
+	d := NewDispatcher(server.URL, server.URL, testInternalToken, time.Second)
+	_, err := d.Dispatch(context.Background(), "race-data-service", contracts.Batch{BatchID: "b1"})
+	if !errors.Is(err, bootstrap.ErrResponseTooLarge) {
+		t.Fatalf("err = %v, want ErrResponseTooLarge", err)
 	}
 }
