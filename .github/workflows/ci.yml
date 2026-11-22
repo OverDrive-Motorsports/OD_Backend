@@ -206,7 +206,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # build: compile every package of every module, in the workspace and on its
-  # own (each go.mod must declare its real dependencies and shared/* replaces).
+  # own (each go.mod must declare its real dependencies and shared/* replaces),
+  # and build the production images.
   # ---------------------------------------------------------------------------
   build-module:
     name: build (${{ matrix.module }})
@@ -252,15 +253,63 @@ jobs:
           GOWORK: "off"
         run: go build ./...
 
+  # Production image of every binary (Dockerfile next to its go.mod), built
+  # from the repository root, then checked: distroless nonroot user, no Go
+  # source and no .env in its filesystem, binary answers its command line.
+  image-module:
+    name: image (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - gateway
+          - services/auth-service
+          - services/championship-service
+          - services/ingestion-service
+          - services/race-data-service
+          - services/user-data-service
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: docker build
+        run: docker build -f ${{ matrix.module }}/Dockerfile -t overdrive-ci-image .
+
+      - name: Check the image
+        run: |
+          user="$(docker image inspect -f '{{.Config.User}}' overdrive-ci-image)"
+          if [ "$user" != "nonroot:nonroot" ]; then
+            echo "::error::image user is '$user', want nonroot:nonroot"
+            exit 1
+          fi
+          container="$(docker create overdrive-ci-image)"
+          leaked="$(docker export "$container" | tar -t | grep -E '(\.go|(^|/)\.env|go\.mod)$' || true)"
+          docker rm "$container" >/dev/null
+          if [ -n "$leaked" ]; then
+            echo "::error::the image contains source or .env files:"
+            echo "$leaked"
+            exit 1
+          fi
+          # An unknown command must fail with the usage error: the binary runs in the image.
+          if docker run --rm overdrive-ci-image no-such-command 2>err.txt; then
+            echo "::error::the binary accepted an unknown command"
+            exit 1
+          fi
+          grep -q 'unknown command' err.txt || { cat err.txt; exit 1; }
+
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: build-module
+    needs: [build-module, image-module]
     if: always()
     steps:
       - name: Check build matrix result
         run: |
           if [ "${{ needs.build-module.result }}" != "success" ]; then
             echo "::error::one or more modules failed to build"
+            exit 1
+          fi
+          if [ "${{ needs.image-module.result }}" != "success" ]; then
+            echo "::error::one or more production images failed to build or their checks"
             exit 1
           fi

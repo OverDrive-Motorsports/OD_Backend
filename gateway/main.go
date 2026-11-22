@@ -18,11 +18,10 @@ import (
 	"overdrive/shared/bootstrap"
 )
 
-// main runs the gateway and exits non-zero when it fails to start or to stop cleanly.
+// main serves without argument; `healthcheck` probes the running service (see bootstrap.Main).
+// It exits non-zero on failure.
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
+	bootstrap.Main("gateway", run)
 }
 
 // run builds the gateway and serves until SIGINT/SIGTERM. Returning instead of calling log.Fatal

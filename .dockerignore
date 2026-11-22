@@ -1,7 +1,22 @@
+# Build context of the production images (docker build -f <module>/Dockerfile .):
+# sources and go.mod/go.sum only. Secrets, generated Prisma clients (regenerated
+# in the image), VCS data and local tooling never enter it.
 .git
 bin
 dist
 node_modules
 coverage.out
 *.log
-
+.github
+.story
+.claude
+.idea
+.vscode
+**/.env
+**/*.env
+**/resources/db
+**/coverage
+**/*.log
+docs
+tools
+docker-compose*.yml

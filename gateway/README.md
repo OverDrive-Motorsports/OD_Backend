@@ -14,7 +14,7 @@ Centralized HTTP gateway for the OverDrive backend microservices.
 Prerequisites:
 
 - Go installed (same version as project toolchain)
-- `gateway/.env` configured (or environment variables exported)
+- `gateway/.env` configured, or the variables exported (the file is optional)
 - Upstream services running on configured URLs
 
 From repository root:
@@ -203,6 +203,10 @@ Load behavior:
 
 - from repo root (`go run ./gateway`): loads `gateway/.env`
 - from `gateway/` directory (`go run .`): loads `.env`
+- the file is optional: without it (e.g. the production image) every variable comes from the
+  environment, and a missing required one stops the start with its name
+- `gateway healthcheck` (the container health probe) reads `HTTP_PORT` from the environment or
+  the root `.env`, not from `gateway/.env`
 - already exported environment variables keep priority over `.env` values
 
 ## Project Structure

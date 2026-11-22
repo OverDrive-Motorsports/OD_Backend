@@ -260,16 +260,26 @@ func TestLoad_FromGatewayDirectory(t *testing.T) {
 	}
 }
 
-// TestLoad_NoEnvFile proves the gateway refuses to start without gateway/.env, even when the
-// environment holds every variable.
+// TestLoad_NoEnvFile proves gateway/.env is optional: without it the gateway starts from the
+// environment alone (production images ship no .env).
 func TestLoad_NoEnvFile(t *testing.T) {
 	isolateGatewayEnv(t)
 	for key, value := range validGatewayEnv() {
 		t.Setenv(key, value)
 	}
 
-	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "unable to find gateway .env") {
-		t.Fatalf("err = %v, want the missing .env error", err)
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+}
+
+// TestLoad_NoEnvFileMissingVariable proves that without gateway/.env the required variables
+// are still checked: an empty environment is refused.
+func TestLoad_NoEnvFileMissingVariable(t *testing.T) {
+	isolateGatewayEnv(t)
+
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "is required") {
+		t.Fatalf("err = %v, want a required variable error", err)
 	}
 }
 

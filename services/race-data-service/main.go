@@ -25,11 +25,10 @@ import (
 	"time"
 )
 
-// main runs the service and exits non-zero when it fails to start or to stop cleanly.
+// main serves without argument; `healthcheck` probes the running service (see bootstrap.Main).
+// It exits non-zero on failure.
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
-	}
+	bootstrap.Main("race-data-service", run)
 }
 
 // run wires the dependencies and serves until SIGINT/SIGTERM. Returning instead of calling

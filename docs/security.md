@@ -162,8 +162,22 @@ the internal batch route 5 minutes to read and 15 to answer (only after the inte
 On `SIGINT`/`SIGTERM` each binary stops accepting connections, releases the long-poll waiters,
 lets in-flight requests finish for up to `SHUTDOWN_TIMEOUT` (default `35s`, above the 30 s long
 poll the gateway may be proxying), then disconnects
-from its database. Compose runs the built binary as PID 1 (not `go run`, which does not forward
+from its database. Compose runs the binary as PID 1 (not `go run`, which does not forward
 the signal) and waits 45 s before killing it.
+
+## Container images
+
+Each binary has a multi-stage `Dockerfile` next to its `go.mod`: a `golang:1.27` stage builds
+it (and generates the Prisma client of the services that have one), and the image only holds
+the binary on a distroless base: `static-debian12` for the gateway and ingestion-service,
+`cc-debian12` for the Prisma services, whose query engine (unpacked into `/tmp` at start) needs
+glibc and libssl. Images run as the distroless `nonroot` user (65532), contain no shell, no Go
+source and no `.env` file (`.dockerignore` keeps `.env`, `.git` and the generated Prisma clients
+out of the build context); configuration comes from the environment only. The container health
+check runs the binary's own `healthcheck` command. CI builds every image and fails when it runs
+as another user or contains `.go`, `go.mod` or `.env` files. Base images are pinned by tag and
+updated by hand. The `*-dbsync` jobs (`db push`) and `docker-compose.dev.yml` are the
+development exceptions: they run the mounted sources in `golang:1.27`, for local use only.
 
 `ingestion-service` also has outbound timeouts:
 

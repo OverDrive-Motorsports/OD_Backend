@@ -54,6 +54,15 @@ After pulling this change:
    ```
    or start from an empty database (all data lost, re-ingest afterwards):
    `docker compose down -v && docker compose up -d --build`.
+3. The services now run from images that contain no `.env` file: Google sign-in settings come
+   from the root `.env` (`GOOGLE_OAUTH_*`), not from `services/auth-service/.env`. For the same
+   reason, the optional tuning variables a service reads (`SHUTDOWN_TIMEOUT`,
+   `REPLAY_MAX_CONCURRENT`, `REPLAY_CACHE_MAX_CONCURRENT`, `RACE_CONTROL_MAX_WAITERS`,
+   `RACE_CONTROL_MAX_WAITERS_PER_SESSION`, `OPENF1_MAX_RESPONSE_BYTES`, ...) no longer come from
+   `services/<service>/.env` under Compose: they keep their defaults unless added to that
+   service's `environment:` in `docker-compose.yml`. This also holds with the development
+   override: a variable Compose sets, even to an empty value (`GOOGLE_OAUTH_*`), wins over the
+   service's `.env` file.
 
 Only the gateway (`3000`) is reachable from the network; the service ports (`3001`-`3005`) and
 Postgres (`5432`) only answer on `localhost`.
@@ -61,12 +70,14 @@ Postgres (`5432`) only answer on `localhost`.
 Then, from the repo root:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-This starts Postgres, runs the four Prisma schema sync jobs, then starts all five
+This builds the production images (one per binary, non-root, no source code inside), starts
+Postgres, runs the four Prisma schema sync jobs, then starts all five
 services and `gateway` in the right order (each waits for its dependencies to be
-healthy).
+healthy). To run from the mounted sources instead, add the development override:
+`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d`.
 
 Check everything is up:
 
@@ -244,8 +255,9 @@ Data persists in a Docker volume (`overdrive-postgres-data`) between restarts -
   in `.env` no longer matches the existing volume - see "Upgrading an existing checkout".
 - **A curl call to `car_data`/`location` fails with `422` / "too much data"**: you
   didn't scope it to one `driver_number` - see step 4.
-- **You changed some Go code and it's not reflected**: services run via `go run`
-  inside their containers, which is not hot-reloading. Restart the affected
-  container: `docker compose restart <service-name>`.
+- **You changed some Go code and it's not reflected**: the default stack runs images
+  built from the code at `--build` time: rebuild with `docker compose up -d --build
+  <service-name>`. With the development override the binary is built at container start, so
+  `docker compose restart <service-name>` is enough (no hot reload).
 - **A service seems stuck on startup**: check `docker compose logs -f <service>` -
   healthchecks have a 60s grace period before Compose gives up on them.
