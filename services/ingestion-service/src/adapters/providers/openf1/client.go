@@ -12,37 +12,99 @@ package openf1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"overdrive/services/ingestion-service/src/core/domain"
+	"overdrive/shared/bootstrap"
+)
+
+// DefaultMaxResponseBytes bounds one OpenF1 response. Heavy resources (car_data, location) are
+// fetched one driver at a time, a few megabytes each; a whole session in one response is
+// several hundred megabytes and is refused instead of being decoded.
+const DefaultMaxResponseBytes int64 = 128 << 20
+
+// maxRateLimitWaits bounds how many 429 answers one request waits through, on top of the normal
+// retries, and maxRetryAfter how long a single Retry-After may make it wait.
+const (
+	maxRateLimitWaits = 5
+	maxRetryAfter     = 60 * time.Second
 )
 
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	retries    int
-	retryDelay time.Duration
+	baseURL          string
+	httpClient       *http.Client
+	retries          int
+	retryDelay       time.Duration
+	minInterval      time.Duration
+	maxResponseBytes int64
+
+	paceMu   sync.Mutex
+	lastCall time.Time
+}
+
+// ClientOptions tunes the pacing and limits of the OpenF1 client.
+type ClientOptions struct {
+	// MinInterval is the minimum time between two OpenF1 requests (rate limit courtesy).
+	MinInterval time.Duration
+	// MaxResponseBytes bounds one response; zero means DefaultMaxResponseBytes.
+	MaxResponseBytes int64
 }
 
 // NewClient builds and returns a client with its required dependencies.
-func NewClient(baseURL string, timeout time.Duration, retries int, retryDelay time.Duration) *Client {
+func NewClient(baseURL string, timeout time.Duration, retries int, retryDelay time.Duration, options ClientOptions) *Client {
+	maxResponseBytes := options.MaxResponseBytes
+	if maxResponseBytes <= 0 {
+		maxResponseBytes = DefaultMaxResponseBytes
+	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-		retries:    retries,
-		retryDelay: retryDelay,
+		retries:          retries,
+		retryDelay:       retryDelay,
+		minInterval:      options.MinInterval,
+		maxResponseBytes: maxResponseBytes,
 	}
 }
 
-// Fetch retrieves provider data for the requested resource and ingestion context.
+// upstreamError is a non-2xx OpenF1 answer. RetryAfter is set for a 429 carrying the header.
+type upstreamError struct {
+	status     int
+	body       string
+	retryAfter time.Duration
+}
+
+func (e *upstreamError) Error() string {
+	if e.status >= http.StatusInternalServerError {
+		return fmt.Sprintf("upstream status %d: %s", e.status, e.body)
+	}
+	return fmt.Sprintf("upstream request failed with status %d: %s", e.status, e.body)
+}
+
+// retryable reports whether another attempt may succeed: server errors, timeouts and rate
+// limiting. Any other 4xx (unknown resource, no data) fails at once.
+func (e *upstreamError) retryable() bool {
+	return e.status >= http.StatusInternalServerError || e.status == http.StatusTooManyRequests || e.status == http.StatusRequestTimeout
+}
+
+// isNotFound reports whether err is an OpenF1 404.
+func isNotFound(err error) bool {
+	var upstream *upstreamError
+	return errors.As(err, &upstream) && upstream.status == http.StatusNotFound
+}
+
+// Fetch retrieves provider data for the requested resource and ingestion context. OpenF1
+// answers 404 "No results found" for an empty result: it is returned as no rows, not an error.
 func (c *Client) Fetch(ctx context.Context, resource string, request domain.OpenF1IngestionRequest) ([]map[string]any, error) {
 	if resource == "starting_grid" {
 		return c.fetchStartingGrid(ctx, request)
@@ -52,27 +114,40 @@ func (c *Client) Fetch(ctx context.Context, resource string, request domain.Open
 	if err != nil {
 		return nil, err
 	}
-
-	var lastErr error
-	for attempt := 0; attempt <= c.retries; attempt++ {
-		rows, err := c.fetchOnce(ctx, endpoint)
-		if err == nil {
-			return rows, nil
-		}
-
-		lastErr = err
-		if attempt == c.retries {
-			break
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(c.retryDelay):
-		}
+	rows, err := c.fetchWithRetry(ctx, endpoint)
+	if isNotFound(err) {
+		return []map[string]any{}, nil
 	}
+	return rows, err
+}
 
-	return nil, lastErr
+// ListDriverNumbers returns the driver numbers of the session, sorted, used to fetch the heavy
+// resources one driver at a time.
+func (c *Client) ListDriverNumbers(ctx context.Context, request domain.OpenF1IngestionRequest) ([]int, error) {
+	query := url.Values{}
+	query.Set("session_key", strconv.Itoa(request.SessionKey))
+	rows, err := c.fetchWithRetry(ctx, fmt.Sprintf("%s/drivers?%s", c.baseURL, query.Encode()))
+	if isNotFound(err) {
+		return []int{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	seen := map[int]struct{}{}
+	drivers := make([]int, 0, len(rows))
+	for _, row := range rows {
+		number := intValue(row["driver_number"])
+		if number <= 0 {
+			continue
+		}
+		if _, done := seen[number]; done {
+			continue
+		}
+		seen[number] = struct{}{}
+		drivers = append(drivers, number)
+	}
+	sort.Ints(drivers)
+	return drivers, nil
 }
 
 // fetchStartingGrid retrieves the grid, falling back from race sessions to their qualifying session.
@@ -86,7 +161,7 @@ func (c *Client) fetchStartingGrid(ctx context.Context, request domain.OpenF1Ing
 	if err == nil {
 		return rows, nil
 	}
-	if !strings.Contains(err.Error(), "status 404") {
+	if !isNotFound(err) {
 		return nil, err
 	}
 
@@ -118,28 +193,49 @@ func (c *Client) fetchStartingGrid(ctx context.Context, request domain.OpenF1Ing
 	return rows, nil
 }
 
-// fetchWithRetry executes one provider endpoint with the client's retry policy.
+// fetchWithRetry executes one provider endpoint with the client's retry policy: retryable
+// failures are retried up to c.retries times with c.retryDelay between attempts, and a 429 waits
+// for its Retry-After (bounded) without consuming a retry, up to maxRateLimitWaits times.
 func (c *Client) fetchWithRetry(ctx context.Context, endpoint string) ([]map[string]any, error) {
 	var lastErr error
-	for attempt := 0; attempt <= c.retries; attempt++ {
+	attempt, rateLimited := 0, 0
+	for {
 		rows, err := c.fetchOnce(ctx, endpoint)
 		if err == nil {
 			return rows, nil
 		}
-
 		lastErr = err
-		if attempt == c.retries {
-			break
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
+		wait := c.retryDelay
+		var upstream *upstreamError
+		switch {
+		case errors.As(err, &upstream) && upstream.status == http.StatusTooManyRequests && rateLimited < maxRateLimitWaits:
+			rateLimited++
+			if upstream.retryAfter > 0 {
+				wait = upstream.retryAfter
+			}
+		case errors.As(err, &upstream) && !upstream.retryable():
+			return nil, err
+		case errors.Is(err, bootstrap.ErrResponseTooLarge):
+			return nil, err
+		default:
+			if attempt == c.retries {
+				return nil, lastErr
+			}
+			attempt++
+		}
+
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return nil, ctx.Err()
-		case <-time.After(c.retryDelay):
+		case <-timer.C:
 		}
 	}
-
-	return nil, lastErr
 }
 
 // findStartingGridSession finds the qualifying session that provides the grid for a race session.
@@ -238,8 +334,12 @@ func (c *Client) buildURL(resource string, request domain.OpenF1IngestionRequest
 	return fmt.Sprintf("%s/%s?%s", c.baseURL, resource, query.Encode()), nil
 }
 
-// fetchOnce executes one upstream HTTP request and decodes the JSON response rows.
+// fetchOnce executes one upstream HTTP request (after the pacing delay) and decodes the JSON
+// response rows, refusing a body over c.maxResponseBytes.
 func (c *Client) fetchOnce(ctx context.Context, endpoint string) ([]map[string]any, error) {
+	if err := c.pace(ctx); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -251,21 +351,65 @@ func (c *Client) fetchOnce(ctx context.Context, endpoint string) ([]map[string]a
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode >= http.StatusInternalServerError {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return nil, fmt.Errorf("upstream request failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &upstreamError{
+			status:     resp.StatusCode,
+			body:       strings.TrimSpace(string(body)),
+			retryAfter: parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
+		}
 	}
 
 	var rows []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+	if err := json.NewDecoder(bootstrap.LimitResponse(resp.Body, c.maxResponseBytes)).Decode(&rows); err != nil {
+		if errors.Is(err, bootstrap.ErrResponseTooLarge) {
+			return nil, fmt.Errorf("%w: %w", domain.ErrResponseTooLarge, err)
+		}
 		return nil, err
 	}
 
 	return rows, nil
+}
+
+// pace waits until c.minInterval has passed since the previous request, so a full-session
+// ingestion (dozens of calls) stays under the OpenF1 rate limit.
+func (c *Client) pace(ctx context.Context) error {
+	if c.minInterval <= 0 {
+		return nil
+	}
+	c.paceMu.Lock()
+	defer c.paceMu.Unlock()
+	wait := time.Until(c.lastCall.Add(c.minInterval))
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	c.lastCall = time.Now()
+	return nil
+}
+
+// parseRetryAfter reads a Retry-After header (seconds or HTTP date), capped at maxRetryAfter;
+// zero when absent or invalid.
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	var wait time.Duration
+	if seconds, err := strconv.Atoi(value); err == nil {
+		wait = time.Duration(seconds) * time.Second
+	} else if at, err := http.ParseTime(value); err == nil {
+		wait = at.Sub(now)
+	}
+	if wait <= 0 {
+		return 0
+	}
+	return min(wait, maxRetryAfter)
 }
 
 // intValue converts OpenF1 numeric payload values into an int.

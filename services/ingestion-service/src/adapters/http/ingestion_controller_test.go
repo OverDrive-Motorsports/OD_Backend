@@ -106,3 +106,41 @@ func assertEnvelope(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int
 		t.Fatalf("response body leaked technical error detail: %s", rec.Body.String())
 	}
 }
+
+// TestIngestionController_OversizedBody proves a request cut by the route body limit answers
+// 413 PAYLOAD_TOO_LARGE instead of 400.
+func TestIngestionController_OversizedBody(t *testing.T) {
+	controller := NewIngestionController(&fakeIngestionUseCase{})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/providers/openf1/ingestions", bytes.NewReader([]byte(`{"meeting_key":1,"session_key":2}`)))
+	req.Body = http.MaxBytesReader(rec, req.Body, 8)
+
+	controller.TriggerOpenF1Ingestion(rec, req)
+
+	assertEnvelope(t, rec, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "")
+}
+
+// TestIngestionController_EveryResourceFailedIs502 proves a run where every resource failed is
+// a 502 UPSTREAM_UNAVAILABLE without the technical cause, and a partial run is still a 202.
+func TestIngestionController_EveryResourceFailedIs502(t *testing.T) {
+	controller := NewIngestionController(&fakeIngestionUseCase{err: fmt.Errorf("%w: first failure: laps: OpenF1 request failed", domain.ErrIngestionFailed)})
+	rec := httptest.NewRecorder()
+	controller.TriggerOpenF1Ingestion(rec, httptest.NewRequest(http.MethodPost, "/providers/openf1/ingestions", bytes.NewReader([]byte(`{"meeting_key":1,"session_key":2}`))))
+	assertEnvelope(t, rec, http.StatusBadGateway, "UPSTREAM_UNAVAILABLE", "first failure")
+
+	controller = NewIngestionController(&fakeIngestionUseCase{result: domain.OpenF1IngestionResult{Status: domain.IngestionStatusPartial}})
+	rec = httptest.NewRecorder()
+	controller.TriggerOpenF1Ingestion(rec, httptest.NewRequest(http.MethodPost, "/providers/openf1/ingestions", bytes.NewReader([]byte(`{"meeting_key":1,"session_key":2}`))))
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"status":"partial"`) {
+		t.Fatalf("partial run: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestIngestionController_NoOpenF1DataIs404 proves an ingestion where OpenF1 had nothing
+// (unknown meeting or session) answers 404 OPENF1_DATA_NOT_FOUND.
+func TestIngestionController_NoOpenF1DataIs404(t *testing.T) {
+	controller := NewIngestionController(&fakeIngestionUseCase{err: domain.ErrNoOpenF1Data})
+	rec := httptest.NewRecorder()
+	controller.TriggerOpenF1Ingestion(rec, httptest.NewRequest(http.MethodPost, "/providers/openf1/ingestions", bytes.NewReader([]byte(`{"meeting_key":1,"session_key":99999}`))))
+	assertEnvelope(t, rec, http.StatusNotFound, "OPENF1_DATA_NOT_FOUND", "")
+}

@@ -90,6 +90,13 @@ erDiagram
         datetime createdAt
     }
 
+    RACE_CONTROL_NOTIFICATION {
+        bigint id PK
+        string sessionId
+        json events
+        datetime createdAt
+    }
+
     RACE_CONTROL_EVENT {
         bigint id PK
         string sessionId
@@ -176,6 +183,7 @@ erDiagram
         bigint id PK
         string archiveId FK
         string dataset
+        int driverNumber
         int chunkIndex
         int rowCount
         json rows

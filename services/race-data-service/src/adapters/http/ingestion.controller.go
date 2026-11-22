@@ -11,8 +11,10 @@ package httpadapter
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
+	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
 	"overdrive/shared/apierror"
 	contracts "overdrive/shared/contracts/ingestion"
@@ -34,11 +36,15 @@ func NewIngestionController(usecase ports.IngestionBatchUseCase) *IngestionContr
 func (c *IngestionController) ReceiveBatch(w http.ResponseWriter, r *http.Request) {
 	var batch contracts.Batch
 	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 
 	ack, err := c.usecase.Execute(r.Context(), batch)
+	if errors.Is(err, domain.ErrReplayCacheInvalidation) {
+		apierror.Write(w, r.URL.Path, apierror.Internal("batch stored but the replay cache could not be refreshed, retry the batch", err))
+		return
+	}
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Validation("invalid ingestion batch", err))
 		return

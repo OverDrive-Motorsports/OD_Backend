@@ -11,12 +11,22 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"overdrive/services/race-data-service/src/core/domain"
 )
+
+// eventsOnly drops Wait's error for the tests below, which never reach a cap; a non-nil error
+// there is a bug, reported as a panic since several callers run in goroutines.
+func eventsOnly(events []domain.RaceControlEvent, err error) []domain.RaceControlEvent {
+	if err != nil {
+		panic(err)
+	}
+	return events
+}
 
 // event builds a single-element RaceControlEvent slice used to Publish in these tests.
 func event(message string) []domain.RaceControlEvent {
@@ -39,7 +49,7 @@ func TestRaceControlBroadcaster_PublishWakesConcurrentWaiters(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			ready <- struct{}{}
-			results[i] = b.Wait(context.Background(), "session-A", 5*time.Second)
+			results[i] = eventsOnly(b.Wait(context.Background(), "session-A", 5*time.Second))
 		}(i)
 	}
 
@@ -69,7 +79,7 @@ func TestRaceControlBroadcaster_TimeoutReturnsEmptyAfterRealElapsedTime(t *testi
 	const timeout = 150 * time.Millisecond
 
 	start := time.Now()
-	got := b.Wait(context.Background(), "session-B", timeout)
+	got := eventsOnly(b.Wait(context.Background(), "session-B", timeout))
 	elapsed := time.Since(start)
 
 	if got != nil {
@@ -94,7 +104,7 @@ func TestRaceControlBroadcaster_ContextCancellationReturnsPromptlyAndCleansUp(t 
 
 	done := make(chan []domain.RaceControlEvent, 1)
 	go func() {
-		done <- b.Wait(ctx, "session-C", 10*time.Second)
+		done <- eventsOnly(b.Wait(ctx, "session-C", 10*time.Second))
 	}()
 
 	waitUntilSubscriberCount(t, b, "session-C", 1)
@@ -123,7 +133,7 @@ func TestRaceControlBroadcaster_SessionIsolation(t *testing.T) {
 
 	done := make(chan []domain.RaceControlEvent, 1)
 	go func() {
-		done <- b.Wait(context.Background(), "session-B", 300*time.Millisecond)
+		done <- eventsOnly(b.Wait(context.Background(), "session-B", 300*time.Millisecond))
 	}()
 
 	waitUntilSubscriberCount(t, b, "session-B", 1)
@@ -157,4 +167,96 @@ func waitUntilSubscriberCount(t *testing.T, b *RaceControlBroadcaster, sessionID
 		time.Sleep(2 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for subscriber count %d on %q", want, sessionID)
+}
+
+// TestRaceControlBroadcaster_PerSessionCap proves a session already holding its maximum number
+// of waiters refuses the next one with ErrRaceControlBusy, while another session still accepts.
+func TestRaceControlBroadcaster_PerSessionCap(t *testing.T) {
+	b := NewRaceControlBroadcasterWithLimits(10, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for i := 0; i < 2; i++ {
+		go func() { _, _ = b.Wait(ctx, "session-A", 5*time.Second) }()
+	}
+	waitUntilSubscriberCount(t, b, "session-A", 2)
+
+	if _, err := b.Wait(context.Background(), "session-A", time.Second); !errors.Is(err, domain.ErrRaceControlBusy) {
+		t.Fatalf("third waiter on session-A: err = %v, want ErrRaceControlBusy", err)
+	}
+	go func() { _, _ = b.Wait(ctx, "session-B", 5*time.Second) }()
+	waitUntilSubscriberCount(t, b, "session-B", 1)
+}
+
+// TestRaceControlBroadcaster_GlobalCapAndRelease proves the global cap refuses a waiter on any
+// session once reached, and that a slot freed by a returning waiter can be reused.
+func TestRaceControlBroadcaster_GlobalCapAndRelease(t *testing.T) {
+	b := NewRaceControlBroadcasterWithLimits(2, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _, _ = b.Wait(ctx, "session-A", 5*time.Second) }()
+	firstCtx, releaseFirst := context.WithCancel(context.Background())
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = b.Wait(firstCtx, "session-B", 5*time.Second)
+		close(firstDone)
+	}()
+	waitUntilSubscriberCount(t, b, "session-A", 1)
+	waitUntilSubscriberCount(t, b, "session-B", 1)
+
+	if _, err := b.Wait(context.Background(), "session-C", time.Second); !errors.Is(err, domain.ErrRaceControlBusy) {
+		t.Fatalf("waiter over the global cap: err = %v, want ErrRaceControlBusy", err)
+	}
+
+	releaseFirst()
+	<-firstDone
+	go func() { _, _ = b.Wait(ctx, "session-C", 5*time.Second) }()
+	waitUntilSubscriberCount(t, b, "session-C", 1)
+}
+
+// TestRaceControlBroadcaster_PublishFreesSlots proves woken waiters no longer count against the
+// caps (the counter follows Publish, not only timeouts).
+func TestRaceControlBroadcaster_PublishFreesSlots(t *testing.T) {
+	b := NewRaceControlBroadcasterWithLimits(1, 1)
+	done := make(chan []domain.RaceControlEvent, 1)
+	go func() { done <- eventsOnly(b.Wait(context.Background(), "session-A", 5*time.Second)) }()
+	waitUntilSubscriberCount(t, b, "session-A", 1)
+
+	b.Publish("session-A", event("green"))
+	if got := <-done; len(got) != 1 {
+		t.Fatalf("waiter got %+v, want the event", got)
+	}
+	go func() { done <- eventsOnly(b.Wait(context.Background(), "session-A", 50*time.Millisecond)) }()
+	if got := <-done; got != nil {
+		t.Fatalf("second waiter got %+v, want a timeout (slot was free)", got)
+	}
+}
+
+// TestRaceControlBroadcaster_CloseReleasesAndRefuses proves Close (server shutdown) releases a
+// blocked waiter at once with an empty result and refuses new waiters with ErrShuttingDown.
+func TestRaceControlBroadcaster_CloseReleasesAndRefuses(t *testing.T) {
+	b := NewRaceControlBroadcaster()
+	type result struct {
+		events []domain.RaceControlEvent
+		err    error
+	}
+	done := make(chan result, 1)
+	go func() {
+		events, err := b.Wait(context.Background(), "session-A", 10*time.Second)
+		done <- result{events, err}
+	}()
+	waitUntilSubscriberCount(t, b, "session-A", 1)
+
+	b.Close()
+
+	select {
+	case got := <-done:
+		if got.err != nil || got.events != nil {
+			t.Fatalf("released waiter = %+v, want (nil, nil)", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close did not release the waiter")
+	}
+	if _, err := b.Wait(context.Background(), "session-A", time.Second); !errors.Is(err, domain.ErrShuttingDown) {
+		t.Fatalf("Wait after Close: err = %v, want ErrShuttingDown", err)
+	}
 }

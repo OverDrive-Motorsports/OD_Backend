@@ -92,3 +92,22 @@ func TestIngestionController_ReceiveBatch_UsecaseValidationFailure(t *testing.T)
 		t.Fatalf("response body leaked technical error detail: %s", rec.Body.String())
 	}
 }
+
+// TestIngestionController_ReceiveBatch_OversizedBody proves a batch cut by the route body limit
+// answers 413 PAYLOAD_TOO_LARGE instead of 400, before the usecase is called.
+func TestIngestionController_ReceiveBatch_OversizedBody(t *testing.T) {
+	usecase := &fakeIngestionBatchUseCase{}
+	c := NewIngestionController(usecase)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/internal/ingestion/batches", bytes.NewBufferString(`{"batchId":"b1","datasets":[]}`))
+	req.Body = http.MaxBytesReader(rec, req.Body, 8)
+
+	c.ReceiveBatch(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "PAYLOAD_TOO_LARGE") {
+		t.Fatalf("status = %d, want 413 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if usecase.got.BatchID != "" {
+		t.Fatal("usecase called for an oversized body")
+	}
+}

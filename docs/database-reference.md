@@ -63,7 +63,8 @@ Each service must also keep an isolated physical database connection in deployme
 | --- | --- |
 | Main purpose | Store high-volume race read models, telemetry, incidents, media data, and archive exports |
 | Core entities | `RaceLap`, `RaceTelemetrySample`, `RaceLocationSample`, `RacePositionSample`, `RaceArchive`, `RaceDatasetChunk`, others |
-| Strong relationship | `RaceArchive 1 -> N RaceDatasetChunk` |
+| Strong relationship | `RaceArchive 1 -> N RaceDatasetChunk` (replay cache) |
+| Shared state | `RaceControlNotification`: race control batches polled by every instance |
 | Main business identifiers | `sessionId`, `driverNumber`, `dateUtc`, `archiveId` |
 | Main technical pattern | Time-series and append-heavy schema optimized for read models and archive generation |
 

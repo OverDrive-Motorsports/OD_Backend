@@ -99,16 +99,17 @@ func (f *fakeChampionshipClientForLive) GetSession(ctx context.Context, sessionI
 // own behavior is exercised directly in race_control_broadcaster_test.go.
 type fakeRaceControlBroadcaster struct {
 	waitReturn        []domain.RaceControlEvent
+	waitErr           error
 	lastWaitSessionID string
 	lastWaitTimeout   time.Duration
 }
 
 func (f *fakeRaceControlBroadcaster) Publish(sessionID string, events []domain.RaceControlEvent) {}
 
-func (f *fakeRaceControlBroadcaster) Wait(ctx context.Context, sessionID string, timeout time.Duration) []domain.RaceControlEvent {
+func (f *fakeRaceControlBroadcaster) Wait(ctx context.Context, sessionID string, timeout time.Duration) ([]domain.RaceControlEvent, error) {
 	f.lastWaitSessionID = sessionID
 	f.lastWaitTimeout = timeout
-	return f.waitReturn
+	return f.waitReturn, f.waitErr
 }
 
 func newRaceLiveUseCase(repo *fakeRaceLiveRepository, client ports.ChampionshipClient, broadcaster ports.RaceControlBroadcaster) *RaceLiveUseCase {
@@ -283,5 +284,16 @@ func TestRaceLiveUseCase_WaitForRaceControl(t *testing.T) {
 	}
 	if broadcaster.lastWaitSessionID != "s1" || broadcaster.lastWaitTimeout != 30*time.Second {
 		t.Fatalf("expected sessionID/timeout to be forwarded unmodified, got sessionID=%q timeout=%v", broadcaster.lastWaitSessionID, broadcaster.lastWaitTimeout)
+	}
+}
+
+// TestRaceLiveUseCase_WaitForRaceControl_ForwardsCapError proves a broadcaster refusal (cap
+// reached) reaches the controller as domain.ErrRaceControlBusy, so it can answer 503.
+func TestRaceLiveUseCase_WaitForRaceControl_ForwardsCapError(t *testing.T) {
+	broadcaster := &fakeRaceControlBroadcaster{waitErr: domain.ErrRaceControlBusy}
+	uc := newRaceLiveUseCase(&fakeRaceLiveRepository{}, &fakeChampionshipClientForLive{}, broadcaster)
+
+	if _, err := uc.WaitForRaceControl(context.Background(), "s1", time.Second); !errors.Is(err, domain.ErrRaceControlBusy) {
+		t.Fatalf("err = %v, want ErrRaceControlBusy", err)
 	}
 }

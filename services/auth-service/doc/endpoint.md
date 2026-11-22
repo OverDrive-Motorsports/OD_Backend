@@ -5,6 +5,10 @@ Through the gateway these routes are under `/v1/auth` (and `/auth` during the tr
 Login, register, refresh and the OAuth routes are public; the session routes need the user's
 access token (see `gateway/ROUTES.md`).
 
+Every route reading a JSON body (login, register, refresh, OAuth login and register) accepts at
+most 16 KiB: a larger body answers `413 PAYLOAD_TOO_LARGE`
+(`{"error":{"code":"PAYLOAD_TOO_LARGE","status":413,"message":"request body exceeds the 16384 bytes limit"}}`).
+
 ## Access token
 
 The `token` returned by login, register, OAuth and refresh is an HS256 JWT valid 15 minutes:
@@ -130,6 +134,7 @@ Status: `200 OK`, same body as `POST /login`.
 | Status | Cause |
 | --- | --- |
 | `400` | Malformed body. |
+| `413` | Body over 16 KiB. |
 | `401` | Invalid/expired `state`, or the provider rejected the code. |
 | `403` | The provider does not report the email as verified. |
 | `404` | Unknown provider, or (login) no account linked to this identity. |

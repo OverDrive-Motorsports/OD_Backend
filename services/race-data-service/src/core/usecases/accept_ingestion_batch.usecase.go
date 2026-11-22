@@ -12,6 +12,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -25,16 +26,19 @@ type AcceptIngestionBatchUseCase struct {
 	serviceName string
 	repository  ports.RaceDataIngestionRepository
 	broadcaster ports.RaceControlBroadcaster
+	replayCache ports.ReplayCacheInvalidator
 	now         func() time.Time
 }
 
 // NewAcceptIngestionBatchUseCase builds and returns a accept ingestion batch use case with its required dependencies.
-// broadcaster may be nil (e.g. in tests) — publishing is then skipped.
-func NewAcceptIngestionBatchUseCase(serviceName string, repository ports.RaceDataIngestionRepository, broadcaster ports.RaceControlBroadcaster) *AcceptIngestionBatchUseCase {
+// broadcaster may be nil (e.g. in tests) - publishing is then skipped. replayCache may be nil
+// too; otherwise every stored batch drops the cached replays of its session.
+func NewAcceptIngestionBatchUseCase(serviceName string, repository ports.RaceDataIngestionRepository, broadcaster ports.RaceControlBroadcaster, replayCache ports.ReplayCacheInvalidator) *AcceptIngestionBatchUseCase {
 	return &AcceptIngestionBatchUseCase{
 		serviceName: serviceName,
 		repository:  repository,
 		broadcaster: broadcaster,
+		replayCache: replayCache,
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -54,11 +58,37 @@ func (u *AcceptIngestionBatchUseCase) Execute(ctx context.Context, batch contrac
 			return domain.IngestionBatchAck{}, fmt.Errorf("dataset %s targets %s, not %s", dataset.Name, dataset.TargetService, u.serviceName)
 		}
 	}
-	if err := u.repository.StoreBatch(ctx, batch); err != nil {
-		return domain.IngestionBatchAck{}, err
+	storeErr := u.repository.StoreBatch(ctx, batch)
+	// StoreBatch deletes then inserts without a transaction: even a failed store may have changed
+	// the samples. The cached replays of the session are dropped on every exit path, with a
+	// context that survives the caller's cancellation, so a stale dump is never served.
+	invalidateErr := u.invalidateReplays(ctx, batch)
+	if storeErr != nil {
+		if invalidateErr != nil {
+			log.Printf("replay cache: invalidation after a failed batch %s: %v", batch.BatchID, invalidateErr)
+		}
+		return domain.IngestionBatchAck{}, storeErr
+	}
+	if invalidateErr != nil {
+		// Failing the batch makes the caller retry, which invalidates again.
+		return domain.IngestionBatchAck{}, fmt.Errorf("%w: %w", domain.ErrReplayCacheInvalidation, invalidateErr)
 	}
 	u.publishRaceControlEvents(batch)
 	return domain.NewIngestionBatchAck(u.serviceName, batch, u.now()), nil
+}
+
+// replayInvalidationTimeout bounds the cache invalidation, which outlives the request context.
+const replayInvalidationTimeout = 10 * time.Second
+
+// invalidateReplays drops the cached replays of the batch's session (no-op without a cache).
+func (u *AcceptIngestionBatchUseCase) invalidateReplays(ctx context.Context, batch contracts.Batch) error {
+	if u.replayCache == nil {
+		return nil
+	}
+	sessionID := contracts.SessionID(batch.Provider, batch.Context.SessionKey)
+	invalidateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), replayInvalidationTimeout)
+	defer cancel()
+	return u.replayCache.Invalidate(invalidateCtx, sessionID)
 }
 
 // publishRaceControlEvents notifies any long-polling GET .../race/control waiters
@@ -98,7 +128,7 @@ func mapRaceControlEvent(row map[string]any) domain.RaceControlEvent {
 
 // safetyCarFromScope derives the best-effort safetyCar contract value from the
 // available OpenF1 category/scope fields. There is no dedicated safety-car
-// field upstream, so this is a heuristic — see doc/endpoint.md gap note.
+// field upstream, so this is a heuristic - see doc/endpoint.md gap note.
 func safetyCarFromScope(scope string, category string) *string {
 	combined := strings.ToLower(scope + " " + category)
 	switch {

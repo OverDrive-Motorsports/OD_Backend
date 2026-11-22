@@ -12,9 +12,12 @@ package test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"overdrive/shared/apierror"
@@ -56,6 +59,8 @@ func TestConstructors(t *testing.T) {
 		{"NotFound", func() *apierror.Error { return apierror.NotFound("session", "not found", nil) }, "SESSION_NOT_FOUND", apierror.StatusNotFound},
 		{"Conflict", func() *apierror.Error { return apierror.Conflict("user", "conflict", nil) }, "USER_CONFLICT", apierror.StatusConflict},
 		{"Internal", func() *apierror.Error { return apierror.Internal("oops", nil) }, apierror.CodeInternalError, apierror.StatusInternalServerError},
+		{"PayloadTooLarge", func() *apierror.Error { return apierror.PayloadTooLarge("too big", nil) }, apierror.CodePayloadTooLarge, apierror.StatusPayloadTooLarge},
+		{"ServiceUnavailable", func() *apierror.Error { return apierror.ServiceUnavailable("busy", nil) }, apierror.CodeServiceUnavailable, apierror.StatusServiceUnavailable},
 	}
 
 	for _, tc := range cases {
@@ -131,5 +136,35 @@ func TestWrite(t *testing.T) {
 	}
 	if body.Error.Message != "No session found for this ID." {
 		t.Errorf("body.Error.Message = %q, want %q", body.Error.Message, "No session found for this ID.")
+	}
+}
+
+// TestRequestBody_MaxBytesErrorIs413 proves that a body cut by http.MaxBytesReader is reported
+// as 413 PAYLOAD_TOO_LARGE with the limit in the message, even when wrapped by the caller.
+func TestRequestBody_MaxBytesErrorIs413(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	body := http.MaxBytesReader(recorder, io.NopCloser(strings.NewReader("0123456789")), 4)
+	_, readErr := io.ReadAll(body)
+
+	e := apierror.RequestBody("invalid request body", fmt.Errorf("decode: %w", readErr))
+
+	if e.Status != apierror.StatusPayloadTooLarge || e.Code != apierror.CodePayloadTooLarge {
+		t.Fatalf("got %d %s, want 413 PAYLOAD_TOO_LARGE", e.Status, e.Code)
+	}
+	if !strings.Contains(e.Message, "4 bytes") {
+		t.Errorf("Message = %q, want the limit", e.Message)
+	}
+}
+
+// TestRequestBody_OtherErrorIs400 proves that any other body error (malformed JSON, unknown
+// field) stays a 400 VALIDATION_ERROR with the caller's message.
+func TestRequestBody_OtherErrorIs400(t *testing.T) {
+	e := apierror.RequestBody("invalid request body", errors.New("unexpected EOF"))
+
+	if e.Status != apierror.StatusBadRequest || e.Code != apierror.CodeValidationError {
+		t.Fatalf("got %d %s, want 400 VALIDATION_ERROR", e.Status, e.Code)
+	}
+	if e.Message != "invalid request body" {
+		t.Errorf("Message = %q", e.Message)
 	}
 }

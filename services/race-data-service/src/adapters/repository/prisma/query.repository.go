@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	db "overdrive/services/race-data-service/resources/db"
@@ -26,7 +25,7 @@ type QueryRepository struct {
 	client *db.PrismaClient
 }
 
-// isNotFoundErr reports whether err is the Prisma "no row matched" sentinel — this
+// isNotFoundErr reports whether err is the Prisma "no row matched" sentinel - this
 // client returns (nil, ErrNotFound) rather than (nil, nil) on a FindUnique/FindFirst
 // miss, so callers must check for it explicitly instead of treating it as a hard error.
 func isNotFoundErr(err error) bool {
@@ -38,38 +37,31 @@ func NewQueryRepository(client *db.PrismaClient) *QueryRepository {
 	return &QueryRepository{client: client}
 }
 
-// GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
-func (r *QueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string) ([]map[string]any, error) {
+// GetSessionDataset returns page.Fetch() rows of the requested session dataset from
+// page.Offset, in a stable order (time then id for samples, lap number for laps, id otherwise).
+func (r *QueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) ([]map[string]any, error) {
 	switch dataset {
 	case "laps":
-		rows, err := r.client.RaceLap.FindMany(db.RaceLap.SessionID.Equals(sessionID)).Exec(ctx)
-		if err != nil {
-			return nil, err
-		}
-		data := make([]map[string]any, 0, len(rows))
-		for _, row := range rows {
-			data = append(data, rawMap(row.Raw))
-		}
-		sort.Slice(data, func(i, j int) bool { return intFromAny(data[i]["lap_number"]) < intFromAny(data[j]["lap_number"]) })
-		return data, nil
+		return r.lapRows(ctx, sessionID, 0, page)
 	case "car_data", "telemetry":
-		return r.telemetryRows(ctx, sessionID, 0)
+		return r.telemetryRows(ctx, sessionID, 0, page)
 	case "location":
-		return r.locationRows(ctx, sessionID, 0)
+		return r.locationRows(ctx, sessionID, 0, page)
 	case "position":
-		return r.positionRows(ctx, sessionID, 0)
+		return r.positionRows(ctx, sessionID, 0, page)
 	case "intervals":
-		return r.intervalRows(ctx, sessionID, 0)
+		return r.intervalRows(ctx, sessionID, 0, page)
 	case "stints":
-		return r.stintRows(ctx, sessionID, 0)
+		return r.stintRows(ctx, sessionID, 0, page)
 	case "pit", "pit_stops":
-		return r.pitRows(ctx, sessionID, 0)
+		return r.pitRows(ctx, sessionID, 0, page)
 	case "weather":
-		return r.weatherRows(ctx, sessionID)
+		return r.weatherRows(ctx, sessionID, page)
 	case "team_radio":
-		return r.radioRows(ctx, sessionID, 0)
+		return r.radioRows(ctx, sessionID, 0, page)
 	case "overtakes":
-		rows, err := r.client.OvertakeEvent.FindMany(db.OvertakeEvent.SessionID.Equals(sessionID)).Exec(ctx)
+		rows, err := r.client.OvertakeEvent.FindMany(db.OvertakeEvent.SessionID.Equals(sessionID)).
+			OrderBy(db.OvertakeEvent.ID.Order(db.SortOrderAsc)).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +71,10 @@ func (r *QueryRepository) GetSessionDataset(ctx context.Context, sessionID strin
 		}
 		return data, nil
 	case "race_control":
-		rows, err := r.client.RaceControlEvent.FindMany(db.RaceControlEvent.SessionID.Equals(sessionID)).Exec(ctx)
+		rows, err := r.client.RaceControlEvent.FindMany(db.RaceControlEvent.SessionID.Equals(sessionID)).OrderBy(
+			db.RaceControlEvent.DateUtc.Order(db.SortOrderAsc),
+			db.RaceControlEvent.ID.Order(db.SortOrderAsc),
+		).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -93,37 +88,26 @@ func (r *QueryRepository) GetSessionDataset(ctx context.Context, sessionID strin
 	}
 }
 
-// GetDriverDataset returns the requested driver dataset payload for the supplied identifiers.
-func (r *QueryRepository) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) ([]map[string]any, error) {
+// GetDriverDataset returns page.Fetch() rows of the requested driver dataset from page.Offset,
+// in the same stable order as GetSessionDataset.
+func (r *QueryRepository) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) ([]map[string]any, error) {
 	switch dataset {
 	case "laps":
-		rows, err := r.client.RaceLap.FindMany(
-			db.RaceLap.SessionID.Equals(sessionID),
-			db.RaceLap.DriverNumber.Equals(driverNumber),
-		).Exec(ctx)
-		if err != nil {
-			return nil, err
-		}
-		data := make([]map[string]any, 0, len(rows))
-		for _, row := range rows {
-			data = append(data, rawMap(row.Raw))
-		}
-		sort.Slice(data, func(i, j int) bool { return intFromAny(data[i]["lap_number"]) < intFromAny(data[j]["lap_number"]) })
-		return data, nil
+		return r.lapRows(ctx, sessionID, driverNumber, page)
 	case "telemetry":
-		return r.telemetryRows(ctx, sessionID, driverNumber)
+		return r.telemetryRows(ctx, sessionID, driverNumber, page)
 	case "location":
-		return r.locationRows(ctx, sessionID, driverNumber)
+		return r.locationRows(ctx, sessionID, driverNumber, page)
 	case "position":
-		return r.positionRows(ctx, sessionID, driverNumber)
+		return r.positionRows(ctx, sessionID, driverNumber, page)
 	case "intervals":
-		return r.intervalRows(ctx, sessionID, driverNumber)
+		return r.intervalRows(ctx, sessionID, driverNumber, page)
 	case "stints":
-		return r.stintRows(ctx, sessionID, driverNumber)
+		return r.stintRows(ctx, sessionID, driverNumber, page)
 	case "pit":
-		return r.pitRows(ctx, sessionID, driverNumber)
+		return r.pitRows(ctx, sessionID, driverNumber, page)
 	case "radio":
-		return r.radioRows(ctx, sessionID, driverNumber)
+		return r.radioRows(ctx, sessionID, driverNumber, page)
 	default:
 		return nil, fmt.Errorf("%w %q", domain.ErrUnknownDataset, dataset)
 	}
@@ -213,13 +197,36 @@ func (r *QueryRepository) GetDriverBroadcast(ctx context.Context, sessionID stri
 	return row.BroadcastURL, nil
 }
 
+// lapRows loads lap rows ordered by lap number (then driver), optionally for one driver.
+func (r *QueryRepository) lapRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
+	params := []db.RaceLapWhereParam{db.RaceLap.SessionID.Equals(sessionID)}
+	if driverNumber > 0 {
+		params = append(params, db.RaceLap.DriverNumber.Equals(driverNumber))
+	}
+	rows, err := r.client.RaceLap.FindMany(params...).OrderBy(
+		db.RaceLap.LapNumber.Order(db.SortOrderAsc),
+		db.RaceLap.DriverNumber.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		data = append(data, rawMap(row.Raw))
+	}
+	return data, nil
+}
+
 // telemetryRows loads telemetry rows from Prisma and converts them to response maps.
-func (r *QueryRepository) telemetryRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) telemetryRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RaceTelemetrySampleWhereParam{db.RaceTelemetrySample.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RaceTelemetrySample.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RaceTelemetrySample.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RaceTelemetrySample.FindMany(params...).OrderBy(
+		db.RaceTelemetrySample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceTelemetrySample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +234,15 @@ func (r *QueryRepository) telemetryRows(ctx context.Context, sessionID string, d
 }
 
 // locationRows loads location rows from Prisma and converts them to response maps.
-func (r *QueryRepository) locationRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) locationRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RaceLocationSampleWhereParam{db.RaceLocationSample.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RaceLocationSample.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RaceLocationSample.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RaceLocationSample.FindMany(params...).OrderBy(
+		db.RaceLocationSample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceLocationSample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -244,12 +254,15 @@ func (r *QueryRepository) locationRows(ctx context.Context, sessionID string, dr
 }
 
 // positionRows loads position rows from Prisma and converts them to response maps.
-func (r *QueryRepository) positionRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) positionRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RacePositionSampleWhereParam{db.RacePositionSample.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RacePositionSample.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RacePositionSample.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RacePositionSample.FindMany(params...).OrderBy(
+		db.RacePositionSample.DateUtc.Order(db.SortOrderAsc),
+		db.RacePositionSample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -261,12 +274,15 @@ func (r *QueryRepository) positionRows(ctx context.Context, sessionID string, dr
 }
 
 // intervalRows loads interval rows from Prisma and converts them to response maps.
-func (r *QueryRepository) intervalRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) intervalRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RaceIntervalSampleWhereParam{db.RaceIntervalSample.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RaceIntervalSample.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RaceIntervalSample.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RaceIntervalSample.FindMany(params...).OrderBy(
+		db.RaceIntervalSample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceIntervalSample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -278,12 +294,12 @@ func (r *QueryRepository) intervalRows(ctx context.Context, sessionID string, dr
 }
 
 // stintRows loads stint rows from Prisma and converts them to response maps.
-func (r *QueryRepository) stintRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) stintRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RaceStintWhereParam{db.RaceStint.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RaceStint.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RaceStint.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RaceStint.FindMany(params...).OrderBy(db.RaceStint.ID.Order(db.SortOrderAsc)).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -295,12 +311,12 @@ func (r *QueryRepository) stintRows(ctx context.Context, sessionID string, drive
 }
 
 // pitRows loads pit rows from Prisma and converts them to response maps.
-func (r *QueryRepository) pitRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) pitRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.RacePitStopWhereParam{db.RacePitStop.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.RacePitStop.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.RacePitStop.FindMany(params...).Exec(ctx)
+	rows, err := r.client.RacePitStop.FindMany(params...).OrderBy(db.RacePitStop.ID.Order(db.SortOrderAsc)).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -312,8 +328,11 @@ func (r *QueryRepository) pitRows(ctx context.Context, sessionID string, driverN
 }
 
 // weatherRows loads weather rows from Prisma and converts them to response maps.
-func (r *QueryRepository) weatherRows(ctx context.Context, sessionID string) ([]map[string]any, error) {
-	rows, err := r.client.RaceWeatherSample.FindMany(db.RaceWeatherSample.SessionID.Equals(sessionID)).Exec(ctx)
+func (r *QueryRepository) weatherRows(ctx context.Context, sessionID string, page domain.Page) ([]map[string]any, error) {
+	rows, err := r.client.RaceWeatherSample.FindMany(db.RaceWeatherSample.SessionID.Equals(sessionID)).OrderBy(
+		db.RaceWeatherSample.DateUtc.Order(db.SortOrderAsc),
+		db.RaceWeatherSample.ID.Order(db.SortOrderAsc),
+	).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -325,12 +344,12 @@ func (r *QueryRepository) weatherRows(ctx context.Context, sessionID string) ([]
 }
 
 // radioRows loads radio rows from Prisma and converts them to response maps.
-func (r *QueryRepository) radioRows(ctx context.Context, sessionID string, driverNumber int) ([]map[string]any, error) {
+func (r *QueryRepository) radioRows(ctx context.Context, sessionID string, driverNumber int, page domain.Page) ([]map[string]any, error) {
 	params := []db.TeamRadioMessageWhereParam{db.TeamRadioMessage.SessionID.Equals(sessionID)}
 	if driverNumber > 0 {
 		params = append(params, db.TeamRadioMessage.DriverNumber.Equals(driverNumber))
 	}
-	rows, err := r.client.TeamRadioMessage.FindMany(params...).Exec(ctx)
+	rows, err := r.client.TeamRadioMessage.FindMany(params...).OrderBy(db.TeamRadioMessage.ID.Order(db.SortOrderAsc)).Skip(page.Offset).Take(page.Fetch()).Exec(ctx)
 	if err != nil {
 		return nil, err
 	}

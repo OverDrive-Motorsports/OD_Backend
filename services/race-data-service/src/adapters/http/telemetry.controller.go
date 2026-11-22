@@ -31,11 +31,16 @@ func (c *TelemetryController) GetSpeed(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := c.usecase.GetSpeed(r.Context(), sessionID, driverNumber, lapNumber)
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	items, next, err := c.usecase.GetSpeed(r.Context(), sessionID, driverNumber, lapNumber, page)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load speed telemetry", err))
 		return
 	}
+	setNextOffset(w, next)
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -45,11 +50,16 @@ func (c *TelemetryController) GetEngine(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	items, err := c.usecase.GetEngine(r.Context(), sessionID, driverNumber, lapNumber)
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	items, next, err := c.usecase.GetEngine(r.Context(), sessionID, driverNumber, lapNumber, page)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load engine telemetry", err))
 		return
 	}
+	setNextOffset(w, next)
 	writeJSON(w, http.StatusOK, items)
 }
 
@@ -59,11 +69,16 @@ func (c *TelemetryController) GetLocation(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	items, err := c.usecase.GetLocation(r.Context(), sessionID, driverNumber, lapNumber)
+	page, ok := parsePage(w, r)
+	if !ok {
+		return
+	}
+	items, next, err := c.usecase.GetLocation(r.Context(), sessionID, driverNumber, lapNumber, page)
 	if err != nil {
 		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load location telemetry", err))
 		return
 	}
+	setNextOffset(w, next)
 	writeJSON(w, http.StatusOK, items)
 }
 

@@ -19,6 +19,9 @@ root `.env`, compared in constant time). Missing or wrong token: `401`
 `{"error":{"code":"UNAUTHORIZED","status":401,"message":"invalid internal token"}}`, returned
 before the body is read. The service refuses to start without a token of at least 32 bytes.
 
+The body is limited to 256 MiB (larger: `413 PAYLOAD_TOO_LARGE`). The route may read its body
+for up to 5 minutes and answer within 15 minutes, the server defaults being 30 s and 60 s.
+
 Accepted dataset names:
 
 - `event_catalog`

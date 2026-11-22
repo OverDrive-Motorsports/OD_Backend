@@ -9,15 +9,20 @@
 
 package httpadapter
 
-import "net/http"
+import (
+	"net/http"
+
+	"overdrive/shared/bootstrap"
+)
 
 // NewRouter builds and returns a router with its required dependencies.
 func NewRouter(healthController *HealthController, ingestionController *IngestionController) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthController.GetHealth)
-	mux.Handle("POST /providers/openf1/ingestions", limitRequestBody(
-		http.HandlerFunc(ingestionController.TriggerOpenF1Ingestion),
-		manualIngestionBodyLimitBytes,
+	mux.Handle("POST /providers/openf1/ingestions", bootstrap.ExtendDeadlines(
+		limitRequestBody(http.HandlerFunc(ingestionController.TriggerOpenF1Ingestion), manualIngestionBodyLimitBytes),
+		0,
+		manualIngestionWriteTimeout,
 	))
 
 	return withSecurityHeaders(mux)

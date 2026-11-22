@@ -10,9 +10,8 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	"log"
-	"net/http"
 	"os"
 	db "overdrive/services/auth-service/resources/db"
 	httpadapter "overdrive/services/auth-service/src/adapters/http"
@@ -21,28 +20,40 @@ import (
 	"overdrive/services/auth-service/src/core/usecases"
 	"overdrive/shared/authjwt"
 	"overdrive/shared/bootstrap"
-	"time"
 )
 
+// main runs the service and exits non-zero when it fails to start or to stop cleanly.
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run wires the dependencies and serves until SIGINT/SIGTERM. Returning instead of calling
+// log.Fatal lets the deferred cleanup (database disconnect) run on every exit path.
+func run() error {
 	cfg, err := bootstrap.LoadConfig(
 		"auth-service",
 		"Authentication and token lifecycle service.",
 	)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	shutdownTimeout, err := bootstrap.ShutdownTimeout()
+	if err != nil {
+		return err
 	}
 
 	// Required, no insecure fallback: if this were allowed to default to a
 	// well-known value, anyone reading this repo could forge valid session tokens.
 	jwtSecret := os.Getenv("AUTH_JWT_SECRET")
 	if err := authjwt.ValidateSecret(jwtSecret); err != nil {
-		log.Fatalf("AUTH_JWT_SECRET: %v (generate one with: openssl rand -hex 32)", err)
+		return fmt.Errorf("AUTH_JWT_SECRET: %w (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()
 	if err := client.Prisma.Connect(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer func() {
 		if err := client.Prisma.Disconnect(); err != nil {
@@ -59,15 +70,13 @@ func main() {
 	authUseCase := usecases.NewAuthQueryUseCase(sessionRepository, jwtSecret, oauthProviders...)
 	authController := httpadapter.NewAuthController(authUseCase)
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, sessionController, authController, authUseCase),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(healthController, sessionController, authController, authUseCase), bootstrap.DefaultServerLimits())
 
 	log.Printf("%s listening on: %s", cfg.ServiceName, cfg.HTTPPort)
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := bootstrap.Serve(server, shutdownTimeout); err != nil {
+		return err
 	}
+	log.Printf("%s stopped", cfg.ServiceName)
+	return nil
 }

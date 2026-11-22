@@ -121,22 +121,59 @@ Request body size is limited before JSON decoding:
 
 | Endpoint class | Limit |
 | --- | ---: |
+| Public auth routes (login, register, refresh, OAuth) | `16 KiB` |
+| Preset create and update | `320 KiB` |
 | Manual OpenF1 ingestion request | `1 MiB` |
 | Internal ingestion batch dispatch | `256 MiB` |
 
-The internal batch limit is high because OpenF1 resources such as `car_data`, `location`, and `intervals` can produce large normalized payloads.
+A body over the limit answers `413 PAYLOAD_TOO_LARGE` with the limit in the message
+(`apierror.RequestBody` recognises the `http.MaxBytesError`). The internal batch limit is high
+because OpenF1 resources such as `car_data`, `location`, and `intervals` can produce large
+normalized payloads; heavy resources are sent one driver per batch to stay well under it.
+
+Responses read from other services are bounded too (`bootstrap.LimitResponse`, an explicit
+error instead of a truncated decode): OpenF1 `OPENF1_MAX_RESPONSE_BYTES` (default 128 MiB),
+dispatch acknowledgements 1 MiB, championship-service responses read by race-data 32 MiB.
+
+Response sizes are bounded as well: the sample lists are paged (at most 50000 rows per
+response), `GET /race/replay` is streamed one driver at a time and at most
+`REPLAY_MAX_CONCURRENT` (4) replays are built from the sample tables at once (cached replays, served chunk by chunk, have their own cap
+`REPLAY_CACHE_MAX_CONCURRENT`, 32), and the race control long poll holds at
+most `RACE_CONTROL_MAX_WAITERS` (2000) waiters, `RACE_CONTROL_MAX_WAITERS_PER_SESSION` (500) per
+session; beyond a cap the route answers `503` with `Retry-After`.
 
 ## Timeouts
 
-Each Go HTTP server sets `ReadHeaderTimeout` to protect request header parsing.
+Every HTTP server (gateway and services, `bootstrap.NewServer`) bounds each connection, so a
+slow or idle client cannot hold one indefinitely:
+
+| Limit | Value |
+| --- | --- |
+| `ReadHeaderTimeout` | `5s` |
+| `ReadTimeout` (whole request) | `30s` |
+| `WriteTimeout` (response) | `60s`, above the 30 s race control long poll |
+| `IdleTimeout` (keep-alive) | `120s` |
+| `MaxHeaderBytes` | `64 KiB` |
+
+Routes that legitimately take longer extend their own deadline only (`bootstrap.ExtendDeadlines`,
+gateway `domain.Route.SlowWrite`): the replay dump 10 minutes, the ingestion trigger 30 minutes,
+the internal batch route 5 minutes to read and 15 to answer (only after the internal token check).
+
+On `SIGINT`/`SIGTERM` each binary stops accepting connections, releases the long-poll waiters,
+lets in-flight requests finish for up to `SHUTDOWN_TIMEOUT` (default `35s`, above the 30 s long
+poll the gateway may be proxying), then disconnects
+from its database. Compose runs the built binary as PID 1 (not `go run`, which does not forward
+the signal) and waits 45 s before killing it.
 
 `ingestion-service` also has outbound timeouts:
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `OPENF1_TIMEOUT` | OpenF1 provider request timeout | `10s` |
-| `OPENF1_RETRY_COUNT` | OpenF1 retry count | `2` |
+| `OPENF1_TIMEOUT` | OpenF1 provider request timeout | `10s` (`30s` in Compose) |
+| `OPENF1_RETRY_COUNT` | OpenF1 retry count (5xx, 408, network errors) | `2` |
 | `OPENF1_RETRY_DELAY` | Delay between OpenF1 retries | `800ms` |
+| `OPENF1_MIN_REQUEST_INTERVAL` | Minimum time between two OpenF1 requests | `350ms` |
+| `OPENF1_MAX_RESPONSE_BYTES` | Maximum size of one OpenF1 response | `134217728` (128 MiB) |
 | `DISPATCH_TIMEOUT` | Downstream batch dispatch timeout | `10m` |
 
 `DISPATCH_TIMEOUT` is intentionally longer because downstream Prisma writes can take minutes for large OpenF1 datasets.

@@ -34,7 +34,7 @@ func NewIngestionController(usecase ports.IngestionBatchUseCase) *IngestionContr
 func (c *IngestionController) ReceiveBatch(w http.ResponseWriter, r *http.Request) {
 	var batch contracts.Batch
 	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 

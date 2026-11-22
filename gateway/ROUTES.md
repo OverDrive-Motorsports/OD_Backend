@@ -158,7 +158,7 @@ All routes below are exposed by gateway under `/v1/race-data/*` and proxied to `
 
 | Gateway | Upstream |
 | --- | --- |
-| `GET /v1/race-data/sessions/{sessionId}/datasets/{dataset}` | `GET /sessions/{sessionId}/datasets/{dataset}` |
+| `GET /v1/race-data/sessions/{sessionId}/datasets/{dataset}` | `GET /sessions/{sessionId}/datasets/{dataset}` (query: `limit`, `offset`, see Pagination below) |
 | `GET /v1/race-data/sessions/{sessionId}/standings/race` | `GET /sessions/{sessionId}/standings/race` |
 | `GET /v1/race-data/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` |
 | `GET /v1/race-data/sessions/{sessionId}/weather` | `GET /sessions/{sessionId}/weather` |
@@ -190,7 +190,7 @@ Gateway validates `{dataset}` for this route against:
 | --- | --- |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/profile` | `GET /sessions/{sessionId}/drivers/{driverNumber}/profile` |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{dataset}` | `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}` |
+| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{dataset}` | `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}` (query: `limit`, `offset`) |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` |
 
 Supported driver datasets on `/drivers/{driverNumber}/{dataset}`:
@@ -209,8 +209,10 @@ Supported driver datasets on `/drivers/{driverNumber}/{dataset}`:
 
 All routes below are camelCase, bare-array-or-object JSON
 (no `{ "count", "data" }` envelope). `POST /race/control` is a long-poll: the request
-blocks until a new race control event batch is available (bounded server-side
-timeout), then closes, the client must re-POST to keep receiving events.
+blocks until a new race control event batch is available (30 s at most, then `[]`),
+then closes, the client must re-POST to keep receiving events. It works with several
+race-data-service instances. When an instance already holds its maximum number of waiting
+clients it answers `503 SERVICE_UNAVAILABLE` with `Retry-After`: retry after that delay.
 
 | Gateway | Upstream |
 | --- | --- |
@@ -221,7 +223,7 @@ timeout), then closes, the client must re-POST to keep receiving events.
 | `POST /v1/race-data/sessions/{sessionId}/race/control` | `POST /sessions/{sessionId}/race/control` (long-poll) |
 | `GET /v1/race-data/sessions/{sessionId}/race/weather` | `GET /sessions/{sessionId}/race/weather` |
 | `GET /v1/race-data/sessions/{sessionId}/race/radio` | `GET /sessions/{sessionId}/race/radio` (query: `driverNumber`) |
-| `GET /v1/race-data/sessions/{sessionId}/race/replay` | `GET /sessions/{sessionId}/race/replay` (query: `driverNumber`), see below |
+| `GET /v1/race-data/sessions/{sessionId}/race/replay` | `GET /sessions/{sessionId}/race/replay` (query: `driverNumber`, `fromUtc`, `toUtc`), see below |
 
 #### `GET /sessions/{sessionId}/race/replay` (plain JSON bulk dump)
 
@@ -229,8 +231,13 @@ A plain JSON bulk dump of every stored sample for a session across eight
 datasets, `telemetry`, `position`, `raceControl`, `weather`, `radio`,
 `pitStop`, `stint`, `lap`, returned as one response body. Additive, not a
 replacement for the routes above. It replays already-ingested historical
-data for a finished/stored session; there is no pacing/streaming, it's one
-`GET` returning the whole history at once. Driver-scoped datasets
+data for a finished/stored session; there is no pacing, it's one `GET`
+returning the whole history. The body is streamed (same JSON shape as a single
+object), so a client should read it incrementally; the gateway lets this route
+take up to 10 minutes instead of its 60 s default. `fromUtc`/`toUtc` (RFC 3339,
+inclusive) restrict every dataset to a time window. When too many replays are
+being built from the database at once, the route answers `503 SERVICE_UNAVAILABLE`
+with `Retry-After` (cached replays have a separate, larger cap). Driver-scoped datasets
 (`telemetry`, `position`, `radio`, `pitStop`, `stint`, `lap`) are objects
 keyed by driver number (string); `weather`/`raceControl` are always
 track-wide flat arrays (never filtered by `driverNumber`). `stint` entries
@@ -243,7 +250,7 @@ breakdown and payload shapes.
 
 Note: this route used to be a Server-Sent Events stream
 (`/race/replay/stream`, paced by a `speed` query param). It was replaced by
-this plain-JSON bulk dump, no more streaming, pacing, or `speed` param. The
+this plain-JSON bulk dump, no more SSE, pacing, or `speed` param. The
 gateway's SSE flush-passthrough fix on `statusRecorder`
 (`logging_middleware.go`'s explicit `Flush()` forwarding, see below) and its
 regression test (`flush_passthrough_test.go`) were left in place even though no
@@ -280,10 +287,20 @@ the upstream introduced, rather than everything arriving at once at the end, use
 
 | Gateway | Upstream |
 | --- | --- |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` (query: `lapNumber`) |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` (query: `lapNumber`) |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` (query: `lapNumber`) |
+| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/speed` (query: `lapNumber`, `limit`, `offset`) |
+| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/engine` (query: `lapNumber`, `limit`, `offset`) |
+| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/location` (query: `lapNumber`, `limit`, `offset`) |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/telemetry/intervals` | `GET /sessions/{sessionId}/drivers/{driverNumber}/telemetry/intervals` |
+
+### Pagination
+
+The sample lists (session and driver `{dataset}` routes, `/telemetry/speed`, `/engine`,
+`/location`) return at most `limit` rows (`1` to `50000`, default `50000`) from `offset`
+(default `0`). When more rows exist, the response has an `X-Next-Offset` header holding the
+offset of the next page; without it, the page is the last one. The JSON shape is unchanged; in
+the `{dataset}` envelopes, `count` is the number of rows of this page, not the total. A list of
+more than 50000 rows requested without paging is cut at 50000 and only `X-Next-Offset` tells it:
+clients reading session-wide sample lists must follow it.
 
 ### WebSocket Live
 
@@ -315,12 +332,21 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
   - `400` invalid championship dataset/driverNumber parameter on v1 championship routes
   - `400` invalid race v1 parameter (`dataset`, `action`, `driverNumber`, `lapNumber`)
   - `502` upstream unavailable/proxy failure
+- Upstream limits passed through: `413 PAYLOAD_TOO_LARGE` for a body over a route's size limit
+  (auth 16 KiB, presets 320 KiB, ingestion trigger 1 MiB), `503 SERVICE_UNAVAILABLE` with
+  `Retry-After` when race control waiters or concurrent replays are at their cap.
 
 ## Notes
 
 - Gateway target URLs are read from `gateway/.env` (or process env vars), not from hardcoded defaults.
 - Multiple URLs in one `*_SERVICE_URLS` variable are load-balanced with round-robin.
 - Rate limiting is currently in-memory; counters reset when gateway restarts.
+- Connection limits: headers within 5 s, request read within 30 s, response written within
+  60 s (enough for the 30 s race control long poll), idle keep-alive closed after 120 s,
+  headers at most 64 KiB. Two routes get a longer write deadline (`domain.Route.SlowWrite`):
+  `/v1/race-data/.../race/replay` (10 minutes) and `/v1/ingestion` (30 minutes).
+- On `SIGTERM` the gateway and every service stop accepting connections and let in-flight
+  requests finish for up to `SHUTDOWN_TIMEOUT` (default 35 s, above the 30 s long poll the gateway may be proxying); Compose waits 45 s before killing.
 
 ## Auth (`/v1/auth`, public routes are an allow-list)
 

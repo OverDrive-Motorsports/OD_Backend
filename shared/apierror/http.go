@@ -11,6 +11,8 @@ package apierror
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -37,4 +39,15 @@ func Write(w http.ResponseWriter, path string, e *Error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(int(e.Status))
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// RequestBody classifies an error returned while reading or decoding a request body: a body cut
+// by http.MaxBytesReader (or http.MaxBytesHandler) becomes a 413 naming the limit, anything else
+// a 400 with the given client message.
+func RequestBody(message string, err error) *Error {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return PayloadTooLarge(fmt.Sprintf("request body exceeds the %d bytes limit", tooLarge.Limit), err)
+	}
+	return Validation(message, err)
 }
