@@ -307,11 +307,17 @@ func TestServe_SIGTERMLetsInFlightRequestFinish(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Serve(server, 2*time.Second) }()
 
+	// No keep-alive: a pooled client may open a spare connection that never sends a request,
+	// and Shutdown waits 5 s before treating such a new connection as idle, longer than the 2 s
+	// shutdown timeout under test.
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	t.Cleanup(client.CloseIdleConnections)
+
 	// Serve registers the signal handler before listening: once a request succeeds, SIGTERM is
 	// caught by Serve instead of killing the test binary.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		resp, err := http.Get("http://" + addr + "/ready")
+		resp, err := client.Get("http://" + addr + "/ready")
 		if err == nil {
 			_ = resp.Body.Close()
 			break
@@ -324,7 +330,7 @@ func TestServe_SIGTERMLetsInFlightRequestFinish(t *testing.T) {
 
 	got := make(chan string, 1)
 	go func() {
-		resp, err := http.Get("http://" + addr + "/slow")
+		resp, err := client.Get("http://" + addr + "/slow")
 		if err != nil {
 			got <- "error: " + err.Error()
 			return
