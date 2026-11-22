@@ -105,10 +105,9 @@ func (u *RaceLiveUseCase) GetRadio(ctx context.Context, sessionID string, driver
 
 // WaitForRaceControl blocks (long-polls) until a new race control event batch is
 // published for sessionID or timeout elapses, then returns. The HTTP handler
-// closes the response after this call returns — the client must re-POST to
-// receive the next event. See race_control_broadcaster.go for the single-instance
-// in-memory caveat.
+// closes the response after this call returns; the client must re-POST to
+// receive the next event. It returns domain.ErrRaceControlBusy when the waiter
+// caps are reached and domain.ErrShuttingDown during shutdown.
 func (u *RaceLiveUseCase) WaitForRaceControl(ctx context.Context, sessionID string, timeout time.Duration) ([]domain.RaceControlEvent, error) {
-	events := u.broadcaster.Wait(ctx, sessionID, timeout)
-	return events, nil
+	return u.broadcaster.Wait(ctx, sessionID, timeout)
 }

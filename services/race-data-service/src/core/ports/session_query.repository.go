@@ -9,11 +9,16 @@
 
 package ports
 
-import "context"
+import (
+	"context"
+
+	"overdrive/services/race-data-service/src/core/domain"
+)
 
 type SessionQueryRepository interface {
-	GetSessionDataset(ctx context.Context, sessionID string, dataset string) ([]map[string]any, error)
-	GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) ([]map[string]any, error)
+	// GetSessionDataset and GetDriverDataset read page.Fetch() rows from page.Offset.
+	GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) ([]map[string]any, error)
+	GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) ([]map[string]any, error)
 	GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error)
 	GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, error)
 }

@@ -62,8 +62,8 @@ func (f *configurableSessionQueryUseCase) ListSessionDrivers(ctx context.Context
 func (f *configurableSessionQueryUseCase) ListSessionTeams(ctx context.Context, sessionID string) (map[string]any, error) {
 	return f.listSessionTeamsResult, f.err
 }
-func (f *configurableSessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (map[string]any, error) {
-	return f.getSessionResult, f.err
+func (f *configurableSessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) (map[string]any, *int, error) {
+	return f.getSessionResult, nil, f.err
 }
 func (f *configurableSessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	return f.raceStandingsResult, f.err
@@ -77,8 +77,8 @@ func (f *configurableSessionQueryUseCase) GetDriverProfile(ctx context.Context, 
 func (f *configurableSessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
 	return f.driverBroadcastResult, f.err
 }
-func (f *configurableSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (map[string]any, error) {
-	return f.driverDatasetResult, f.err
+func (f *configurableSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) (map[string]any, *int, error) {
+	return f.driverDatasetResult, nil, f.err
 }
 func (f *configurableSessionQueryUseCase) GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error) {
 	return f.driverLapLocationResult, f.err

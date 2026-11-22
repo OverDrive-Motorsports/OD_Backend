@@ -133,6 +133,18 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"stopped":true}` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
+### `RaceControlNotification`
+
+One race control batch published by an instance, polled by every race-data-service instance to
+wake its `POST /race/control` long-poll waiters. Rows are deleted 5 minutes after creation.
+
+| Field | Type | Required | Constraints | Description | Example |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BigInt` | Yes | Primary key, auto-increment | Identifies the batch, so each instance delivers it once | `12` |
+| `sessionId` | `String` | Yes | None | Session the events belong to | `openf1:session:9998` |
+| `events` | `Json` | Yes | None | The batch, as the public race control event array | `[{"category":"Flag","flag":"RED"}]` |
+| `createdAt` | `DateTime` | Yes | Default `now()`, indexed | Database time of the insert, compared with the database clock only | `YYYY-MM-DDThh:mm:ssZ` |
+
 ### `RaceControlEvent`
 
 | Field | Type | Required | Constraints | Description | Example |
@@ -216,6 +228,10 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 
 ### `RaceArchive`
 
+Replay cache: one archive per session holds a full `GET /race/replay` dump split into chunks.
+It is created when a full replay is first streamed, served once `metadata.complete` is `true`,
+and deleted by any ingestion into the session.
+
 | Field | Type | Required | Constraints | Description | Example |
 | --- | --- | --- | --- | --- | --- |
 | `id` | `String` | Yes | Primary key, UUID, default generated | Unique identifier of the archive | `98c9f3fd-5305-4af5-b5c0-790c8fe3d4ff` |
@@ -225,7 +241,7 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | `sourceMeetingKey` | `Int?` | No | Indexed with `sourceSessionKey` | Upstream meeting identifier | `1205` |
 | `sourceSessionKey` | `Int?` | No | Indexed with `sourceMeetingKey` | Upstream session identifier | `8892` |
 | `sourceDriverNumber` | `Int?` | No | None | Optional driver number for driver-focused archives | `1` |
-| `metadata` | `Json` | Yes | None | Archive metadata and generation context | `{"producer":"ingestion-service","version":"1.0"}` |
+| `metadata` | `Json` | Yes | None | Archive state; `complete` is `true` once every chunk is written | `{"complete":true}` |
 | `counts` | `Json` | Yes | None | Aggregate counts per exported dataset | `{"laps":57,"telemetrySamples":45000}` |
 | `fetchErrors` | `Json?` | No | None | Optional fetch or generation errors | `{"teamRadio":"timeout"}` |
 
@@ -235,10 +251,11 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | --- | --- | --- | --- | --- | --- |
 | `id` | `BigInt` | Yes | Primary key, auto-increment | Unique identifier of the chunk row | `1` |
 | `archiveId` | `String` | Yes | Foreign key to `RaceArchive.id`, unique with `dataset` and `chunkIndex` | Parent archive identifier | `98c9f3fd-5305-4af5-b5c0-790c8fe3d4ff` |
-| `dataset` | `String` | Yes | `varchar(50)`, indexed | Dataset name stored in the chunk | `telemetry` |
-| `chunkIndex` | `Int` | Yes | Default `0`, unique with `archiveId` and `dataset` | Position of the chunk inside the dataset | `0` |
+| `dataset` | `String` | Yes | `varchar(50)`, indexed | Replay dataset of the chunk (`telemetry`, `raceControl`, ...) | `telemetry` |
+| `driverNumber` | `Int?` | No | None | Driver of a driver-scoped chunk; null for a track-wide dataset | `63` |
+| `chunkIndex` | `Int` | Yes | Default `0`, unique with `archiveId` and `dataset` | Position of the chunk in the dump (write order) | `0` |
 | `rowCount` | `Int` | Yes | Default `0` | Number of rows included in the chunk | `1000` |
-| `rows` | `Json` | Yes | None | Chunk payload containing exported rows | `[{"driverNumber":1,"speedKph":312}]` |
+| `rows` | `Json` | Yes | None | JSON array of the replay samples of this part | `[{"speed":312,"gear":7}]` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ## Constraints and indexes
@@ -247,7 +264,8 @@ All other tables use `sessionId` as a logical link without an enforced foreign k
 | --- | --- | --- |
 | `RaceLap(sessionId, driverNumber, lapNumber)` | Unique constraint | Prevents duplicate lap rows for the same driver and lap |
 | `RaceDatasetChunk(archiveId, dataset, chunkIndex)` | Unique constraint | Prevents duplicate chunk positions inside an archive dataset |
-| `RaceArchive.id -> RaceDatasetChunk.archiveId` | Foreign key | Enforces the archive-to-chunk relationship |
+| `RaceArchive.id -> RaceDatasetChunk.archiveId` | Foreign key, `ON DELETE CASCADE` | Enforces the archive-to-chunk relationship; deleting an archive deletes its chunks |
+| `RaceControlNotification(createdAt)` | Index | Supports the poll window and the cleanup of old rows |
 | `(sessionId, dateUtc)` indexes | Composite indexes | Support timeline queries over time-series tables |
 | `(sessionId, driverNumber, dateUtc)` indexes | Composite indexes | Support driver-scoped time-series queries |
 | `(sessionId, lapNumber)` and `(sessionId, position)` indexes | Composite indexes | Support race flow and ranking lookups |

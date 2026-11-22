@@ -13,6 +13,7 @@ package config
 
 import (
 	"net/url"
+	"time"
 
 	"overdrive/gateway/internal/core/domain"
 )
@@ -22,7 +23,13 @@ import (
 func ingestionServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
 		proxied: []domain.Route{
-			{Prefix: "/v1/ingestion", Targets: targets.ingestion, Access: domain.AccessAdmin},
+			{
+				Prefix:  "/v1/ingestion",
+				Targets: targets.ingestion,
+				Access:  domain.AccessAdmin,
+				// A full-session ingestion paces its OpenF1 calls and can run for many minutes.
+				SlowWrite: domain.SlowWrite{Timeout: 30 * time.Minute},
+			},
 		},
 		health: map[string][]*url.URL{
 			"/health/ingestion": targets.ingestion,

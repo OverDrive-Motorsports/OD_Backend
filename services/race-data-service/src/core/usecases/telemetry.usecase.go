@@ -35,19 +35,34 @@ func (u *TelemetryUseCase) SessionExists(ctx context.Context, sessionID string) 
 	return session != nil, nil
 }
 
-// GetSpeed returns every speed sample for a driver, oldest first.
-func (u *TelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
-	return u.repository.GetSpeed(ctx, sessionID, driverNumber, lapNumber)
+// GetSpeed returns one page of a driver's speed samples, oldest first, and the next offset.
+func (u *TelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetrySpeed, *int, error) {
+	items, err := u.repository.GetSpeed(ctx, sessionID, driverNumber, lapNumber, page)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, next := domain.TrimPage(items, page)
+	return items, next, nil
 }
 
-// GetEngine returns every engine sample for a driver, oldest first.
-func (u *TelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
-	return u.repository.GetEngine(ctx, sessionID, driverNumber, lapNumber)
+// GetEngine returns one page of a driver's engine samples, oldest first, and the next offset.
+func (u *TelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryEngine, *int, error) {
+	items, err := u.repository.GetEngine(ctx, sessionID, driverNumber, lapNumber, page)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, next := domain.TrimPage(items, page)
+	return items, next, nil
 }
 
-// GetLocation returns spatial samples for a driver.
-func (u *TelemetryUseCase) GetLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryLocation, error) {
-	return u.repository.ListLocation(ctx, sessionID, driverNumber, lapNumber)
+// GetLocation returns one page of a driver's spatial samples, oldest first, and the next offset.
+func (u *TelemetryUseCase) GetLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryLocation, *int, error) {
+	items, err := u.repository.ListLocation(ctx, sessionID, driverNumber, lapNumber, page)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, next := domain.TrimPage(items, page)
+	return items, next, nil
 }
 
 // GetIntervals returns the latest interval telemetry for a driver.

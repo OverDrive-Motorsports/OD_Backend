@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"overdrive/services/race-data-service/src/core/domain"
 	"overdrive/services/race-data-service/src/core/ports"
 )
 
@@ -115,22 +116,25 @@ func (u *SessionQueryUseCase) ListSessionTeams(ctx context.Context, sessionID st
 	return map[string]any{"count": len(payload), "data": payload, "session_id": sessionID}, nil
 }
 
-// GetSessionDataset returns the requested session dataset payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (map[string]any, error) {
+// GetSessionDataset returns one page of the requested session dataset and the next page
+// offset (nil on the last page). Datasets served by championship-service are not paged.
+func (u *SessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) (map[string]any, *int, error) {
 	session, event, err := u.loadContext(ctx, sessionID)
 	if err != nil || session == nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if isRemoteDataset(dataset) {
-		return u.client.GetSessionDataset(ctx, sessionID, dataset)
+		payload, err := u.client.GetSessionDataset(ctx, sessionID, dataset)
+		return payload, nil, err
 	}
-	rows, err := u.repository.GetSessionDataset(ctx, sessionID, dataset)
+	rows, err := u.repository.GetSessionDataset(ctx, sessionID, dataset, page)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	rows, next := domain.TrimPage(rows, page)
 	lookup, err := u.driverLookup(ctx, sessionID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, row := range rows {
 		enrichDriverRow(row, lookup)
@@ -141,7 +145,7 @@ func (u *SessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID s
 		"count":      len(rows),
 		"data":       rows,
 		"metadata":   sessionMetadata(event, session),
-	}, nil
+	}, next, nil
 }
 
 // GetSessionRaceStandings returns the requested session race standings payload for the supplied identifiers.
@@ -200,16 +204,17 @@ func (u *SessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID 
 	}, nil
 }
 
-// GetDriverDataset returns the requested driver dataset payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (map[string]any, error) {
+// GetDriverDataset returns one page of the requested driver dataset and the next page offset
+// (nil on the last page). The "result" dataset comes from championship-service and is not paged.
+func (u *SessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) (map[string]any, *int, error) {
 	session, event, err := u.loadContext(ctx, sessionID)
 	if err != nil || session == nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if dataset == "result" {
 		payload, err := u.client.GetSessionDataset(ctx, sessionID, "session_result")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if payload == nil {
 			payload = map[string]any{
@@ -232,15 +237,16 @@ func (u *SessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID st
 		payload["count"] = len(filtered)
 		payload["data"] = filtered
 		payload["driver_number"] = driverNumber
-		return payload, nil
+		return payload, nil, nil
 	}
-	rows, err := u.repository.GetDriverDataset(ctx, sessionID, driverNumber, dataset)
+	rows, err := u.repository.GetDriverDataset(ctx, sessionID, driverNumber, dataset, page)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	rows, next := domain.TrimPage(rows, page)
 	lookup, err := u.driverLookup(ctx, sessionID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, row := range rows {
 		enrichDriverRow(row, lookup)
@@ -252,7 +258,7 @@ func (u *SessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID st
 		"count":         len(rows),
 		"data":          rows,
 		"metadata":      sessionMetadata(event, session),
-	}, nil
+	}, next, nil
 }
 
 // GetSessionFacts returns the requested session facts payload for the supplied identifiers.
@@ -261,19 +267,19 @@ func (u *SessionQueryUseCase) GetSessionFacts(ctx context.Context, sessionID str
 	if err != nil || session == nil {
 		return nil, err
 	}
-	raceControl, err := u.repository.GetSessionDataset(ctx, sessionID, "race_control")
+	raceControl, err := u.repository.GetSessionDataset(ctx, sessionID, "race_control", domain.DefaultPage())
 	if err != nil {
 		return nil, err
 	}
-	overtakes, err := u.repository.GetSessionDataset(ctx, sessionID, "overtakes")
+	overtakes, err := u.repository.GetSessionDataset(ctx, sessionID, "overtakes", domain.DefaultPage())
 	if err != nil {
 		return nil, err
 	}
-	pitStops, err := u.repository.GetSessionDataset(ctx, sessionID, "pit")
+	pitStops, err := u.repository.GetSessionDataset(ctx, sessionID, "pit", domain.DefaultPage())
 	if err != nil {
 		return nil, err
 	}
-	radio, err := u.repository.GetSessionDataset(ctx, sessionID, "team_radio")
+	radio, err := u.repository.GetSessionDataset(ctx, sessionID, "team_radio", domain.DefaultPage())
 	if err != nil {
 		return nil, err
 	}

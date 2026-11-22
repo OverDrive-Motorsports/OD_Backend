@@ -10,12 +10,16 @@
 package championshipclient
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"overdrive/shared/bootstrap"
 )
 
 func testServer(t *testing.T, handler http.HandlerFunc) *Client {
@@ -324,5 +328,26 @@ func TestClient_PathSegmentsAreEscaped(t *testing.T) {
 		if gotPaths[index] != want[index] {
 			t.Fatalf("call %d: path = %q, want %q", index, gotPaths[index], want[index])
 		}
+	}
+}
+
+// TestClient_GetSession_OversizedResponse proves a championship-service response larger than
+// maxResponseBytes fails with bootstrap.ErrResponseTooLarge instead of being decoded whole.
+func TestClient_GetSession_OversizedResponse(t *testing.T) {
+	client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"sessionId":"s1","name":"`))
+		chunk := bytes.Repeat([]byte("a"), 1<<20)
+		for written := int64(0); written <= maxResponseBytes; written += int64(len(chunk)) {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+		_, _ = w.Write([]byte(`"}`))
+	})
+
+	_, err := client.GetSession(context.Background(), "s1")
+	if !errors.Is(err, bootstrap.ErrResponseTooLarge) {
+		t.Fatalf("err = %v, want ErrResponseTooLarge", err)
 	}
 }

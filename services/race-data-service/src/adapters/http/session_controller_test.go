@@ -27,6 +27,8 @@ import (
 type fakeSessionQueryUseCase struct {
 	datasetResult map[string]any
 	datasetErr    error
+	datasetNext   *int
+	gotPage       domain.Page
 }
 
 func (f *fakeSessionQueryUseCase) ListChampionships(ctx context.Context) (any, error) {
@@ -53,8 +55,9 @@ func (f *fakeSessionQueryUseCase) ListSessionDrivers(ctx context.Context, sessio
 func (f *fakeSessionQueryUseCase) ListSessionTeams(ctx context.Context, sessionID string) (map[string]any, error) {
 	return nil, nil
 }
-func (f *fakeSessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string) (map[string]any, error) {
-	return f.datasetResult, f.datasetErr
+func (f *fakeSessionQueryUseCase) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) (map[string]any, *int, error) {
+	f.gotPage = page
+	return f.datasetResult, f.datasetNext, f.datasetErr
 }
 func (f *fakeSessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	return nil, nil
@@ -68,8 +71,9 @@ func (f *fakeSessionQueryUseCase) GetDriverProfile(ctx context.Context, sessionI
 func (f *fakeSessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
 	return nil, nil
 }
-func (f *fakeSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string) (map[string]any, error) {
-	return nil, nil
+func (f *fakeSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) (map[string]any, *int, error) {
+	f.gotPage = page
+	return f.datasetResult, f.datasetNext, f.datasetErr
 }
 func (f *fakeSessionQueryUseCase) GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error) {
 	return nil, nil
@@ -156,5 +160,42 @@ func TestSessionController_GetSessionDataset_ErrorEnvelope(t *testing.T) {
 				t.Fatalf("response body leaked technical error detail: %s", rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestSessionController_DatasetPagination proves the session and driver dataset facades pass
+// limit/offset to the usecase, announce a further page in X-Next-Offset, and reject an invalid
+// limit with 400.
+func TestSessionController_DatasetPagination(t *testing.T) {
+	next := 10
+	usecase := &fakeSessionQueryUseCase{datasetResult: map[string]any{"data": []any{}}, datasetNext: &next}
+	c := NewSessionController(usecase)
+
+	req := httptest.NewRequest(http.MethodGet, "/sessions/s1/datasets/car_data?limit=10", nil)
+	req.SetPathValue("sessionId", "s1")
+	req.SetPathValue("dataset", "car_data")
+	rec := httptest.NewRecorder()
+	c.GetSessionDataset(rec, req)
+	if rec.Code != http.StatusOK || usecase.gotPage != (domain.Page{Limit: 10}) || rec.Header().Get(NextOffsetHeader) != "10" {
+		t.Fatalf("session dataset: status %d page %+v header %q", rec.Code, usecase.gotPage, rec.Header().Get(NextOffsetHeader))
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/sessions/s1/drivers/44/location?offset=5", nil)
+	req.SetPathValue("sessionId", "s1")
+	req.SetPathValue("driverNumber", "44")
+	req.SetPathValue("dataset", "location")
+	rec = httptest.NewRecorder()
+	c.GetDriverDataset(rec, req)
+	if rec.Code != http.StatusOK || usecase.gotPage != (domain.Page{Offset: 5, Limit: domain.MaxPageLimit}) {
+		t.Fatalf("driver dataset: status %d page %+v", rec.Code, usecase.gotPage)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/sessions/s1/datasets/car_data?limit=999999", nil)
+	req.SetPathValue("sessionId", "s1")
+	req.SetPathValue("dataset", "car_data")
+	rec = httptest.NewRecorder()
+	c.GetSessionDataset(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("limit over the maximum: status %d, want 400", rec.Code)
 	}
 }

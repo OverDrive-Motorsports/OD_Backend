@@ -18,6 +18,8 @@ import (
 
 type OpenF1Provider interface {
 	Fetch(ctx context.Context, resource string, request domain.OpenF1IngestionRequest) ([]map[string]any, error)
+	// ListDriverNumbers returns the session's driver numbers, to fetch heavy resources per driver.
+	ListDriverNumbers(ctx context.Context, request domain.OpenF1IngestionRequest) ([]int, error)
 }
 
 type ProviderMapper interface {

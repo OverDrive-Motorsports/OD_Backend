@@ -12,23 +12,34 @@
 package main
 
 import (
-	"errors"
 	"log"
-	"net/http"
 	"overdrive/gateway/internal/app"
 	"overdrive/gateway/internal/config"
-	"time"
+	"overdrive/shared/bootstrap"
 )
 
+// main runs the gateway and exits non-zero when it fails to start or to stop cleanly.
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run builds the gateway and serves until SIGINT/SIGTERM. Returning instead of calling log.Fatal
+// lets the deferred runtime cleanup run on every exit path.
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	shutdownTimeout, err := bootstrap.ShutdownTimeout()
+	if err != nil {
+		return err
 	}
 
 	runtime, err := app.Build(cfg)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer func() {
 		if closeErr := runtime.Close(); closeErr != nil {
@@ -36,15 +47,13 @@ func main() {
 		}
 	}()
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           runtime.Handler,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	server := bootstrap.NewServer(":"+cfg.HTTPPort, runtime.Handler, bootstrap.DefaultServerLimits())
 
 	log.Printf("gateway listening on :%s", cfg.HTTPPort)
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := bootstrap.Serve(server, shutdownTimeout); err != nil {
+		return err
 	}
+	log.Printf("gateway stopped")
+	return nil
 }

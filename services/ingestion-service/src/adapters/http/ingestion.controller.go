@@ -33,7 +33,7 @@ func NewIngestionController(usecase ports.OpenF1IngestionUseCase) *IngestionCont
 func (c *IngestionController) TriggerOpenF1Ingestion(w http.ResponseWriter, r *http.Request) {
 	var request domain.OpenF1IngestionRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid request body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid request body", err))
 		return
 	}
 
@@ -62,6 +62,10 @@ func classifyIngestionError(err error, ctx context.Context, request domain.OpenF
 
 	if errors.Is(err, domain.ErrUnsupportedResource) {
 		return apierror.Validation("unsupported OpenF1 resource requested", err)
+	}
+
+	if errors.Is(err, domain.ErrNoOpenF1Data) {
+		return apierror.NotFound("OPENF1_DATA", "OpenF1 has no data for this meeting and session", err)
 	}
 
 	return apierror.UpstreamUnavailable("failed to ingest data from OpenF1", err)

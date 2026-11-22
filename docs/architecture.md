@@ -138,19 +138,22 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 The gateway keeps the connection open for as long as `race-data-service` takes to
 answer. On the service side:
 
-1. The handler asks an in-memory, single-process pub/sub
-   (`race_control_broadcaster.go`) to wait for the next race-control event on this
-   `sessionId`, bounded to 30 seconds.
-2. If a new `race_control` ingestion batch is stored for that session while the
-   request is waiting (see Example 4), the broadcaster wakes the handler
-   immediately, which responds `200` with the new event(s).
+1. The handler registers as a waiter for the next race-control event on this
+   `sessionId`, bounded to 30 seconds. The instance caps its waiters (globally and per
+   session); beyond the cap it answers `503` with `Retry-After`.
+2. When a `race_control` ingestion batch is stored for that session (see Example 4),
+   it is also inserted into the `RaceControlNotification` table. Every
+   `race-data-service` instance polls that table each second
+   (`shared_race_control_broadcaster.go`) and wakes its local waiters for the session,
+   which respond `200` with the new event(s).
 3. If nothing arrives within 30 seconds, the handler responds `200` with an empty
    array `[]` - the client is expected to immediately re-`POST` to keep waiting.
    This is *not* an error; it's the documented long-poll contract.
 
-This mechanism is single-instance by construction (an in-process Go channel, not a
-shared broker): with more than one `race-data-service` replica, a client's
-long-poll could land on a replica that never sees the event.
+Because the batch goes through Postgres, the long poll works with several replicas: a
+client waiting on one replica is woken by a batch ingested through another, at most about a
+second later. No broker is involved; the rows are deleted after 5 minutes. On shutdown the
+waiters are released at once with `[]` so the client re-POSTs, possibly to another replica.
 
 ## Example 4 - ingestion: `POST /v1/ingestion/providers/openf1/ingestions`
 
@@ -179,7 +182,8 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: applicati
    `race_control`, the session's existing `RaceControlEvent` rows are deleted then
    the fresh ones inserted, and the new events are **published** to the broadcaster
    from Example 3, so any client long-polling `POST /race/control` for that session
-   wakes up immediately.
+   wakes up within a second, on any instance. Every stored batch also deletes the
+   session's cached replays (Example 5).
 5. High-volume datasets (`car_data`/telemetry, `location`, `position`,
    `intervals`, `laps`) are written with up to 16 rows in flight concurrently
    (`runConcurrent` in `ingestion.repository.go`), because the Prisma Go client has
@@ -189,8 +193,14 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: applicati
    when a `sessions` row arrives before its meeting, championship-service creates a
    placeholder event from it, but a later re-ingestion does not overwrite the real
    event written by `meetings` (otherwise the event name became "Race").
-7. The response summarises, per resource, how many rows were fetched and whether
-   they were dispatched.
+7. A full-session request (no `driver_number`) fetches the heavy resources
+   (`car_data`, `location`) one driver at a time and dispatches each driver's batch on
+   its own, after the light resources: one response or batch never holds a whole
+   session. OpenF1 calls are spaced (`OPENF1_MIN_REQUEST_INTERVAL`) and a `429` waits for
+   its `Retry-After`.
+8. A failing resource (or driver) does not stop the others. The response summarises,
+   per resource, its `status` (`ok`, `partial`, `failed`), row count and whether it was
+   dispatched; the request fails with `502` only when every resource failed.
 
 ## Example 5 - the replay: catalog then bulk dump
 
@@ -212,26 +222,35 @@ cars. That check is a single raw `EXISTS` query on the `sessionId` indexes
 `DISTINCT`/`EXISTS` and the sample tables hold millions of rows. Newest first,
 `[]` when nothing is playable.
 
-**The replay** is a plain `GET` returning one JSON object. `race_replay_stream.usecase.go`'s
-`GetReplay`:
+**The replay** is a plain `GET` returning one JSON object, **streamed** so memory stays
+bounded whatever the session size. `race_replay_stream.usecase.go`'s `StreamReplay`:
 
-1. validates `sessionId` against `championship-service` (Example 2's pattern);
-2. asks `race_stream.repository.go` for **eight** datasets - `telemetry`,
-   `position`, `raceControl`, `weather`, `radio`, `pitStop`, `stint`, `lap` - each
-   queried **once per call**, sorted by timestamp. Telemetry samples carry no lap
-   number nor position: `x`/`y`/`z` come from the nearest `RaceLocationSample` and
-   `lapNumber` from the `RaceLap` that started last, both resolved with a
-   forward-only pointer over the already-sorted rows. `stint` has no timestamp
-   column, so each stint is anchored to the start time of its `lapStart` lap;
-3. groups the six driver-scoped datasets by driver number (as a string key) and
-   leaves the two track-wide ones (`raceControl`, `weather`) as flat arrays;
-4. returns the assembled `domain.RaceReplay` - no pagination, no streaming.
+1. the controller validates `sessionId` against `championship-service` (Example 2's
+   pattern) and the optional `driverNumber`, `fromUtc`, `toUtc`;
+2. a replay slot is taken (at most `REPLAY_MAX_CONCURRENT` at once, `503` beyond);
+3. without a time window, a complete cached archive (`RaceArchive` and its
+   `RaceDatasetChunk` rows) is served chunk by chunk when one exists;
+4. otherwise `race_stream.repository.go` is read **one driver at a time** for each of
+   the six driver-scoped datasets (`telemetry`, `position`, `radio`, `pitStop`,
+   `stint`, `lap`), then the two track-wide ones (`raceControl`, `weather`), each
+   sorted by timestamp. Telemetry samples carry no lap number nor position:
+   `x`/`y`/`z` come from the driver's nearest `RaceLocationSample` and `lapNumber`
+   from the `RaceLap` that started last, both resolved with a forward-only pointer
+   over the already-sorted rows. `stint` has no timestamp column, so each stint is
+   anchored to the start time of its `lapStart` lap;
+5. each part is written to the response as soon as it is read
+   (`replay_json_writer.go`), driver keys in the order a JSON map encoder gives them,
+   and a full dump is recorded into the cache at the same time. An ingestion into the
+   session deletes its archives, so the cache is never stale.
+
+A failure after the first byte aborts the connection rather than ending a truncated
+object.
 
 It is a **replay** of already-ingested historical samples, not a live feed. See
 `services/race-data-service/doc/endpoint.md` for the full response shape. The
-gateway still forwards `Flush()` through its logging middleware
-(`statusRecorder.Flush()`, covered by `flush_passthrough_test.go`), so a streaming
-endpoint would work through it if one is added.
+gateway forwards `Flush()` and exposes `Unwrap()` through its logging middleware
+(`statusRecorder`), so the streamed body and the route's longer write deadline pass
+through it.
 
 ## Example 6 - per-user data: `POST /v1/presets`
 

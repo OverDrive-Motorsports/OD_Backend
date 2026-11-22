@@ -9,9 +9,16 @@
 
 package httpadapter
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 const manualIngestionBodyLimitBytes int64 = 1 << 20
+
+// manualIngestionWriteTimeout lets a full-session ingestion (paced OpenF1 calls, one dispatch
+// per driver for the heavy resources) answer after the server WriteTimeout.
+const manualIngestionWriteTimeout = 30 * time.Minute
 
 // withSecurityHeaders applies baseline HTTP hardening headers to every response.
 func withSecurityHeaders(next http.Handler) http.Handler {

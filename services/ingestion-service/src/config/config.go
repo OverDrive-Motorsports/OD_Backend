@@ -20,10 +20,14 @@ import (
 
 type Config struct {
 	bootstrap.Config
-	OpenF1BaseURL          string
-	OpenF1Timeout          time.Duration
-	OpenF1RetryCount       int
-	OpenF1RetryDelay       time.Duration
+	OpenF1BaseURL    string
+	OpenF1Timeout    time.Duration
+	OpenF1RetryCount int
+	OpenF1RetryDelay time.Duration
+	// OpenF1MinInterval is the minimum time between two OpenF1 requests.
+	OpenF1MinInterval time.Duration
+	// OpenF1MaxResponseBytes bounds one OpenF1 response.
+	OpenF1MaxResponseBytes int64
 	DispatchTimeout        time.Duration
 	RaceDataServiceURL     string
 	ChampionshipServiceURL string
@@ -68,12 +72,17 @@ func Load() (Config, error) {
 		OpenF1Timeout:          getDuration("OPENF1_TIMEOUT", 10*time.Second),
 		OpenF1RetryCount:       getInt("OPENF1_RETRY_COUNT", 2),
 		OpenF1RetryDelay:       getDuration("OPENF1_RETRY_DELAY", 800*time.Millisecond),
+		OpenF1MinInterval:      getDuration("OPENF1_MIN_REQUEST_INTERVAL", 350*time.Millisecond),
+		OpenF1MaxResponseBytes: int64(getInt("OPENF1_MAX_RESPONSE_BYTES", int(defaultOpenF1MaxResponseBytes))),
 		DispatchTimeout:        getDuration("DISPATCH_TIMEOUT", 10*time.Minute),
 		RaceDataServiceURL:     raceDataServiceURL,
 		ChampionshipServiceURL: championshipServiceURL,
 		InternalIngestionToken: internalToken,
 	}, nil
 }
+
+// defaultOpenF1MaxResponseBytes bounds one OpenF1 response (one driver's car_data is a few MB).
+const defaultOpenF1MaxResponseBytes int64 = 128 << 20
 
 // getEnv returns an environment value or the provided fallback.
 func getEnv(key string, fallback string) string {

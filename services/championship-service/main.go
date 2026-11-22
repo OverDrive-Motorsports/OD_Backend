@@ -10,38 +10,48 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	"log"
-	"net/http"
 	"os"
 	db "overdrive/services/championship-service/resources/db"
 	httpadapter "overdrive/services/championship-service/src/adapters/http"
 	prismaadapter "overdrive/services/championship-service/src/adapters/repository/prisma"
 	"overdrive/services/championship-service/src/core/usecases"
 	"overdrive/shared/bootstrap"
-	"time"
 )
 
-// main bootstraps the service process, wires dependencies, and starts the HTTP server.
+// main runs the service and exits non-zero when it fails to start or to stop cleanly.
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run wires the dependencies and serves until SIGINT/SIGTERM. Returning instead of calling
+// log.Fatal lets the deferred cleanup (database disconnect) run on every exit path.
+func run() error {
 	cfg, err := bootstrap.LoadConfig(
 		"championship-service",
 		"Championship metadata, seasons, and calendar service.",
 	)
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+	shutdownTimeout, err := bootstrap.ShutdownTimeout()
+	if err != nil {
+		return err
 	}
 
 	// INTERNAL_INGESTION_TOKEN protects POST /internal/ingestion/batches: only ingestion-service
 	// knows it. Refusing to start without it keeps the write endpoint from ever being open.
 	internalToken := os.Getenv("INTERNAL_INGESTION_TOKEN")
 	if err := httpadapter.ValidateInternalToken(internalToken); err != nil {
-		log.Fatalf("INTERNAL_INGESTION_TOKEN: %v (generate one with: openssl rand -hex 32)", err)
+		return fmt.Errorf("INTERNAL_INGESTION_TOKEN: %w (generate one with: openssl rand -hex 32)", err)
 	}
 
 	client := db.NewClient()
 	if err := client.Prisma.Connect(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer func() {
 		if err := client.Prisma.Disconnect(); err != nil {
@@ -58,15 +68,13 @@ func main() {
 	catalogUsecase := usecases.NewCatalogQueryUseCase(catalogRepository)
 	catalogController := httpadapter.NewCatalogController(catalogUsecase)
 
-	server := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
-		Handler:           httpadapter.NewRouter(healthController, ingestionController, catalogController, internalToken),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	server := bootstrap.NewServer(":"+cfg.HTTPPort, httpadapter.NewRouter(healthController, ingestionController, catalogController, internalToken), bootstrap.DefaultServerLimits())
 
 	log.Printf("%s listening on :%s", cfg.ServiceName, cfg.HTTPPort)
 
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := bootstrap.Serve(server, shutdownTimeout); err != nil {
+		return err
 	}
+	log.Printf("%s stopped", cfg.ServiceName)
+	return nil
 }

@@ -9,7 +9,10 @@
 
 package domain
 
-import "net/url"
+import (
+	"net/url"
+	"time"
+)
 
 // RouteAccess says who may call a proxied route. The zero value is not a policy: a route
 // without an explicit access level is refused when the router is built (fail closed).
@@ -33,4 +36,17 @@ type Route struct {
 	UpstreamPrefix string
 	Targets        []*url.URL
 	Access         RouteAccess
+	// SlowWrite lets some responses of this prefix outlive the server WriteTimeout. The zero
+	// value keeps the server default.
+	SlowWrite SlowWrite
+}
+
+// SlowWrite extends the write deadline of the responses that legitimately take long (an
+// ingestion run, the replay dump) without loosening it for every other route.
+type SlowWrite struct {
+	// PathSuffix limits the extension to request paths ending with it; empty means every path
+	// under the route prefix.
+	PathSuffix string
+	// Timeout is the write deadline, counted from the start of the request.
+	Timeout time.Duration
 }

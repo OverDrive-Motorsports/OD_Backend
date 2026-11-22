@@ -29,17 +29,17 @@ type fakeTelemetryRepository struct {
 	lastLapArg *int
 }
 
-func (f *fakeTelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
+func (f *fakeTelemetryRepository) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetrySpeed, error) {
 	f.lastLapArg = lapNumber
 	return f.speed, f.err
 }
 
-func (f *fakeTelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
+func (f *fakeTelemetryRepository) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryEngine, error) {
 	f.lastLapArg = lapNumber
 	return f.engine, f.err
 }
 
-func (f *fakeTelemetryRepository) ListLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryLocation, error) {
+func (f *fakeTelemetryRepository) ListLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryLocation, error) {
 	f.lastLapArg = lapNumber
 	return f.location, f.err
 }
@@ -85,7 +85,7 @@ func TestTelemetryUseCase_GetSpeed_NormalCase(t *testing.T) {
 	repo := &fakeTelemetryRepository{speed: []domain.TelemetrySpeed{{Speed: 300, Gear: 8}, {Speed: 310, Gear: 8}}}
 	uc := NewTelemetryUseCase(repo, &fakeChampionshipClientForTelemetry{})
 
-	got, err := uc.GetSpeed(context.Background(), "s1", 44, nil)
+	got, _, err := uc.GetSpeed(context.Background(), "s1", 44, nil, domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestTelemetryUseCase_GetEngine_LapFilterForwarded(t *testing.T) {
 	uc := NewTelemetryUseCase(repo, &fakeChampionshipClientForTelemetry{})
 
 	lap := 3
-	got, err := uc.GetEngine(context.Background(), "s1", 44, &lap)
+	got, _, err := uc.GetEngine(context.Background(), "s1", 44, &lap, domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestTelemetryUseCase_GetLocation_EmptyForUnknownDriver(t *testing.T) {
 	repo := &fakeTelemetryRepository{location: []domain.TelemetryLocation{}}
 	uc := NewTelemetryUseCase(repo, &fakeChampionshipClientForTelemetry{})
 
-	got, err := uc.GetLocation(context.Background(), "s1", 999, nil)
+	got, _, err := uc.GetLocation(context.Background(), "s1", 999, nil, domain.DefaultPage())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,7 +151,23 @@ func TestTelemetryUseCase_RepositoryErrorPropagates(t *testing.T) {
 	boom := errors.New("db unavailable")
 	uc := NewTelemetryUseCase(&fakeTelemetryRepository{err: boom}, &fakeChampionshipClientForTelemetry{})
 
-	if _, err := uc.GetSpeed(context.Background(), "s1", 44, nil); !errors.Is(err, boom) {
+	if _, _, err := uc.GetSpeed(context.Background(), "s1", 44, nil, domain.DefaultPage()); !errors.Is(err, boom) {
 		t.Fatalf("expected the repository error to propagate, got %v", err)
+	}
+}
+
+// TestTelemetryUseCase_TrimsToPage proves the usecase cuts the extra row read by the repository
+// and returns the next offset, and returns no offset on the last page.
+func TestTelemetryUseCase_TrimsToPage(t *testing.T) {
+	repo := &fakeTelemetryRepository{speed: []domain.TelemetrySpeed{{Speed: 1}, {Speed: 2}, {Speed: 3}}}
+	uc := NewTelemetryUseCase(repo, &fakeChampionshipClientForTelemetry{})
+
+	got, next, err := uc.GetSpeed(context.Background(), "s1", 44, nil, domain.Page{Offset: 4, Limit: 2})
+	if err != nil || len(got) != 2 || next == nil || *next != 6 {
+		t.Fatalf("got %v next=%v err=%v, want 2 rows and next 6", got, next, err)
+	}
+	got, next, err = uc.GetSpeed(context.Background(), "s1", 44, nil, domain.Page{Limit: 3})
+	if err != nil || len(got) != 3 || next != nil {
+		t.Fatalf("last page: got %v next=%v err=%v", got, next, err)
 	}
 }

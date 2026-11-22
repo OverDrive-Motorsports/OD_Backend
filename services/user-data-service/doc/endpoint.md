@@ -73,6 +73,7 @@ The caller's presets, newest first. `[]` when none.
 
 - `201`, the created preset
 - `400` `VALIDATION_ERROR`, invalid body or rule violation (message names the field)
+- `413` `PAYLOAD_TOO_LARGE`, body over the route limit (a little above the 256 KiB of `data`)
 - `409` `PRESET_CONFLICT`, the user already owns 20 presets
 
 ### `GET /presets/{presetId}`
@@ -90,6 +91,7 @@ Partial update; at least one field. An absent field (or `"data": null`) is left 
 
 - `200`, the updated preset
 - `400` `VALIDATION_ERROR`, empty update, invalid body or rule violation
+- `413` `PAYLOAD_TOO_LARGE`, body over the route limit
 - `404` `PRESET_NOT_FOUND`
 
 `isDefault: false` on the default preset leaves the user without a default.

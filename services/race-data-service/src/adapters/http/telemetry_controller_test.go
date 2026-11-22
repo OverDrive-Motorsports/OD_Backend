@@ -32,19 +32,25 @@ type fakeTelemetryUseCase struct {
 	locationErr  error
 	intervals    *domain.TelemetryIntervals
 	intervalsErr error
+
+	next    *int
+	gotPage domain.Page
 }
 
 func (f *fakeTelemetryUseCase) SessionExists(ctx context.Context, sessionID string) (bool, error) {
 	return f.sessionExists, f.sessionExistsErr
 }
-func (f *fakeTelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetrySpeed, error) {
-	return f.speed, f.speedErr
+func (f *fakeTelemetryUseCase) GetSpeed(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetrySpeed, *int, error) {
+	f.gotPage = page
+	return f.speed, f.next, f.speedErr
 }
-func (f *fakeTelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryEngine, error) {
-	return f.engine, f.engineErr
+func (f *fakeTelemetryUseCase) GetEngine(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryEngine, *int, error) {
+	f.gotPage = page
+	return f.engine, f.next, f.engineErr
 }
-func (f *fakeTelemetryUseCase) GetLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int) ([]domain.TelemetryLocation, error) {
-	return f.location, f.locationErr
+func (f *fakeTelemetryUseCase) GetLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber *int, page domain.Page) ([]domain.TelemetryLocation, *int, error) {
+	f.gotPage = page
+	return f.location, f.next, f.locationErr
 }
 func (f *fakeTelemetryUseCase) GetIntervals(ctx context.Context, sessionID string, driverNumber int) (*domain.TelemetryIntervals, error) {
 	return f.intervals, f.intervalsErr
@@ -176,4 +182,38 @@ func TestTelemetryController_GetIntervals_ShapeAndNotFound(t *testing.T) {
 			t.Fatalf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
 		}
 	})
+}
+
+// TestTelemetryController_Pagination proves limit and offset reach the usecase, the default is
+// the maximum page, a further page is announced in X-Next-Offset, and an invalid limit or offset
+// is a 400 before the usecase.
+func TestTelemetryController_Pagination(t *testing.T) {
+	next := 100
+	usecase := &fakeTelemetryUseCase{sessionExists: true, speed: []domain.TelemetrySpeed{{Speed: 300}}, next: &next}
+	c := NewTelemetryController(usecase)
+
+	rec := httptest.NewRecorder()
+	c.GetSpeed(rec, newTelemetryRequest("/sessions/s1/drivers/44/telemetry/speed?limit=50&offset=50", "s1", "44"))
+	if rec.Code != http.StatusOK || usecase.gotPage != (domain.Page{Offset: 50, Limit: 50}) {
+		t.Fatalf("status %d, page %+v", rec.Code, usecase.gotPage)
+	}
+	if rec.Header().Get(NextOffsetHeader) != "100" {
+		t.Fatalf("X-Next-Offset = %q, want 100", rec.Header().Get(NextOffsetHeader))
+	}
+
+	usecase.next = nil
+	rec = httptest.NewRecorder()
+	c.GetLocation(rec, newTelemetryRequest("/sessions/s1/drivers/44/telemetry/location", "s1", "44"))
+	if usecase.gotPage != domain.DefaultPage() || rec.Header().Get(NextOffsetHeader) != "" {
+		t.Fatalf("default page %+v, header %q", usecase.gotPage, rec.Header().Get(NextOffsetHeader))
+	}
+
+	for _, query := range []string{"?limit=0", "?limit=50001", "?limit=abc", "?offset=-1", "?offset=x"} {
+		usecase.gotPage = domain.Page{}
+		rec = httptest.NewRecorder()
+		c.GetEngine(rec, newTelemetryRequest("/sessions/s1/drivers/44/telemetry/engine"+query, "s1", "44"))
+		if rec.Code != http.StatusBadRequest || usecase.gotPage != (domain.Page{}) {
+			t.Fatalf("%s: status %d, usecase page %+v; want 400 before the usecase", query, rec.Code, usecase.gotPage)
+		}
+	}
 }

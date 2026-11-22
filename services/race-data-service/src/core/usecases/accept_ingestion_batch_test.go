@@ -45,8 +45,8 @@ func (f *fakeAcceptBatchBroadcaster) Publish(sessionID string, events []domain.R
 	f.publishedEvents = events
 }
 
-func (f *fakeAcceptBatchBroadcaster) Wait(ctx context.Context, sessionID string, timeout time.Duration) []domain.RaceControlEvent {
-	return nil
+func (f *fakeAcceptBatchBroadcaster) Wait(ctx context.Context, sessionID string, timeout time.Duration) ([]domain.RaceControlEvent, error) {
+	return nil, nil
 }
 
 func validBatch(datasetName string, rows []map[string]any) contracts.Batch {
@@ -65,7 +65,7 @@ func validBatch(datasetName string, rows []map[string]any) contracts.Batch {
 func TestAcceptIngestionBatchUseCase_Execute_ValidatesInput(t *testing.T) {
 	t.Run("missing batch_id", func(t *testing.T) {
 		repo := &fakeRaceDataIngestionRepository{}
-		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil)
+		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil)
 		batch := validBatch("laps", nil)
 		batch.BatchID = ""
 		if _, err := uc.Execute(context.Background(), batch); err == nil {
@@ -78,7 +78,7 @@ func TestAcceptIngestionBatchUseCase_Execute_ValidatesInput(t *testing.T) {
 
 	t.Run("no datasets", func(t *testing.T) {
 		repo := &fakeRaceDataIngestionRepository{}
-		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil)
+		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil)
 		batch := validBatch("laps", nil)
 		batch.Datasets = nil
 		if _, err := uc.Execute(context.Background(), batch); err == nil {
@@ -91,7 +91,7 @@ func TestAcceptIngestionBatchUseCase_Execute_ValidatesInput(t *testing.T) {
 
 	t.Run("wrong target service", func(t *testing.T) {
 		repo := &fakeRaceDataIngestionRepository{}
-		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil)
+		uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil)
 		batch := validBatch("laps", nil)
 		batch.Datasets[0].TargetService = "championship-service"
 		if _, err := uc.Execute(context.Background(), batch); err == nil {
@@ -109,7 +109,7 @@ func TestAcceptIngestionBatchUseCase_Execute_RepositoryFailurePropagates(t *test
 	boom := errors.New("db unavailable")
 	repo := &fakeRaceDataIngestionRepository{err: boom}
 	broadcaster := &fakeAcceptBatchBroadcaster{}
-	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster)
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster, nil)
 
 	_, err := uc.Execute(context.Background(), validBatch("laps", nil))
 	if !errors.Is(err, boom) {
@@ -124,7 +124,7 @@ func TestAcceptIngestionBatchUseCase_Execute_RepositoryFailurePropagates(t *test
 // a well-formed acknowledgement with dataset/row counts summed from the batch.
 func TestAcceptIngestionBatchUseCase_Execute_NormalCase(t *testing.T) {
 	repo := &fakeRaceDataIngestionRepository{}
-	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil)
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil)
 
 	ack, err := uc.Execute(context.Background(), validBatch("laps", []map[string]any{{"lap_number": 1}, {"lap_number": 2}}))
 	if err != nil {
@@ -145,7 +145,7 @@ func TestAcceptIngestionBatchUseCase_Execute_NormalCase(t *testing.T) {
 func TestAcceptIngestionBatchUseCase_Execute_PublishesRaceControlEvents(t *testing.T) {
 	repo := &fakeRaceDataIngestionRepository{}
 	broadcaster := &fakeAcceptBatchBroadcaster{}
-	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster)
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster, nil)
 
 	batch := validBatch("race_control", []map[string]any{
 		{"category": "Flag", "flag": "YELLOW", "message": "yellow flag sector 1", "lap_number": 12, "date_utc": "2026-03-08T15:00:00Z", "scope": "Track"},
@@ -172,7 +172,7 @@ func TestAcceptIngestionBatchUseCase_Execute_PublishesRaceControlEvents(t *testi
 func TestAcceptIngestionBatchUseCase_Execute_NonRaceControlDatasetDoesNotPublish(t *testing.T) {
 	repo := &fakeRaceDataIngestionRepository{}
 	broadcaster := &fakeAcceptBatchBroadcaster{}
-	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster)
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster, nil)
 
 	_, err := uc.Execute(context.Background(), validBatch("laps", []map[string]any{{"lap_number": 1}}))
 	if err != nil {
@@ -188,7 +188,7 @@ func TestAcceptIngestionBatchUseCase_Execute_NonRaceControlDatasetDoesNotPublish
 // race_control batch.
 func TestAcceptIngestionBatchUseCase_Execute_NilBroadcasterIsSkipped(t *testing.T) {
 	repo := &fakeRaceDataIngestionRepository{}
-	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil)
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil)
 
 	_, err := uc.Execute(context.Background(), validBatch("race_control", []map[string]any{{"message": "flag"}}))
 	if err != nil {
@@ -304,4 +304,91 @@ func TestParseTimeAny(t *testing.T) {
 	if _, ok := parseTimeAny("not-a-time"); ok {
 		t.Fatal("expected ok=false for an unparsable string")
 	}
+}
+
+// fakeReplayInvalidator records the sessions whose replay cache was dropped.
+type fakeReplayInvalidator struct {
+	sessions []string
+	err      error
+}
+
+func (f *fakeReplayInvalidator) Invalidate(ctx context.Context, sessionID string) error {
+	f.sessions = append(f.sessions, sessionID)
+	return f.err
+}
+
+// TestAcceptIngestionBatch_InvalidatesReplayCache proves a stored batch drops the cached
+// replays of its session (identified like every other session ID), so the next replay is rebuilt
+// from the new samples.
+func TestAcceptIngestionBatch_InvalidatesReplayCache(t *testing.T) {
+	cache := &fakeReplayInvalidator{}
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", &fakeRaceDataIngestionRepository{}, nil, cache)
+	batch := validBatch("laps", nil)
+
+	if _, err := uc.Execute(context.Background(), batch); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	want := contracts.SessionID(batch.Provider, batch.Context.SessionKey)
+	if len(cache.sessions) != 1 || cache.sessions[0] != want {
+		t.Fatalf("invalidated %v, want [%s]", cache.sessions, want)
+	}
+}
+
+// TestAcceptIngestionBatch_InvalidationFailureFailsBatch proves a failed invalidation is returned
+// as ErrReplayCacheInvalidation (the caller retries) instead of leaving a stale replay.
+func TestAcceptIngestionBatch_InvalidationFailureFailsBatch(t *testing.T) {
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", &fakeRaceDataIngestionRepository{}, nil, &fakeReplayInvalidator{err: errors.New("db down")})
+
+	if _, err := uc.Execute(context.Background(), validBatch("laps", nil)); !errors.Is(err, domain.ErrReplayCacheInvalidation) {
+		t.Fatalf("err = %v, want ErrReplayCacheInvalidation", err)
+	}
+}
+
+// TestAcceptIngestionBatch_FailedStoreStillInvalidates proves a batch whose storage fails part
+// way (rows already deleted) still drops the cached replays, and returns the storage error.
+func TestAcceptIngestionBatch_FailedStoreStillInvalidates(t *testing.T) {
+	cache := &fakeReplayInvalidator{}
+	storeErr := errors.New("insert failed")
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", &fakeRaceDataIngestionRepository{err: storeErr}, nil, cache)
+
+	_, err := uc.Execute(context.Background(), validBatch("laps", nil))
+	if !errors.Is(err, storeErr) {
+		t.Fatalf("err = %v, want the storage error", err)
+	}
+	if len(cache.sessions) != 1 {
+		t.Fatalf("invalidated %v after a failed store, want the session", cache.sessions)
+	}
+}
+
+// TestAcceptIngestionBatch_InvalidatesAfterCancel proves the invalidation still runs when the
+// caller's context is cancelled right after the store (dispatcher timeout).
+func TestAcceptIngestionBatch_InvalidatesAfterCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cache := &ctxCheckingInvalidator{}
+	repo := &cancellingRepository{cancel: cancel}
+	uc := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, cache)
+
+	if _, err := uc.Execute(ctx, validBatch("laps", nil)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if cache.ctxErr != nil {
+		t.Fatalf("invalidation ran with a cancelled context: %v", cache.ctxErr)
+	}
+}
+
+// cancellingRepository stores nothing and cancels the request context, as a caller timing out
+// right after the store would.
+type cancellingRepository struct{ cancel context.CancelFunc }
+
+func (r *cancellingRepository) StoreBatch(ctx context.Context, batch contracts.Batch) error {
+	r.cancel()
+	return nil
+}
+
+// ctxCheckingInvalidator records the context state seen by Invalidate.
+type ctxCheckingInvalidator struct{ ctxErr error }
+
+func (c *ctxCheckingInvalidator) Invalidate(ctx context.Context, sessionID string) error {
+	c.ctxErr = ctx.Err()
+	return nil
 }

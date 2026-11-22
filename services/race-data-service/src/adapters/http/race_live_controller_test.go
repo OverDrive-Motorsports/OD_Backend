@@ -13,8 +13,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,7 +204,8 @@ func TestRaceLiveController_ArrayEndpoints_PassThroughAndErrorMapping(t *testing
 }
 
 // TestRaceLiveController_PostRaceControl proves the long-poll handler substitutes an empty JSON
-// array (never null) when WaitForRaceControl returns a nil slice, and maps a failure to 500.
+// array (never null) when WaitForRaceControl returns a nil slice, maps a full long poll or a
+// shutdown to 503 and any other failure to 500.
 func TestRaceLiveController_PostRaceControl(t *testing.T) {
 	t.Run("nil events become an empty array, not null", func(t *testing.T) {
 		c := NewRaceLiveController(&fakeRaceLiveUseCase{sessionExists: true, waitEvents: nil})
@@ -213,6 +216,27 @@ func TestRaceLiveController_PostRaceControl(t *testing.T) {
 		}
 		if rec.Body.String() != "[]\n" {
 			t.Fatalf("expected a bare empty array body, got %q", rec.Body.String())
+		}
+	})
+
+	t.Run("waiter cap reached -> 503 with Retry-After", func(t *testing.T) {
+		c := NewRaceLiveController(&fakeRaceLiveUseCase{sessionExists: true, waitErr: fmt.Errorf("wait: %w", domain.ErrRaceControlBusy)})
+		req, rec := newRaceLiveRequest(t, "s1")
+		c.PostRaceControl(rec, req)
+		if rec.Code != http.StatusServiceUnavailable || rec.Header().Get("Retry-After") == "" {
+			t.Fatalf("status = %d Retry-After=%q, want 503 with Retry-After (body: %s)", rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "SERVICE_UNAVAILABLE") {
+			t.Fatalf("body = %s, want SERVICE_UNAVAILABLE", rec.Body.String())
+		}
+	})
+
+	t.Run("shutting down -> 503", func(t *testing.T) {
+		c := NewRaceLiveController(&fakeRaceLiveUseCase{sessionExists: true, waitErr: domain.ErrShuttingDown})
+		req, rec := newRaceLiveRequest(t, "s1")
+		c.PostRaceControl(rec, req)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("status = %d, want 503", rec.Code)
 		}
 	})
 
