@@ -33,6 +33,11 @@ func Build(cfg config.Config) (Runtime, error) {
 	tokenValidator := auth.NewJWTValidator(jwtSecret)
 	healthUseCase := usecases.NewCheckHealthUseCase()
 	authorizeUseCase := usecases.NewAuthorizeRequestUseCase(tokenValidator)
+	userTokenValidator, err := auth.NewUserTokenValidator(cfg.UserJWTSecret)
+	if err != nil {
+		return Runtime{}, err
+	}
+	userAuthorizeUseCase := usecases.NewAuthorizeUserRequestUseCase(userTokenValidator)
 
 	handler, err := httpinbound.NewHandler(
 		cfg.Routes,
@@ -41,6 +46,7 @@ func Build(cfg config.Config) (Runtime, error) {
 		cfg.RateLimitBurst,
 		healthUseCase,
 		authorizeUseCase,
+		userAuthorizeUseCase,
 	)
 	if err != nil {
 		return Runtime{}, err

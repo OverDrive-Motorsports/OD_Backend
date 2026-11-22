@@ -38,6 +38,25 @@ type fakeSessionRepository struct {
 
 	addedUser    *domain.User
 	refreshCalls int
+
+	// usersByOAuth is keyed by provider + ":" + subject.
+	usersByOAuth    map[string]*domain.User
+	addOAuthUserErr error
+	addedOAuthUser  *domain.User
+	addedOAuthLink  string
+}
+
+func (f *fakeSessionRepository) GetUserByOAuthAccount(ctx context.Context, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	return f.usersByOAuth[string(provider)+":"+subject], nil
+}
+
+func (f *fakeSessionRepository) AddOAuthUser(ctx context.Context, email string, username string, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	if f.addOAuthUserErr != nil {
+		return nil, f.addOAuthUserErr
+	}
+	f.addedOAuthUser = &domain.User{ID: "oauth-user", Email: email, DisplayName: username, UsesOAuth: true}
+	f.addedOAuthLink = string(provider) + ":" + subject
+	return f.addedOAuthUser, nil
 }
 
 func (f *fakeSessionRepository) GetUserSessions(ctx context.Context, userID string) ([]domain.AuthSession, error) {

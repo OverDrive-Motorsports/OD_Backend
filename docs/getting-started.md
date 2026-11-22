@@ -14,7 +14,7 @@ The backend is a set of small Go services plus a gateway that sits in front of t
 | --- | ---: | --- |
 | `gateway` | `3000` | Single public entrypoint. Everything a client (mobile/AR app, or you) talks to goes through here. |
 | `auth-service` | `3001` | Registration, login, refresh, and session records. |
-| `user-data-service` | `3002` | User presets/providers/widgets. Still scaffolding — health check only for now. |
+| `user-data-service` | `3002` | AR/VR layout presets of each user (`/presets`, user JWT required). |
 | `championship-service` | `3003` | Championship metadata: championships, events, sessions, drivers, teams, standings. |
 | `race-data-service` | `3004` | Live race data and telemetry: laps, positions, stints, pit stops, weather, radio, race control, speed/engine/location samples. |
 | `ingestion-service` | `3005` | Pulls raw data from the OpenF1 public API and pushes it into the two services above. |

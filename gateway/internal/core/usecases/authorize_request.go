@@ -24,3 +24,18 @@ func NewAuthorizeRequestUseCase(validator ports.TokenValidator) AuthorizeRequest
 func (u AuthorizeRequestUseCase) Execute(authHeader string) bool {
 	return u.validator.ValidateBearerHeader(authHeader)
 }
+
+// AuthorizeUserRequestUseCase authorises a request carrying an end-user access token and tells
+// why it is rejected (see ports.UserTokenValidator).
+type AuthorizeUserRequestUseCase struct {
+	validator ports.UserTokenValidator
+}
+
+func NewAuthorizeUserRequestUseCase(validator ports.UserTokenValidator) AuthorizeUserRequestUseCase {
+	return AuthorizeUserRequestUseCase{validator: validator}
+}
+
+// Execute returns nil when the header carries a valid user token, the rejection reason otherwise.
+func (u AuthorizeUserRequestUseCase) Execute(authHeader string) error {
+	return u.validator.ValidateUserBearerHeader(authHeader)
+}

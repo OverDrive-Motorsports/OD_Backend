@@ -33,6 +33,35 @@ type fakeAuthUseCase struct {
 
 	refreshResp *domain.RefreshResponse
 	refreshErr  error
+
+	oauthProviders     []domain.OAuthProviderInfo
+	oauthAuthorizeResp *domain.OAuthAuthorization
+	oauthLoginResp     *domain.LoginResponse
+	oauthRegisterResp  *domain.LoginResponse
+	oauthErr           error
+
+	gotProviderID string
+	gotCallback   domain.OAuthCallback
+	gotUsername   string
+}
+
+func (f *fakeAuthUseCase) ListOAuthProviders() []domain.OAuthProviderInfo {
+	return f.oauthProviders
+}
+
+func (f *fakeAuthUseCase) OAuthAuthorize(providerID string) (*domain.OAuthAuthorization, error) {
+	f.gotProviderID = providerID
+	return f.oauthAuthorizeResp, f.oauthErr
+}
+
+func (f *fakeAuthUseCase) OAuthLogin(ctx context.Context, providerID string, callback domain.OAuthCallback) (*domain.LoginResponse, error) {
+	f.gotProviderID, f.gotCallback = providerID, callback
+	return f.oauthLoginResp, f.oauthErr
+}
+
+func (f *fakeAuthUseCase) OAuthRegister(ctx context.Context, providerID string, callback domain.OAuthCallback, username string) (*domain.LoginResponse, error) {
+	f.gotProviderID, f.gotCallback, f.gotUsername = providerID, callback, username
+	return f.oauthRegisterResp, f.oauthErr
 }
 
 func (f *fakeAuthUseCase) Login(ctx context.Context, email string, password string) (*domain.LoginResponse, error) {

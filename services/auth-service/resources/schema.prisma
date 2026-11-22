@@ -23,11 +23,31 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique @db.VarChar(255)
   displayName  String   @db.VarChar(50)
-  passwordHash String
+  passwordHash String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  authSessions AuthSession[]
+  authSessions  AuthSession[]
+  oauthAccounts OAuthAccount[]
+}
+
+model OAuthAccount {
+  id              String       @id @default(uuid())
+  userID          String
+  provider        ProviderType
+  providerSubject String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  user User @relation(fields: [userID], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@index([userID])
+}
+
+enum ProviderType {
+  GOOGLE @map("Google")
+  F1TV   @map("F1TV")
 }
 
 model AuthSession {

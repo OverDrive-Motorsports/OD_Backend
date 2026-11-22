@@ -16,6 +16,7 @@ type User struct {
 	Email        string         `json:"email"`
 	DisplayName  string         `json:"displayName"`
 	PasswordHash string         `json:"passwordHash"`
+	UsesOAuth    bool           `json:"usesOAuth"`
 	CreatedAt    types.DateTime `json:"createdAt"`
 	UpdatedAt    types.DateTime `json:"updatedAt"`
 }

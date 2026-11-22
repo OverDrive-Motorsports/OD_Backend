@@ -56,6 +56,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	userJWTSecret, err := getRequiredEnv("AUTH_JWT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
+
 	rps, err := parsePositiveFloat("GATEWAY_RATE_LIMIT_RPS")
 	if err != nil {
 		return Config{}, err

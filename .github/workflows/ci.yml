@@ -30,6 +30,7 @@ jobs:
           - services/race-data-service
           - services/user-data-service
           - shared/apierror
+          - shared/authjwt
           - shared/bootstrap
           - shared/contracts
     steps:
@@ -42,7 +43,7 @@ jobs:
           cache-dependency-path: "**/go.sum"
 
       - name: Generate Prisma client
-        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service"]'), matrix.module)
+        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service", "services/user-data-service"]'), matrix.module)
         working-directory: ${{ matrix.module }}
         run: go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
 
@@ -90,6 +91,7 @@ jobs:
           - services/race-data-service
           - services/user-data-service
           - shared/apierror
+          - shared/authjwt
           - shared/bootstrap
           - shared/contracts
     steps:
@@ -102,7 +104,7 @@ jobs:
           cache-dependency-path: "**/go.sum"
 
       - name: Generate Prisma client
-        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service"]'), matrix.module)
+        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service", "services/user-data-service"]'), matrix.module)
         working-directory: ${{ matrix.module }}
         run: go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
 
@@ -140,6 +142,7 @@ jobs:
           - services/race-data-service
           - services/user-data-service
           - shared/apierror
+          - shared/authjwt
           - shared/bootstrap
           - shared/contracts
     steps:
@@ -152,7 +155,7 @@ jobs:
           cache-dependency-path: "**/go.sum"
 
       - name: Generate Prisma client
-        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service"]'), matrix.module)
+        if: contains(fromJSON('["services/auth-service", "services/championship-service", "services/race-data-service", "services/user-data-service"]'), matrix.module)
         working-directory: ${{ matrix.module }}
         run: go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
 

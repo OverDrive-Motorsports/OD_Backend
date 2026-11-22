@@ -67,6 +67,14 @@ func (f *recordingSessionRepository) GetUserByID(ctx context.Context, userID str
 	panic("not used by SessionQueryUseCase")
 }
 
+func (f *recordingSessionRepository) GetUserByOAuthAccount(ctx context.Context, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	panic("not used by SessionQueryUseCase")
+}
+
+func (f *recordingSessionRepository) AddOAuthUser(ctx context.Context, email string, username string, provider domain.OAuthProviderType, subject string) (*domain.User, error) {
+	panic("not used by SessionQueryUseCase")
+}
+
 func (f *recordingSessionRepository) AddUser(ctx context.Context, email string, passwordHash string, username string) (*domain.User, error) {
 	panic("not used by SessionQueryUseCase")
 }

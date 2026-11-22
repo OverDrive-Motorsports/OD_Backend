@@ -139,12 +139,14 @@ func TestMapAuthSessionMin_OmitsUserIDAndRefreshToken(t *testing.T) {
 func TestMapUser_CopiesAllFields(t *testing.T) {
 	createdAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	passwordHash := "hashed-password"
+
 	row := &db.UserModel{
 		InnerUser: db.InnerUser{
 			ID:           "user-1",
 			Email:        "user@example.com",
 			DisplayName:  "User One",
-			PasswordHash: "hashed-password",
+			PasswordHash: &passwordHash,
 			CreatedAt:    createdAt,
 			UpdatedAt:    updatedAt,
 		},

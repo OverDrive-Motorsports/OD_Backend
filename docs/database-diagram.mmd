@@ -3,28 +3,26 @@ flowchart TB
         AUTH_USER["User
 id
 email
-displayName"]
+displayName
+passwordHash"]
         AUTH_SESSION["AuthSession
-userId
+userID
 refreshTokenHash
 expiresAt"]
         AUTH_USER --> AUTH_SESSION
     end
 
     subgraph USER_DATA_DB["user-data-service database"]
-        UDS_CONNECTION["ProviderConnection
-userId
-providerId
-configJson"]
         UDS_PRESET["UserPreset
 id
 userId
-name"]
-        UDS_WIDGET["PresetWidget
-presetId
-type
-settings"]
-        UDS_PRESET --> UDS_WIDGET
+name
+isDefault
+data (JSON layout)"]
+        UDS_CONNECTION["ProviderConnection (unused)
+userId
+providerId
+configJson"]
     end
 
     subgraph CHAMPIONSHIP_DB["championship-service database"]
@@ -43,7 +41,9 @@ seasonYear"]
         CH_SESSION["Session
 id
 eventId
-type"]
+type
+status
+broadcastUrl"]
         CH_TEAM["Team
 id
 championshipId
@@ -78,22 +78,25 @@ RaceStint
 RacePitStop
 RaceControlEvent
 RaceWeatherSample"]
-        RD_MEDIA["Media and highlights
-RaceHighlight
+        RD_MEDIA["Media
 OvertakeEvent
 TeamRadioMessage
 SessionDriverBroadcast"]
-        RD_ARCHIVE["Archive
-RaceArchive
-RaceDatasetChunk"]
-        RD_ARCHIVE --> RD_TIMING
-        RD_ARCHIVE --> RD_FLOW
-        RD_ARCHIVE --> RD_MEDIA
+        RD_HIGHLIGHT["RaceHighlight (unused)"]
+        RD_ARCHIVE["RaceArchive (unused)"]
+        RD_CHUNK["RaceDatasetChunk (unused)"]
+        RD_ARCHIVE --> RD_CHUNK
     end
 
+    UDS_PRESET -. "userId" .-> AUTH_USER
     UDS_CONNECTION -. "userId" .-> AUTH_USER
     UDS_CONNECTION -. "providerId" .-> CH_PROVIDER
     RD_TIMING -. "sessionId" .-> CH_SESSION
     RD_FLOW -. "sessionId" .-> CH_SESSION
     RD_MEDIA -. "sessionId" .-> CH_SESSION
     RD_MEDIA -. "driverId / driverNumber" .-> CH_DRIVER
+    RD_HIGHLIGHT -. "sessionId" .-> CH_SESSION
+    RD_ARCHIVE -. "sessionId" .-> CH_SESSION
+
+    classDef unused stroke-dasharray: 5 5,opacity:0.6
+    class UDS_CONNECTION,RD_HIGHLIGHT,RD_ARCHIVE,RD_CHUNK unused

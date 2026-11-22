@@ -23,5 +23,7 @@ type SessionRepository interface {
 	GetUserByEmail(ctx context.Context, email string) (*domain.User, error)
 	GetUserByID(ctx context.Context, userID string) (*domain.User, error)
 	AddUser(ctx context.Context, email string, passwordHash string, username string) (*domain.User, error)
+	GetUserByOAuthAccount(ctx context.Context, provider domain.OAuthProviderType, subject string) (*domain.User, error)
+	AddOAuthUser(ctx context.Context, email string, username string, provider domain.OAuthProviderType, subject string) (*domain.User, error)
 	RefreshToken(ctx context.Context, sessionID string) (*domain.AuthSession, error)
 }

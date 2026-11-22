@@ -12,9 +12,11 @@
 package httpinbound
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"overdrive/gateway/internal/core/domain"
 	"overdrive/shared/apierror"
 )
 
@@ -38,5 +40,25 @@ func RequireAuthorization(authorize func(authHeader string) bool, next http.Hand
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireUserToken rejects any request without a valid end-user access token, with the 401
+// code matching the reason so the client knows what to do: UNAUTHORIZED (no bearer token),
+// TOKEN_EXPIRED (call /auth/refresh), INVALID_TOKEN (log in again). These are the same codes
+// the upstream service would answer, so the contract does not depend on which layer rejects.
+func RequireUserToken(authorize func(authHeader string) error, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := authorize(r.Header.Get("Authorization"))
+		switch {
+		case err == nil:
+			next.ServeHTTP(w, r)
+		case errors.Is(err, domain.ErrMissingUserToken):
+			apierror.Write(w, r.URL.Path, apierror.Unauthorized("missing bearer token", nil))
+		case errors.Is(err, domain.ErrUserTokenExpired):
+			apierror.Write(w, r.URL.Path, apierror.TokenExpired("token expired", nil))
+		default:
+			apierror.Write(w, r.URL.Path, apierror.InvalidToken("invalid token", nil))
+		}
 	})
 }
