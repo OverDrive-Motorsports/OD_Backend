@@ -216,7 +216,7 @@ modules (`gateway`, the five `services/*`, `shared/apierror`, `shared/authjwt`,
 | Check | What it runs |
 | --- | --- |
 | `lint` | `gofmt -l` must report nothing (excluding generated `resources/db`), then `go vet`, `staticcheck`, `gosec` (generated code excluded) and `govulncheck` on `./...` |
-| `test` | `go test ./... -race` |
+| `test` | `tools/coverage.sh <module>`: `go test ./... -race` with coverage, failing below the module's minimum in `tools/coverage-thresholds.txt`; plus the database integration tests of the four Prisma services against a `postgres:16` service container (`tools/integration-test.sh <service>`) |
 | `build` | `go build ./...` in the workspace, then again with `GOWORK=off`: each `go.mod` declares its real dependencies and the `replace` directives for `shared/*`, so a module builds on its own |
 
 An accepted analyzer finding carries an inline `//lint:ignore <check> <reason>` (staticcheck) or
@@ -238,6 +238,39 @@ Reproduce a check locally, e.g.:
 ```bash
 cd services/championship-service && gofmt -l . && go vet ./... && go test ./... -race && go build ./... && GOWORK=off go build ./...
 ```
+
+### Coverage gate
+
+`tools/coverage.sh` (no argument: every module) runs the unit tests with the race detector and
+prints each module's total coverage. Every package of the module counts (`-coverpkg`, so tests
+kept in another package, like `shared/apierror/test`, are measured); the generated
+`resources/db` clients are excluded. The job fails when a module is below its minimum in
+`tools/coverage-thresholds.txt`. A minimum is the module's coverage rounded down when it was
+set: raise it by hand when coverage goes up, and justify any decrease in the pull request.
+Totals differ between Go patch releases for the same code, so the script always measures with
+the toolchain named on the file's `toolchain` line (the go command downloads it if needed);
+bumping it means re-measuring every minimum in the same change.
+
+### Database integration tests
+
+The `TestIntegration*` tests of each Prisma repository package run against a real Postgres:
+preset limit and single default under concurrency (user-data), create-only event upsert on
+re-ingestion (championship), the replay catalog `EXISTS` query (race-data), refresh token
+rotation, session revocation, the OAuth sign-up transaction and concurrent registration
+(auth). Without `INTEGRATION_DATABASE_URL` they are skipped, so `go test ./...` needs no
+database. Run them locally with one command (Docker required):
+
+```bash
+tools/integration-test.sh            # the four services
+tools/integration-test.sh user-data  # one service
+```
+
+It starts a throwaway `postgres:16.16-alpine` container on a random localhost port, pushes each
+schema into its own `overdrive_<service>_test` database, runs the tests and removes the
+container; the Compose stack and its data are not touched. It fails when a test is skipped or
+none ran. In CI, `INTEGRATION_POSTGRES_URL` points the script at the job's Postgres service
+container instead (server only, no database name). The tests refuse a database whose name does
+not end with `_test`, checked again on the connection itself (`current_database()`).
 
 ## Security
 

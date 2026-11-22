@@ -333,8 +333,10 @@ func TestClient_PathSegmentsAreEscaped(t *testing.T) {
 
 // TestClient_GetSession_OversizedResponse proves a championship-service response larger than
 // maxResponseBytes fails with bootstrap.ErrResponseTooLarge instead of being decoded whole.
+// Streaming 32 MiB through the decoder takes seconds on a CI runner under -race and coverage,
+// so this test gets a generous client timeout: it checks the size limit, not the timeout.
 func TestClient_GetSession_OversizedResponse(t *testing.T) {
-	client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"sessionId":"s1","name":"`))
 		chunk := bytes.Repeat([]byte("a"), 1<<20)
@@ -344,7 +346,9 @@ func TestClient_GetSession_OversizedResponse(t *testing.T) {
 			}
 		}
 		_, _ = w.Write([]byte(`"}`))
-	})
+	}))
+	t.Cleanup(server.Close)
+	client := New(server.URL, time.Minute)
 
 	_, err := client.GetSession(context.Background(), "s1")
 	if !errors.Is(err, bootstrap.ErrResponseTooLarge) {

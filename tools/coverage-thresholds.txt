@@ -1,0 +1,22 @@
+# Minimum unit-test coverage per Go module, in percent, enforced by
+# tools/coverage.sh in the CI test job. Each value is the module's coverage
+# rounded down when it was set: new code must not lower it. Raise a value by
+# hand when a module's coverage goes up; lowering one needs a reason in the PR.
+#
+# Totals move between Go patch releases (same code: user-data 51.7% on
+# go1.27.0, 58.3% on go1.27.4), so they are always measured with the toolchain
+# below, which tools/coverage.sh selects itself. When it is bumped, re-measure
+# and update every minimum in the same change.
+toolchain                        go1.27.4
+#
+# module                         minimum
+gateway                          87
+services/auth-service            70
+services/championship-service    40
+services/ingestion-service       90
+services/race-data-service       52
+services/user-data-service       58
+shared/apierror                  76
+shared/authjwt                   97
+shared/bootstrap                 92
+shared/contracts                 100

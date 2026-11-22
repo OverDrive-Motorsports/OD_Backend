@@ -102,7 +102,9 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # test: unit tests per module, race detector enabled.
+  # test: unit tests per module, race detector enabled, with a minimum coverage
+  # per module (tools/coverage-thresholds.txt); plus the database integration
+  # tests of the Prisma repositories against a real Postgres.
   # ---------------------------------------------------------------------------
   test-module:
     name: test (${{ matrix.module }})
@@ -138,20 +140,67 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
 
-      - name: go test
-        working-directory: ${{ matrix.module }}
-        run: go test ./... -race
+      - name: go test with coverage gate
+        run: tools/coverage.sh ${{ matrix.module }}
+
+  integration-module:
+    name: integration (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - auth
+          - championship
+          - race-data
+          - user-data
+    services:
+      postgres:
+        # Same image as docker-compose.yml. Throwaway container: the password
+        # only protects a database that lives for this job.
+        image: postgres:16.16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+          cache-dependency-path: "**/go.sum"
+
+      - name: Generate Prisma client
+        working-directory: services/${{ matrix.service }}-service
+        run: go run github.com/steebchen/prisma-client-go generate --schema resources/schema.prisma
+
+      - name: Integration tests
+        env:
+          INTEGRATION_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432
+        run: tools/integration-test.sh ${{ matrix.service }}
 
   test:
     name: test
     runs-on: ubuntu-latest
-    needs: test-module
+    needs: [test-module, integration-module]
     if: always()
     steps:
-      - name: Check test matrix result
+      - name: Check test matrix results
         run: |
           if [ "${{ needs.test-module.result }}" != "success" ]; then
-            echo "::error::one or more modules failed tests"
+            echo "::error::one or more modules failed unit tests or their coverage minimum"
+            exit 1
+          fi
+          if [ "${{ needs.integration-module.result }}" != "success" ]; then
+            echo "::error::one or more services failed the database integration tests"
             exit 1
           fi
 
