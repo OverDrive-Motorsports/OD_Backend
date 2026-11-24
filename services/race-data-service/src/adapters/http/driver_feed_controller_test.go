@@ -237,6 +237,7 @@ func TestNewRouter_DriverBroadcastRoutes(t *testing.T) {
 		NewRaceLiveController(&fakeRaceLiveUseCase{}),
 		NewTelemetryController(&fakeTelemetryUseCase{}),
 		NewRaceReplayStreamController(&fakeRaceReplayUseCase{}),
+		NewReplayCatalogController(&fakeReplayCatalogUseCase{}),
 		NewDriverFeedController(usecase),
 	)
 
