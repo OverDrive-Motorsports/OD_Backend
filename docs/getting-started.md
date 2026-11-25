@@ -102,7 +102,7 @@ TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/login -H 'Content-Type: ap
   -d '{"email":"dev@example.com","password":"dev-password"}' | jq -r .token)
 ```
 
-Ingestion (`/v1/ingestion`) is reserved to administrators. From a script, use the
+Ingestion (`/v1/ingestion`) and video feed writes (`PUT .../broadcast`) are reserved to administrators. From a script, use the
 `GATEWAY_AUTH_TOKEN` value of the root `.env` (never put it in a client app):
 
 ```bash

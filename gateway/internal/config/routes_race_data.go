@@ -12,6 +12,7 @@
 package config
 
 import (
+	"net/http"
 	"net/url"
 	"time"
 
@@ -25,6 +26,8 @@ func raceDataServiceRoutes(targets upstreamTargets) serviceRoutes {
 				Prefix:  "/v1/race-data",
 				Targets: targets.raceData,
 				Access:  domain.AccessUser,
+				// Video feeds are shared by every user: only an operator writes them.
+				AdminMethods: []string{http.MethodPut},
 				// The replay dump is streamed and can take minutes on a slow client.
 				SlowWrite: domain.SlowWrite{PathSuffix: "/race/replay", Timeout: 10 * time.Minute},
 			},

@@ -136,6 +136,10 @@ func TestBuild_WiresAccessRules(t *testing.T) {
 		{"admin route with admin JWT", http.MethodPost, "/v1/ingestion/jobs", adminJWT, http.StatusOK, "POST /jobs"},
 		{"admin route with gateway token", http.MethodPost, "/v1/ingestion/jobs", testGatewayToken, http.StatusOK, "POST /jobs"},
 		{"admin route without token", http.MethodPost, "/v1/ingestion/jobs", "", http.StatusUnauthorized, ""},
+		{"session feeds with user JWT", http.MethodPut, "/v1/championship/sessions/s1/broadcast", userJWT, http.StatusForbidden, ""},
+		{"session feeds with admin JWT", http.MethodPut, "/v1/championship/sessions/s1/broadcast", adminJWT, http.StatusOK, "PUT /sessions/s1/broadcast"},
+		{"driver feeds with user JWT", http.MethodPut, "/v1/race-data/sessions/s1/drivers/44/broadcast", userJWT, http.StatusForbidden, ""},
+		{"driver feeds with gateway token", http.MethodPut, "/v1/race-data/sessions/s1/drivers/44/broadcast", testGatewayToken, http.StatusOK, "PUT /sessions/s1/drivers/44/broadcast"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

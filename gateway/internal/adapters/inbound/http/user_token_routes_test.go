@@ -178,7 +178,8 @@ func TestNewHandler_UserTokenRejectionCodes(t *testing.T) {
 }
 
 // TestNewHandler_RejectsInvalidRouteTables proves the router fails closed at build time on a
-// route without an access policy and on a prefix declared twice, instead of serving it open or
+// route without an access policy, on a prefix declared twice and on admin methods outside a user
+// route, instead of serving it open or
 // panicking inside ServeMux.
 func TestNewHandler_RejectsInvalidRouteTables(t *testing.T) {
 	upstreamURL, _ := url.Parse("http://127.0.0.1:1")
@@ -189,9 +190,87 @@ func TestNewHandler_RejectsInvalidRouteTables(t *testing.T) {
 			{Prefix: "/v1/race-data", Targets: targets, Access: domain.AccessUser},
 			{Prefix: "/v1/race-data/", Targets: targets, Access: domain.AccessPublic},
 		},
+		"admin methods on a public route": {
+			{Prefix: "/v1/race-data", Targets: targets, Access: domain.AccessPublic, AdminMethods: []string{http.MethodPut}},
+		},
 	} {
 		if _, err := newTestHandler(t, routes); err == nil {
 			t.Fatalf("%s: expected an error", name)
+		}
+	}
+}
+
+// TestNewHandler_AdminMethods proves a user route restricts its admin methods to administrators
+// on every path: a feed PUT needs an admin JWT or the gateway token (403 for a user JWT, and
+// the edge method gate is only reached by an administrator), an encoded slash does not dodge the
+// rule, reads stay open to any user JWT, and the gateway token still cannot read.
+func TestNewHandler_AdminMethods(t *testing.T) {
+	var gotMethod, gotPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	upstreamURL, _ := url.Parse(upstream.URL)
+	targets := []*url.URL{upstreamURL}
+
+	adminMethods := []string{http.MethodPut}
+	handler, err := newTestHandler(t, []domain.Route{
+		{Prefix: "/v1/championship", Targets: targets, Access: domain.AccessUser, AdminMethods: adminMethods},
+		{Prefix: "/v1/race-data", Targets: targets, Access: domain.AccessUser, AdminMethods: adminMethods},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userJWT := "Bearer " + signTestJWT(t, "user", time.Minute)
+	legacyJWT := "Bearer " + signTestJWT(t, "", time.Minute)
+	adminJWT := "Bearer " + signTestJWT(t, "admin", time.Minute)
+	expiredAdminJWT := "Bearer " + signTestJWT(t, "admin", -time.Minute)
+	static := "Bearer " + gatewayTestToken
+
+	const driverPath, sessionPath = "/sessions/s1/drivers/44/broadcast", "/sessions/s1/broadcast"
+	for _, prefix := range []string{"/v1/championship", "/v1/race-data"} {
+		feedPath := sessionPath
+		if prefix == "/v1/race-data" {
+			feedPath = driverPath
+		}
+		cases := []struct {
+			name, method, path, authorization string
+			want                              int
+			code                              string
+		}{
+			{"PUT without token", http.MethodPut, feedPath, "", http.StatusUnauthorized, "UNAUTHORIZED"},
+			{"PUT with user JWT", http.MethodPut, feedPath, userJWT, http.StatusForbidden, "FORBIDDEN"},
+			{"PUT with role-less JWT", http.MethodPut, feedPath, legacyJWT, http.StatusForbidden, "FORBIDDEN"},
+			{"PUT with expired admin JWT", http.MethodPut, feedPath, expiredAdminJWT, http.StatusUnauthorized, "TOKEN_EXPIRED"},
+			{"PUT with wrong token", http.MethodPut, feedPath, "Bearer wrong", http.StatusUnauthorized, "INVALID_TOKEN"},
+			{"PUT with encoded slash and user JWT", http.MethodPut, strings.Replace(feedPath, "/s1/", "%2Fs1/", 1), userJWT, http.StatusForbidden, "FORBIDDEN"},
+			{"PUT elsewhere with user JWT", http.MethodPut, "/sessions/s1", userJWT, http.StatusForbidden, "FORBIDDEN"},
+			{"PUT elsewhere with admin JWT", http.MethodPut, "/sessions/s1", adminJWT, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED"},
+			{"PUT with admin JWT", http.MethodPut, feedPath, adminJWT, http.StatusOK, ""},
+			{"PUT with gateway token", http.MethodPut, feedPath, static, http.StatusOK, ""},
+			{"GET with user JWT", http.MethodGet, feedPath, userJWT, http.StatusOK, ""},
+			{"GET with admin JWT", http.MethodGet, feedPath, adminJWT, http.StatusOK, ""},
+			{"GET with gateway token", http.MethodGet, feedPath, static, http.StatusUnauthorized, "INVALID_TOKEN"},
+			{"DELETE with user JWT", http.MethodDelete, feedPath, userJWT, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED"},
+		}
+		for _, tc := range cases {
+			gotMethod, gotPath = "", ""
+			req := httptest.NewRequest(tc.method, prefix+tc.path, nil)
+			if tc.authorization != "" {
+				req.Header.Set("Authorization", tc.authorization)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.want || !strings.Contains(rec.Body.String(), tc.code) {
+				t.Fatalf("%s %s: status = %d body=%s, want %d %s", prefix, tc.name, rec.Code, rec.Body.String(), tc.want, tc.code)
+			}
+			if tc.want == http.StatusOK && (gotMethod != tc.method || gotPath != tc.path) {
+				t.Fatalf("%s %s: upstream got %s %s, want %s %s", prefix, tc.name, gotMethod, gotPath, tc.method, tc.path)
+			}
+			if tc.want != http.StatusOK && gotPath != "" {
+				t.Fatalf("%s %s: upstream reached with %s %s", prefix, tc.name, gotMethod, gotPath)
+			}
 		}
 	}
 }

@@ -119,7 +119,7 @@ URLs). Upgrading a checkout that already has a database: see "Upgrading an exist
 | Variable | Used by | Notes |
 | --- | --- | --- |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`, every service's database URL | `POSTGRES_PASSWORD` must be set |
-| `GATEWAY_AUTH_TOKEN` | `gateway` | **required**, at least 32 bytes - bearer token for internal and scripted calls, accepted on `/v1/ingestion` only; never shipped in a client |
+| `GATEWAY_AUTH_TOKEN` | `gateway` | **required**, at least 32 bytes - bearer token for internal and scripted calls, accepted on the admin routes only (`/v1/ingestion` and the video feed `PUT` routes); never shipped in a client |
 | `GATEWAY_RATE_LIMIT_RPS` / `GATEWAY_RATE_LIMIT_BURST` | `gateway` | rate limiter tuning |
 | `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
 | `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder - the three refuse to start otherwise |

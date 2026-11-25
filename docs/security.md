@@ -33,7 +33,8 @@ Access model at the gateway (`gateway/ROUTES.md`):
 - **User**: `/v1/championship`, `/v1/race-data`, `/v1/presets` and the rest of `/v1/auth` (the
   session routes) require a
   valid access token of any role. The gateway token is refused there.
-- **Admin**: `/v1/ingestion` requires an access token with the `admin` role (`403` for a
+- **Admin**: `/v1/ingestion`, and every `PUT` on `/v1/championship` and `/v1/race-data` (video
+  feeds, shared by every user), require an access token with the `admin` role (`403` for a
   `user` token), or the gateway token.
 - `user-data-service` and the auth-service session routes re-verify the token and take the
   user ID **only** from `sub`; no route accepts a user ID from the client. Another user's preset

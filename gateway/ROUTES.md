@@ -10,8 +10,8 @@ Every proxied prefix has an access level (`gateway/internal/config/routes_*.go`)
 | Access | Prefixes | Expected `Authorization` |
 | --- | --- | --- |
 | Public | `/v1/auth/login`, `/v1/auth/register`, `/v1/auth/refresh`, `/v1/auth/oauth/...` (and the same under `/auth`) | none |
-| User | the rest of `/v1/auth` (the session routes) and of `/auth`, `/v1/presets` (and `/presets`), `/v1/championship`, `/v1/race-data` | `Bearer <access token>`, the JWT returned by login, register, OAuth or refresh, verified with `AUTH_JWT_SECRET`. Any role. The gateway token is **refused**. |
-| Admin | `/v1/ingestion` | `Bearer <access token>` whose `role` claim is `admin`, or `Bearer <GATEWAY_AUTH_TOKEN>` for internal and scripted calls |
+| User | the rest of `/v1/auth` (the session routes) and of `/auth`, `/v1/presets` (and `/presets`), `/v1/championship` and `/v1/race-data` (except `PUT`) | `Bearer <access token>`, the JWT returned by login, register, OAuth or refresh, verified with `AUTH_JWT_SECRET`. Any role. The gateway token is **refused**. |
+| Admin | `/v1/ingestion`, and every `PUT` on `/v1/championship` and `/v1/race-data` (video feed writes) | `Bearer <access token>` whose `role` claim is `admin`, or `Bearer <GATEWAY_AUTH_TOKEN>` for internal and scripted calls |
 
 Rejections carry the code that tells the client what to do, the same codes the services answer
 themselves:
@@ -320,13 +320,12 @@ The gateway gates HTTP methods at the edge, before proxying:
 | `/v1/race-data/*` | `GET` and `POST` everywhere; `PUT` **only** on `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
 
 Every other method/path combination (any `PUT` elsewhere, `DELETE`, `PATCH`, ...)
-is answered by the gateway with `405`
+is answered by the gateway with `405` once the token is accepted
 `{ "error": { "code": "METHOD_NOT_ALLOWED", "status": 405, "message": "method not allowed" } }`.
-The two `PUT` routes sit behind the same mandatory `Authorization: Bearer
-<GATEWAY_AUTH_TOKEN>` check and the rate limiter as every other `/v1/*` route;
-`driverNumber` is still validated as a positive integer on the race-data one.
-There is no role-based restriction on writes yet — the gateway token is the only
-auth layer.
+Feeds are shared by every user, so any `PUT` on these two prefixes is an **admin**
+call (see Auth Behavior): an access token with the `admin` role or the gateway
+token; a `user` token gets `403 FORBIDDEN`. Reading feeds stays a user call.
+`driverNumber` is still validated as a positive integer on the race-data route.
 
 Both routes take `{ "feeds": Feed[] }` and replace the whole list. A `Feed` is a
 stable descriptor, never a playable DRM URL or a user token:

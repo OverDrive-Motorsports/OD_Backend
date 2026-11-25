@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"overdrive/gateway/internal/core/domain"
 	"overdrive/gateway/internal/core/usecases"
+	"slices"
 	"strings"
 )
 
@@ -69,12 +70,20 @@ func NewHandler(
 			serviceHandler = ValidateRaceParameters(serviceHandler)
 		}
 
+		if len(route.AdminMethods) > 0 && route.Access != domain.AccessUser {
+			return nil, fmt.Errorf("route %q: admin methods only apply to a user route", prefix)
+		}
+
 		var protected http.Handler
 		switch route.Access {
 		case domain.AccessPublic:
 			protected = serviceHandler
 		case domain.AccessUser:
 			protected = RequireUserToken(userAuthorizeUseCase.Execute, serviceHandler)
+			if len(route.AdminMethods) > 0 {
+				admin := RequireUserToken(adminAuthorizeUseCase.Execute, serviceHandler)
+				protected = selectByMethod(route.AdminMethods, admin, protected)
+			}
 		case domain.AccessAdmin:
 			protected = RequireUserToken(adminAuthorizeUseCase.Execute, serviceHandler)
 		default:
@@ -92,4 +101,16 @@ func NewHandler(
 	// 2) Request logging on final status
 	// 3) Rate limit at the edge
 	return SecurityHeaders(RequestLogger(RateLimit(rateLimitRPS, rateLimitBurst, trustedProxies, mux))), nil
+}
+
+// selectByMethod serves the request with matched when its method is one of methods, with other
+// otherwise.
+func selectByMethod(methods []string, matched http.Handler, other http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if slices.Contains(methods, r.Method) {
+			matched.ServeHTTP(w, r)
+			return
+		}
+		other.ServeHTTP(w, r)
+	})
 }

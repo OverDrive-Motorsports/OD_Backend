@@ -36,6 +36,9 @@ type Route struct {
 	UpstreamPrefix string
 	Targets        []*url.URL
 	Access         RouteAccess
+	// AdminMethods are the HTTP methods of an AccessUser route that need AccessAdmin instead,
+	// whatever the path: shared data any user may read but only an operator may write.
+	AdminMethods []string
 	// SlowWrite lets some responses of this prefix outlive the server WriteTimeout. The zero
 	// value keeps the server default.
 	SlowWrite SlowWrite

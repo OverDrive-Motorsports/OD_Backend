@@ -12,6 +12,7 @@
 package config
 
 import (
+	"net/http"
 	"net/url"
 
 	"overdrive/gateway/internal/core/domain"
@@ -20,7 +21,13 @@ import (
 func championshipServiceRoutes(targets upstreamTargets) serviceRoutes {
 	return serviceRoutes{
 		proxied: []domain.Route{
-			{Prefix: "/v1/championship", Targets: targets.championship, Access: domain.AccessUser},
+			{
+				Prefix:  "/v1/championship",
+				Targets: targets.championship,
+				Access:  domain.AccessUser,
+				// Video feeds are shared by every user: only an operator writes them.
+				AdminMethods: []string{http.MethodPut},
+			},
 		},
 		health: map[string][]*url.URL{
 			"/health/championship": targets.championship,

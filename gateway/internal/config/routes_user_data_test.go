@@ -10,6 +10,7 @@
 package config
 
 import (
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -20,8 +21,9 @@ import (
 // TestBuildRoutes_AccessModel pins the public route table: every prefix, the service path it
 // reaches and who may call it. Only login, register, refresh and OAuth are public (the rest of
 // the auth prefix, sessions included, needs a user token), data and presets need a user token,
-// ingestion is admin-only, the unversioned /auth and /presets mirror their /v1 versions during
-// the transition, presets keep their prefix upstream, and nothing else is proxied (no /users
+// ingestion and the PUT routes of the data prefixes (video feeds) are admin-only, the
+// unversioned /auth and /presets mirror their /v1 versions during the transition, presets keep
+// their prefix upstream, and nothing else is proxied (no /users
 // or /providers, which would land on unrelated upstream routes).
 func TestBuildRoutes_AccessModel(t *testing.T) {
 	target, _ := url.Parse("http://upstream:3000")
@@ -31,23 +33,24 @@ func TestBuildRoutes_AccessModel(t *testing.T) {
 	type expectation struct {
 		upstreamPrefix string
 		access         domain.RouteAccess
+		adminMethods   string
 	}
 	want := map[string]expectation{
-		"/v1/auth":          {"", domain.AccessUser},
-		"/auth":             {"", domain.AccessUser},
-		"/v1/auth/login":    {"/login", domain.AccessPublic},
-		"/v1/auth/register": {"/register", domain.AccessPublic},
-		"/v1/auth/refresh":  {"/refresh", domain.AccessPublic},
-		"/v1/auth/oauth":    {"/oauth", domain.AccessPublic},
-		"/auth/login":       {"/login", domain.AccessPublic},
-		"/auth/register":    {"/register", domain.AccessPublic},
-		"/auth/refresh":     {"/refresh", domain.AccessPublic},
-		"/auth/oauth":       {"/oauth", domain.AccessPublic},
-		"/v1/presets":       {"/presets", domain.AccessUser},
-		"/presets":          {"/presets", domain.AccessUser},
-		"/v1/championship":  {"", domain.AccessUser},
-		"/v1/race-data":     {"", domain.AccessUser},
-		"/v1/ingestion":     {"", domain.AccessAdmin},
+		"/v1/auth":          {"", domain.AccessUser, ""},
+		"/auth":             {"", domain.AccessUser, ""},
+		"/v1/auth/login":    {"/login", domain.AccessPublic, ""},
+		"/v1/auth/register": {"/register", domain.AccessPublic, ""},
+		"/v1/auth/refresh":  {"/refresh", domain.AccessPublic, ""},
+		"/v1/auth/oauth":    {"/oauth", domain.AccessPublic, ""},
+		"/auth/login":       {"/login", domain.AccessPublic, ""},
+		"/auth/register":    {"/register", domain.AccessPublic, ""},
+		"/auth/refresh":     {"/refresh", domain.AccessPublic, ""},
+		"/auth/oauth":       {"/oauth", domain.AccessPublic, ""},
+		"/v1/presets":       {"/presets", domain.AccessUser, ""},
+		"/presets":          {"/presets", domain.AccessUser, ""},
+		"/v1/championship":  {"", domain.AccessUser, http.MethodPut},
+		"/v1/race-data":     {"", domain.AccessUser, http.MethodPut},
+		"/v1/ingestion":     {"", domain.AccessAdmin, ""},
 	}
 	if len(routes) != len(want) {
 		t.Fatalf("expected %d routes, got %d: %+v", len(want), len(routes), routes)
@@ -59,6 +62,9 @@ func TestBuildRoutes_AccessModel(t *testing.T) {
 		}
 		if route.UpstreamPrefix != expected.upstreamPrefix || route.Access != expected.access || len(route.Targets) != 1 {
 			t.Fatalf("%s: got upstream %q access %d targets %d, want %q access %d", route.Prefix, route.UpstreamPrefix, route.Access, len(route.Targets), expected.upstreamPrefix, expected.access)
+		}
+		if got := strings.Join(route.AdminMethods, ","); got != expected.adminMethods {
+			t.Fatalf("%s: admin methods %q, want %q", route.Prefix, got, expected.adminMethods)
 		}
 	}
 }

@@ -4,7 +4,8 @@ Through the gateway the public routes are under `/v1/race-data` and require the 
 token (`Authorization: Bearer <access token>`, any role); the gateway token is refused. Without
 a token: `401 UNAUTHORIZED`, expired: `401 TOKEN_EXPIRED`, otherwise invalid:
 `401 INVALID_TOKEN` (see `gateway/ROUTES.md`). The service itself checks no user token: it
-relies on the gateway.
+relies on the gateway. Through the gateway, `PUT` (video feed writes) is reserved to administrators:
+an access token with the `admin` role or the gateway token, `403 FORBIDDEN` for a `user` token.
 
 ## `GET /health`
 
