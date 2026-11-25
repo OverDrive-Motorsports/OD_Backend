@@ -235,6 +235,7 @@ func TestNewRouter_SessionBroadcastRoutes(t *testing.T) {
 		NewIngestionController(&fakeIngestionUseCase{}),
 		NewCatalogController(&fakeCatalogUseCase{}),
 		NewSessionFeedController(usecase),
+		testInternalToken,
 	)
 
 	rec := httptest.NewRecorder()
@@ -258,8 +259,8 @@ func TestNewRouter_SessionBroadcastRoutes(t *testing.T) {
 	huge := fmt.Sprintf(`{"feeds":[{"provider":"hls","url":"https://cdn.example.com/%s.m3u8"}]}`, strings.Repeat("a", int(feedListBodyLimitBytes)))
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/sessions/s1/broadcast", strings.NewReader(huge)))
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("oversized PUT: status = %d, want 400", rec.Code)
+	if rec.Code != http.StatusRequestEntityTooLarge || !strings.Contains(rec.Body.String(), "PAYLOAD_TOO_LARGE") {
+		t.Fatalf("oversized PUT: status = %d body=%s, want 413 PAYLOAD_TOO_LARGE", rec.Code, rec.Body.String())
 	}
 }
 

@@ -93,7 +93,7 @@ URLs and never by a user token. The same `Feed` object is used by
 and `race-data-service` (one onboard camera list per driver).
 
 ```json
-{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard", "startedAtUtc": "2026-07-06T14:02:51Z" }
+{ "provider": "f1tv",    "contentId": "1000005432", "channelId": "1017", "label": "Onboard", "startedAtUtc": "YYYY-MM-DDThh:mm:ssZ" }
 { "provider": "youtube", "url": "https://www.youtube.com/watch?v=...", "label": "Highlights" }
 { "provider": "hls",     "url": "https://cdn.example.com/demo/index.m3u8", "label": "Demo" }
 ```
@@ -138,8 +138,8 @@ UTC. `startedAtUtc` ties a video to that timeline:
 dataTimeUtc = startedAtUtc + playbackPosition
 ```
 
-Example: a feed with `"startedAtUtc": "2026-07-06T14:02:51Z"` played at
-`00:12:30` shows the track at `2026-07-06T14:15:21Z`; the client displays the
+Example: a feed whose `startedAtUtc` is at `14:02:51` UTC played at
+`00:12:30` shows the track at `14:15:21` UTC the same day; the client displays the
 replay samples whose `timestamp` is the latest one ≤ that instant.
 
 - **Playing**: advance `dataTimeUtc` with the player clock; do not re-query the
@@ -170,7 +170,7 @@ when nothing is registered), never `null`. Unknown session: `404`
 Replaces the **whole** feed list of the session. Body (at most 64 KiB):
 
 ```json
-{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1017", "label": "World feed", "startedAtUtc": "2026-07-06T14:02:51Z" } ] }
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1017", "label": "World feed", "startedAtUtc": "YYYY-MM-DDThh:mm:ssZ" } ] }
 ```
 
 `{ "feeds": [] }` clears the list. Responses:
@@ -180,6 +180,7 @@ Replaces the **whole** feed list of the session. Body (at most 64 KiB):
   not RFC 3339), missing `feeds`, unknown field, or a feed violating the rules
   above (message names `feeds[<index>].<field>`, e.g. `feeds[0].startedAtUtc
   must be between ... and ...`)
+- `413` `PAYLOAD_TOO_LARGE` - body over 64 KiB
 - `404` `SESSION_NOT_FOUND` — unknown session
 
 ```bash

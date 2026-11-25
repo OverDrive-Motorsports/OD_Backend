@@ -381,7 +381,7 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
   - `405` method not allowed on `/v1/championship/*` (anything but `GET`, except `PUT` on the session broadcast route) and `/v1/race-data/*` (anything but `GET`/`POST`, except `PUT` on the driver broadcast route)
   - `502` upstream unavailable/proxy failure
 - Upstream limits passed through: `413 PAYLOAD_TOO_LARGE` for a body over a route's size limit
-  (auth 16 KiB, presets 320 KiB, ingestion trigger 1 MiB), `503 SERVICE_UNAVAILABLE` with
+  (auth 16 KiB, presets 320 KiB, feed lists 64 KiB, ingestion trigger 1 MiB), `503 SERVICE_UNAVAILABLE` with
   `Retry-After` when race control waiters or concurrent replays are at their cap.
 
 ## Notes

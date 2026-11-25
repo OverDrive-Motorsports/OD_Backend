@@ -31,7 +31,7 @@ func TestInternalIngestionEndpoint_RequiresToken(t *testing.T) {
 		if token != "" {
 			req.Header.Set(InternalTokenHeader, token)
 		}
-		NewRouter(NewHealthController(nil), NewIngestionController(usecase), NewSessionController(nil), NewRaceLiveController(nil), NewTelemetryController(nil), NewRaceReplayStreamController(nil), NewReplayCatalogController(nil), testInternalToken).ServeHTTP(rec, req)
+		NewRouter(NewHealthController(nil), NewIngestionController(usecase), NewSessionController(nil), NewRaceLiveController(nil), NewTelemetryController(nil), NewRaceReplayStreamController(nil), NewReplayCatalogController(nil), NewDriverFeedController(nil), testInternalToken).ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "UNAUTHORIZED") {
 			t.Fatalf("%s token: status = %d body=%s, want 401 UNAUTHORIZED", name, rec.Code, rec.Body.String())
 		}
@@ -44,7 +44,7 @@ func TestInternalIngestionEndpoint_RequiresToken(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/internal/ingestion/batches", strings.NewReader(`{"batch_id":"b1"}`))
 	req.Header.Set(InternalTokenHeader, testInternalToken)
-	NewRouter(NewHealthController(nil), NewIngestionController(usecase), NewSessionController(nil), NewRaceLiveController(nil), NewTelemetryController(nil), NewRaceReplayStreamController(nil), NewReplayCatalogController(nil), testInternalToken).ServeHTTP(rec, req)
+	NewRouter(NewHealthController(nil), NewIngestionController(usecase), NewSessionController(nil), NewRaceLiveController(nil), NewTelemetryController(nil), NewRaceReplayStreamController(nil), NewReplayCatalogController(nil), NewDriverFeedController(nil), testInternalToken).ServeHTTP(rec, req)
 	if rec.Code == http.StatusUnauthorized || !(usecase.got.BatchID == "b1") {
 		t.Fatalf("valid token: status = %d body=%s, want the batch forwarded to the usecase", rec.Code, rec.Body.String())
 	}

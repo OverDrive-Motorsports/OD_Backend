@@ -19,11 +19,6 @@ import (
 	"overdrive/shared/apierror"
 )
 
-// feedListRequest is the body of PUT /sessions/{sessionId}/broadcast.
-type feedListRequest struct {
-	Feeds []domain.Feed `json:"feeds"`
-}
-
 type SessionFeedController struct {
 	usecase ports.SessionFeedUseCase
 }
@@ -68,7 +63,7 @@ func (c *SessionFeedController) PutSessionBroadcast(w http.ResponseWriter, r *ht
 }
 
 // decodeFeedListBody strictly decodes a feed list body (unknown fields rejected, exactly one
-// JSON value, "feeds" key mandatory). It writes the 400 itself and reports ok=false on failure.
+// JSON value, "feeds" key mandatory). It writes the 400 (413 above the body limit) itself and reports ok=false on failure.
 func decodeFeedListBody(w http.ResponseWriter, r *http.Request) ([]domain.Feed, bool) {
 	var body struct {
 		Feeds *[]domain.Feed `json:"feeds"`
@@ -76,7 +71,7 @@ func decodeFeedListBody(w http.ResponseWriter, r *http.Request) ([]domain.Feed, 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&body); err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid feed list body", err))
+		apierror.Write(w, r.URL.Path, apierror.RequestBody("invalid feed list body", err))
 		return nil, false
 	}
 	if decoder.More() {

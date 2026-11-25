@@ -195,13 +195,14 @@ created the row yet), never `null`:
 whole list, creating the row if needed. Body (at most 64 KiB):
 
 ```json
-{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1044", "label": "Onboard", "startedAtUtc": "2026-07-06T14:02:51Z" } ] }
+{ "feeds": [ { "provider": "f1tv", "contentId": "1000005432", "channelId": "1044", "label": "Onboard", "startedAtUtc": "YYYY-MM-DDThh:mm:ssZ" } ] }
 ```
 
 - `200` — the updated payload, same shape as the `GET`
 - `400` `VALIDATION_ERROR` — malformed body (including a `startedAtUtc` that is
   not RFC 3339), missing `feeds`, unknown field, non-positive `driverNumber`,
   or a feed violating the rules (message names `feeds[<index>].<field>`)
+- `413` `PAYLOAD_TOO_LARGE` - body over 64 KiB
 - `404` `SESSION_NOT_FOUND` / `DRIVER_NOT_FOUND`
 
 Ingestion seeds the row with `feeds: []` on creation only and never overwrites
