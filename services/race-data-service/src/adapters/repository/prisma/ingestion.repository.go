@@ -25,7 +25,7 @@ import (
 // ingestionConcurrency bounds how many rows are written to Postgres in parallel per dataset.
 // The generated Prisma client has no CreateMany/bulk-insert support, so high-volume
 // per-sample datasets (telemetry, location, position, intervals) would otherwise be
-// written one row at a time, sequentially — dominated by per-row network round trips.
+// written one row at a time, sequentially - dominated by per-row network round trips.
 const ingestionConcurrency = 16
 
 // runConcurrent applies fn to each row using up to ingestionConcurrency workers and
@@ -129,42 +129,8 @@ func (r *IngestionRepository) StoreBatch(ctx context.Context, batch contracts.Ba
 		default:
 			return fmt.Errorf("unsupported race dataset %q", dataset.Name)
 		}
-		if err := r.ensureDriverBroadcasts(ctx, sessionID, batch.Provider, batch.Context.SessionKey, dataset.Rows); err != nil {
-			return fmt.Errorf("ensure driver broadcasts: %w", err)
-		}
 	}
 
-	return nil
-}
-
-// ensureDriverBroadcasts finds or creates the related database record needed by ingestion.
-func (r *IngestionRepository) ensureDriverBroadcasts(ctx context.Context, sessionID string, provider string, sessionKey int, rows []map[string]any) error {
-	seen := map[int]struct{}{}
-	for _, row := range rows {
-		driverNumber := intValue(row["driver_number"])
-		if driverNumber == 0 {
-			continue
-		}
-		if _, ok := seen[driverNumber]; ok {
-			continue
-		}
-		seen[driverNumber] = struct{}{}
-		driverID := contracts.DriverID(provider, "f1", fmt.Sprintf("%d", driverNumber))
-		url := fmt.Sprintf("https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=%d&driver=%d", sessionKey, driverNumber)
-		_, err := r.client.SessionDriverBroadcast.UpsertOne(
-			db.SessionDriverBroadcast.SessionIDDriverID(
-				db.SessionDriverBroadcast.SessionID.Equals(sessionID),
-				db.SessionDriverBroadcast.DriverID.Equals(driverID),
-			),
-		).CreateOrUpdate(
-			db.SessionDriverBroadcast.SessionID.Set(sessionID),
-			db.SessionDriverBroadcast.DriverID.Set(driverID),
-			db.SessionDriverBroadcast.BroadcastURL.Set(url),
-		).Exec(ctx)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -681,7 +647,11 @@ func stringify(value any) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case float64:
-		return strconv.Itoa(int(v))
+		// Decimals are kept: OpenF1 gaps such as 12.345 s must not become "12". A whole number
+		// still prints without a fraction.
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", value))
 	}

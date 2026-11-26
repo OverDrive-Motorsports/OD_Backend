@@ -33,3 +33,6 @@ var ErrShuttingDown = errors.New("service is shutting down")
 // ErrReplayCacheInvalidation is returned when a batch was stored but the cached replays of its
 // session could not be dropped (500: the batch must be retried).
 var ErrReplayCacheInvalidation = errors.New("failed to invalidate the cached replays")
+
+// ErrUnknownWriteMode is returned for an ingestion batch whose write mode is not supported.
+var ErrUnknownWriteMode = errors.New("unknown ingestion batch write mode")

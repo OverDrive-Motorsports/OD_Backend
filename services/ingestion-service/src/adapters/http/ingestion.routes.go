@@ -16,7 +16,7 @@ import (
 )
 
 // NewRouter builds and returns a router with its required dependencies.
-func NewRouter(healthController *HealthController, ingestionController *IngestionController) http.Handler {
+func NewRouter(healthController *HealthController, ingestionController *IngestionController, liveController *LiveController) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthController.GetHealth)
 	mux.Handle("POST /providers/openf1/ingestions", bootstrap.ExtendDeadlines(
@@ -24,6 +24,7 @@ func NewRouter(healthController *HealthController, ingestionController *Ingestio
 		0,
 		manualIngestionWriteTimeout,
 	))
+	registerLiveRoutes(mux, liveController)
 
 	return withSecurityHeaders(mux)
 }

@@ -24,6 +24,14 @@ type fakeRaceDataIngestionRepository struct {
 	err         error
 	storedBatch contracts.Batch
 	called      bool
+	merged      bool
+	added       []map[string]any
+}
+
+func (f *fakeRaceDataIngestionRepository) MergeBatch(ctx context.Context, batch contracts.Batch) ([]map[string]any, error) {
+	f.merged = true
+	f.storedBatch = batch
+	return f.added, f.err
 }
 
 func (f *fakeRaceDataIngestionRepository) StoreBatch(ctx context.Context, batch contracts.Batch) error {
@@ -385,10 +393,72 @@ func (r *cancellingRepository) StoreBatch(ctx context.Context, batch contracts.B
 	return nil
 }
 
+func (r *cancellingRepository) MergeBatch(ctx context.Context, batch contracts.Batch) ([]map[string]any, error) {
+	r.cancel()
+	return nil, nil
+}
+
 // ctxCheckingInvalidator records the context state seen by Invalidate.
 type ctxCheckingInvalidator struct{ ctxErr error }
 
 func (c *ctxCheckingInvalidator) Invalidate(ctx context.Context, sessionID string) error {
 	c.ctxErr = ctx.Err()
 	return nil
+}
+
+// TestAcceptIngestionBatch_Merge proves a merge batch never goes through the replace path, drops
+// the cached replays, and publishes only the race control rows the repository added: none when
+// the batch overlaps what is already stored.
+func TestAcceptIngestionBatch_Merge(t *testing.T) {
+	batch := validBatch("race_control", []map[string]any{{"message": "OLD"}, {"message": "NEW"}})
+	batch.WriteMode = contracts.WriteModeMerge
+
+	repo := &fakeRaceDataIngestionRepository{added: []map[string]any{{"message": "NEW", "date_utc": "2026-03-08T15:00:00Z"}}}
+	broadcaster := &fakeAcceptBatchBroadcaster{}
+	cache := &ctxCheckingInvalidator{ctxErr: errors.New("not called")}
+	ack, err := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster, cache).Execute(context.Background(), batch)
+	if err != nil || !ack.Accepted {
+		t.Fatalf("Execute: ack=%+v err=%v", ack, err)
+	}
+	if repo.called || !repo.merged || cache.ctxErr != nil {
+		t.Fatalf("replace=%v merge=%v invalidation=%v", repo.called, repo.merged, cache.ctxErr)
+	}
+	if broadcaster.publishCount != 1 || len(broadcaster.publishedEvents) != 1 || broadcaster.publishedEvents[0].Message != "NEW" ||
+		broadcaster.publishedSessionID != "openf1:session:9998" {
+		t.Fatalf("published %+v", broadcaster)
+	}
+
+	broadcaster = &fakeAcceptBatchBroadcaster{}
+	if _, err := NewAcceptIngestionBatchUseCase("race-data-service", &fakeRaceDataIngestionRepository{}, broadcaster, nil).Execute(context.Background(), batch); err != nil {
+		t.Fatal(err)
+	}
+	if broadcaster.publishCount != 0 {
+		t.Fatalf("an overlapping batch published %d times", broadcaster.publishCount)
+	}
+}
+
+// TestAcceptIngestionBatch_MergeFailure proves a merge failing part way still publishes the race
+// control rows it committed (a retry would not see them as new) and returns the error.
+func TestAcceptIngestionBatch_MergeFailure(t *testing.T) {
+	batch := validBatch("race_control", nil)
+	batch.WriteMode = contracts.WriteModeMerge
+	boom := errors.New("db down")
+	repo := &fakeRaceDataIngestionRepository{err: boom, added: []map[string]any{{"message": "RED FLAG"}}}
+	broadcaster := &fakeAcceptBatchBroadcaster{}
+	_, err := NewAcceptIngestionBatchUseCase("race-data-service", repo, broadcaster, nil).Execute(context.Background(), batch)
+	if !errors.Is(err, boom) || broadcaster.publishCount != 1 {
+		t.Fatalf("err=%v publish=%d", err, broadcaster.publishCount)
+	}
+}
+
+// TestAcceptIngestionBatch_UnknownWriteMode proves an unsupported mode is refused before the
+// repository is reached, instead of silently replacing the session's rows.
+func TestAcceptIngestionBatch_UnknownWriteMode(t *testing.T) {
+	batch := validBatch("laps", nil)
+	batch.WriteMode = "append"
+	repo := &fakeRaceDataIngestionRepository{}
+	_, err := NewAcceptIngestionBatchUseCase("race-data-service", repo, nil, nil).Execute(context.Background(), batch)
+	if !errors.Is(err, domain.ErrUnknownWriteMode) || repo.called || repo.merged {
+		t.Fatalf("err=%v replace=%v merge=%v", err, repo.called, repo.merged)
+	}
 }

@@ -74,6 +74,9 @@ func (p *ReverseProxy) director(req *http.Request) {
 
 	req.URL.Path = joinPaths(target.Path, trimmedPath)
 	req.URL.RawPath = req.URL.EscapedPath()
+	// No upstream reads it: the user ID only comes from the verified token. Dropping it keeps a
+	// client from ever injecting an identity if one starts to.
+	req.Header.Del("X-User-Id")
 	req.Header.Set("X-Forwarded-Host", originalHost)
 	req.Header.Set("X-Forwarded-Proto", "http")
 	if remoteIP != "" {

@@ -30,10 +30,8 @@ type configurableSessionQueryUseCase struct {
 	listSessionDriversResult map[string]any
 	listSessionTeamsResult   map[string]any
 	raceStandingsResult      any
-	broadcastResult          map[string]any
 	factsResult              map[string]any
 	driverProfileResult      map[string]any
-	driverBroadcastResult    map[string]any
 	driverDatasetResult      map[string]any
 	driverLapLocationResult  map[string]any
 }
@@ -68,14 +66,8 @@ func (f *configurableSessionQueryUseCase) GetSessionDataset(ctx context.Context,
 func (f *configurableSessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	return f.raceStandingsResult, f.err
 }
-func (f *configurableSessionQueryUseCase) GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error) {
-	return f.broadcastResult, f.err
-}
 func (f *configurableSessionQueryUseCase) GetDriverProfile(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
 	return f.driverProfileResult, f.err
-}
-func (f *configurableSessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
-	return f.driverBroadcastResult, f.err
 }
 func (f *configurableSessionQueryUseCase) GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) (map[string]any, *int, error) {
 	return f.driverDatasetResult, nil, f.err
@@ -214,16 +206,6 @@ func TestSessionController_GetSessionRaceStandings_NormalCase(t *testing.T) {
 	}
 }
 
-// TestSessionController_GetSessionBroadcast_NormalCase proves the happy path returns 200.
-func TestSessionController_GetSessionBroadcast_NormalCase(t *testing.T) {
-	c := NewSessionController(&configurableSessionQueryUseCase{broadcastResult: map[string]any{"broadcastUrl": "https://x"}})
-	rec := httptest.NewRecorder()
-	c.GetSessionBroadcast(rec, withSessionPath(http.MethodGet, "/sessions/s1/broadcast", "s1"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
-	}
-}
-
 // TestSessionController_GetSessionWeather_NormalAndErrorMapping proves GetSessionWeather calls
 // GetSessionDataset with "weather" and maps a failure to a plain apierror.Internal (unlike
 // GetSessionDataset itself, which classifies domain.ErrUnknownDataset specially - weather is a
@@ -297,35 +279,6 @@ func TestSessionController_GetDriverProfile(t *testing.T) {
 		c := NewSessionController(&configurableSessionQueryUseCase{})
 		rec := httptest.NewRecorder()
 		c.GetDriverProfile(rec, withDriverPath(http.MethodGet, "/sessions/s1/drivers/abc", "s1", "abc"))
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
-		}
-	})
-}
-
-// TestSessionController_GetDriverBroadcast covers the normal case, not-found, and invalid
-// driverNumber.
-func TestSessionController_GetDriverBroadcast(t *testing.T) {
-	t.Run("found", func(t *testing.T) {
-		c := NewSessionController(&configurableSessionQueryUseCase{driverBroadcastResult: map[string]any{"broadcastUrl": "https://x"}})
-		rec := httptest.NewRecorder()
-		c.GetDriverBroadcast(rec, withDriverPath(http.MethodGet, "/sessions/s1/drivers/1/broadcast", "s1", "1"))
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
-		}
-	})
-	t.Run("not found", func(t *testing.T) {
-		c := NewSessionController(&configurableSessionQueryUseCase{driverBroadcastResult: nil})
-		rec := httptest.NewRecorder()
-		c.GetDriverBroadcast(rec, withDriverPath(http.MethodGet, "/sessions/missing/drivers/1/broadcast", "missing", "1"))
-		if rec.Code != http.StatusNotFound {
-			t.Fatalf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
-		}
-	})
-	t.Run("invalid driverNumber -> 400", func(t *testing.T) {
-		c := NewSessionController(&configurableSessionQueryUseCase{})
-		rec := httptest.NewRecorder()
-		c.GetDriverBroadcast(rec, withDriverPath(http.MethodGet, "/sessions/s1/drivers/abc/broadcast", "s1", "abc"))
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
 		}

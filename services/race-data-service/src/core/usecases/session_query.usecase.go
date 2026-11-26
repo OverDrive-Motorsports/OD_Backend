@@ -65,7 +65,6 @@ func (u *SessionQueryUseCase) GetSession(ctx context.Context, sessionID string) 
 		"status":         session.Status,
 		"name":           session.Name,
 		"external_key":   session.ExternalKey,
-		"broadcast_url":  session.BroadcastURL,
 		"started_at_utc": session.StartedAtUTC,
 		"ended_at_utc":   session.EndedAtUTC,
 	}, nil
@@ -153,11 +152,6 @@ func (u *SessionQueryUseCase) GetSessionRaceStandings(ctx context.Context, sessi
 	return u.client.GetSessionRaceStandings(ctx, sessionID)
 }
 
-// GetSessionBroadcast returns the requested session broadcast payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error) {
-	return u.client.GetSessionBroadcast(ctx, sessionID)
-}
-
 // GetDriverProfile returns the requested driver profile payload for the supplied identifiers.
 func (u *SessionQueryUseCase) GetDriverProfile(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
 	drivers, err := u.client.ListSessionDrivers(ctx, sessionID)
@@ -171,37 +165,15 @@ func (u *SessionQueryUseCase) GetDriverProfile(ctx context.Context, sessionID st
 		if driver.DriverNumber != driverNumber {
 			continue
 		}
-		broadcastURL, err := u.repository.GetDriverBroadcast(ctx, sessionID, driverNumber)
-		if err != nil {
-			return nil, err
-		}
 		return map[string]any{
 			"session_id":    sessionID,
 			"driver_number": driver.DriverNumber,
 			"driver_name":   driver.DriverName,
 			"team_name":     driver.TeamName,
 			"team_color":    driver.TeamColor,
-			"broadcast_url": broadcastURL,
 		}, nil
 	}
 	return nil, nil
-}
-
-// GetDriverBroadcast returns the requested driver broadcast payload for the supplied identifiers.
-func (u *SessionQueryUseCase) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error) {
-	session, _, err := u.loadContext(ctx, sessionID)
-	if err != nil || session == nil {
-		return nil, err
-	}
-	broadcastURL, err := u.repository.GetDriverBroadcast(ctx, sessionID, driverNumber)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"session_id":    sessionID,
-		"driver_number": driverNumber,
-		"broadcast_url": broadcastURL,
-	}, nil
 }
 
 // GetDriverDataset returns one page of the requested driver dataset and the next page offset

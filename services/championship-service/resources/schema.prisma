@@ -115,7 +115,6 @@ model Session {
   status       SessionStatus
   name         String?       @db.VarChar(80)
   externalKey  String?       @db.VarChar(64)
-  broadcastUrl String?       @db.VarChar(255)
   startedAtUtc DateTime
   endedAtUtc   DateTime?
   createdAt    DateTime      @default(now())
@@ -160,6 +159,7 @@ model Driver {
   code        String?  @db.VarChar(20)
   number      Int
   countryCode String?  @db.VarChar(3)
+  headshotUrl String?  @db.VarChar(500)
   externalKey String?  @db.VarChar(64)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

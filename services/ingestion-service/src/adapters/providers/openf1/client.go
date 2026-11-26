@@ -46,6 +46,7 @@ type Client struct {
 	retryDelay       time.Duration
 	minInterval      time.Duration
 	maxResponseBytes int64
+	tokens           *tokenSource
 
 	paceMu   sync.Mutex
 	lastCall time.Time
@@ -57,6 +58,11 @@ type ClientOptions struct {
 	MinInterval time.Duration
 	// MaxResponseBytes bounds one response; zero means DefaultMaxResponseBytes.
 	MaxResponseBytes int64
+	// Username and Password are the optional OpenF1 account (live data, higher rate limits),
+	// exchanged at TokenURL for an access token sent on every call.
+	Username string
+	Password string
+	TokenURL string
 }
 
 // NewClient builds and returns a client with its required dependencies.
@@ -74,6 +80,7 @@ func NewClient(baseURL string, timeout time.Duration, retries int, retryDelay ti
 		retryDelay:       retryDelay,
 		minInterval:      options.MinInterval,
 		maxResponseBytes: maxResponseBytes,
+		tokens:           newTokenSource(options.TokenURL, options.Username, options.Password, timeout),
 	}
 }
 
@@ -198,7 +205,7 @@ func (c *Client) fetchStartingGrid(ctx context.Context, request domain.OpenF1Ing
 // for its Retry-After (bounded) without consuming a retry, up to maxRateLimitWaits times.
 func (c *Client) fetchWithRetry(ctx context.Context, endpoint string) ([]map[string]any, error) {
 	var lastErr error
-	attempt, rateLimited := 0, 0
+	attempt, rateLimited, tokenRenewed := 0, 0, false
 	for {
 		rows, err := c.fetchOnce(ctx, endpoint)
 		if err == nil {
@@ -217,6 +224,14 @@ func (c *Client) fetchWithRetry(ctx context.Context, endpoint string) ([]map[str
 			if upstream.retryAfter > 0 {
 				wait = upstream.retryAfter
 			}
+		case errors.As(err, &upstream) && upstream.status == http.StatusUnauthorized && c.tokens != nil && !tokenRenewed:
+			// The token was revoked early: one more try with a new one.
+			tokenRenewed = true
+			continue
+		case errors.As(err, &upstream) && upstream.status == http.StatusUnauthorized:
+			return nil, fmt.Errorf("%w: %w", domain.ErrOpenF1Credentials, err)
+		case errors.Is(err, domain.ErrOpenF1Credentials):
+			return nil, err
 		case errors.As(err, &upstream) && !upstream.retryable():
 			return nil, err
 		case errors.Is(err, bootstrap.ErrResponseTooLarge):
@@ -345,12 +360,23 @@ func (c *Client) fetchOnce(ctx context.Context, endpoint string) ([]map[string]a
 		return nil, err
 	}
 
+	token := ""
+	if c.tokens != nil {
+		if token, err = c.tokens.get(ctx); err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusUnauthorized && c.tokens != nil {
+		c.tokens.discard(token)
+	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return nil, &upstreamError{

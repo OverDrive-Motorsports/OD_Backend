@@ -29,7 +29,7 @@ handful of real `curl` calls as worked examples. For "how do I run this," see
 | `/v1/presets` | `user-data-service` (the user's AR/VR layouts) | user access token (JWT) |
 | `/v1/championship` | `championship-service` (catalog, standings) | user access token (JWT) |
 | `/v1/race-data` | `race-data-service` (race, telemetry, replay) | user access token (JWT) |
-| `/v1/ingestion` | `ingestion-service` (OpenF1 import) | access token with the `admin` role, or the gateway token |
+| `/v1/ingestion` | `ingestion-service` (OpenF1 import, live jobs) | access token with the `admin` role, or the gateway token |
 
 `/auth` and `/presets` still answer unversioned during the transition to `/v1`.
 
@@ -201,6 +201,13 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: applicati
 8. A failing resource (or driver) does not stop the others. The response summarises,
    per resource, its `status` (`ok`, `partial`, `failed`), row count and whether it was
    dispatched; the request fails with `502` only when every resource failed.
+
+A **live job** (`POST /v1/ingestion/providers/openf1/live/{sessionKey}/start`) follows a running
+session instead: `live_job.go` polls OpenF1 for the rows published since the latest known one and
+dispatches them with `write_mode: merge`, which adds the missing rows instead of replacing the
+session's (`ingestion_merge.repository.go`). The rest of the path is the same, long poll included.
+A manual ingestion of race data is refused (`409`) while a live job follows the same session, and
+the other way round. See `services/ingestion-service/doc/endpoint.md`.
 
 ## Example 5 - the replay: catalog then bulk dump
 

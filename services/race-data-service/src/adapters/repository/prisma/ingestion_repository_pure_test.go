@@ -146,7 +146,8 @@ func TestStringPtr(t *testing.T) {
 }
 
 // TestStringify covers every supported dynamic-value branch, including the default
-// fmt.Sprintf/TrimSpace fallback.
+// fmt.Sprintf/TrimSpace fallback, and proves a decimal (an OpenF1 gap in seconds) keeps its
+// fraction instead of being truncated to whole seconds.
 func TestStringify(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -157,7 +158,10 @@ func TestStringify(t *testing.T) {
 		{"string with whitespace", "  hi  ", "hi"},
 		{"int", 42, "42"},
 		{"int64", int64(43), "43"},
-		{"float64", float64(3.9), "3"},
+		{"float64 keeps its decimals", float64(12.345), "12.345"},
+		{"float64 below one second", float64(0.4), "0.4"},
+		{"whole float64", float64(9998), "9998"},
+		{"float32", float32(1.5), "1.5"},
 		{"bool fallback", true, "true"},
 	}
 	for _, tc := range cases {
@@ -186,5 +190,15 @@ func TestJSONValue(t *testing.T) {
 
 	if _, err := jsonValue(make(chan int)); err == nil {
 		t.Fatal("expected an error for an unmarshalable value")
+	}
+}
+
+// TestStringPtr_OpenF1Gaps proves the gap columns receive OpenF1 values as sent: decimal seconds
+// with their fraction, and the text OpenF1 uses for lapped cars unchanged.
+func TestStringPtr_OpenF1Gaps(t *testing.T) {
+	for value, want := range map[any]string{12.345: "12.345", 0.4: "0.4", "+1 LAP": "+1 LAP", float64(0): "0"} {
+		if got := stringPtr(value); got == nil || *got != want {
+			t.Fatalf("stringPtr(%#v) = %v, want %q", value, got, want)
+		}
 	}
 }

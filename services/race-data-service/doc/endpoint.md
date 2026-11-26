@@ -24,6 +24,18 @@ read its body for up to 5 minutes and answer within 15 minutes (storage of a lar
 server defaults being 30 s and 60 s. A stored batch drops the cached replays of its session
 (see the replay route); if that fails the batch answers `500 INTERNAL_ERROR` and must be resent.
 
+`write_mode` selects how the rows are stored:
+
+- absent: the stored rows of the batch's scope are **replaced** (manual ingestion);
+- `merge`: only the rows not stored yet are added (live jobs), so overlapping or repeated batches
+  never duplicate a sample. A row is identified by driver and time (within a millisecond), time
+  alone for weather, time and content for race control, driver and stint number for stints,
+  driver and lap for laps. Laps, stints and pit stops, which change during a session, are
+  updated. Merges of the same table and session are serialised by a Postgres advisory lock.
+  `overtakes` cannot be merged. Race control waiters are woken with the added events only.
+
+Any other value answers `400 VALIDATION_ERROR`.
+
 Accepted dataset names:
 
 - `lap_timing`
@@ -111,14 +123,12 @@ driver does not.
 - `GET /sessions/{sessionId}/teams`
 - `GET /sessions/{sessionId}/datasets/{dataset}`
 - `GET /sessions/{sessionId}/standings/race`
-- `GET /sessions/{sessionId}/broadcast`
 - `GET /sessions/{sessionId}/weather`
 - `GET /sessions/{sessionId}/facts`
 
 ### Driver routes
 
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/profile`
-- `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast`
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}`
 - `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location`
 

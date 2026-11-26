@@ -80,7 +80,6 @@ The databases are independent, but several fields clearly act as logical bridges
 | `user-data-service` | `ProviderConnection.userId` | `auth-service` | Refers to the authenticated platform user | `550e8400-e29b-41d4-a716-446655440000` |
 | `user-data-service` | `ProviderConnection.providerId` | `championship-service` | Refers logically to a provider namespace or upstream source | `f1tv` |
 | `race-data-service` | `sessionId` | `championship-service` | Refers logically to a race session defined in the competition catalog | `session_2026_miami_race` |
-| `race-data-service` | `driverId` in `SessionDriverBroadcast` | `championship-service` | Refers logically to a driver entity managed in the championship domain | `driver_1` |
 | `race-data-service` | `driverNumber` | `championship-service` | Refers to the race number used by standings and session data | `1` |
 
 <br>

@@ -27,7 +27,7 @@ import (
 func TestNewRouter_RoutesRegisteredAndHardened(t *testing.T) {
 	health := NewHealthController(&fakeHealthUseCase{status: domain.HealthStatus{Status: "ok", Service: "ingestion-service"}})
 	ingestion := NewIngestionController(&fakeIngestionUseCase{result: domain.OpenF1IngestionResult{Provider: "openf1"}})
-	router := NewRouter(health, ingestion)
+	router := NewRouter(health, ingestion, NewLiveController(&fakeLiveUseCase{}))
 
 	t.Run("GET /health reaches the health controller", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)

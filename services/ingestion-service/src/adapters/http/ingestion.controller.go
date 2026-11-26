@@ -64,6 +64,10 @@ func classifyIngestionError(err error, ctx context.Context, request domain.OpenF
 		return apierror.Validation("unsupported OpenF1 resource requested", err)
 	}
 
+	if errors.Is(err, domain.ErrSessionBusy) {
+		return apierror.Conflict("SESSION_INGESTION", "a live job is ingesting this session", err)
+	}
+
 	if errors.Is(err, domain.ErrNoOpenF1Data) {
 		return apierror.NotFound("OPENF1_DATA", "OpenF1 has no data for this meeting and session", err)
 	}

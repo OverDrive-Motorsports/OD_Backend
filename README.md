@@ -124,6 +124,8 @@ URLs). Upgrading a checkout that already has a database: see "Upgrading an exist
 | `GATEWAY_TRUSTED_PROXIES` | `gateway` | optional: IPs/CIDRs of reverse proxies in front of the gateway, whose `X-Forwarded-For` identifies clients for rate limiting; empty without a proxy |
 | `AUTH_JWT_SECRET` | `auth-service`, `gateway`, `user-data-service` | **required**, at least 32 bytes and not the template placeholder - the three refuse to start otherwise |
 | `INTERNAL_INGESTION_TOKEN` | `ingestion-service`, `championship-service`, `race-data-service` | **required**, at least 32 bytes - protects `POST /internal/ingestion/batches` (sent by the ingestion dispatcher in `X-Internal-Token`) |
+| `OPENF1_USERNAME` / `OPENF1_PASSWORD` / `OPENF1_TOKEN_URL` | `ingestion-service` | optional: OpenF1 account, required by OpenF1 for live data (both or neither), and its token endpoint |
+| `OPENF1_LIVE_POLL_INTERVAL` / `OPENF1_LIVE_GRACE` / `OPENF1_LIVE_MAX_FAILURES` / `OPENF1_LIVE_MAX_JOBS` | `ingestion-service` | optional: live job tuning (`3s`, `30m`, `20`, `1`) |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URL` | `auth-service` | optional: Google sign-in, disabled when empty |
 | `OVERDRIVE_IMAGE_TAG` | Compose | optional: tag of the built images (default `local`) |
 

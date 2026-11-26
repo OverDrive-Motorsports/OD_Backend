@@ -23,11 +23,9 @@ func registerSessionRoutes(mux *http.ServeMux, controller *SessionController) {
 	mux.HandleFunc("GET /sessions/{sessionId}/teams", controller.ListSessionTeams)
 	mux.HandleFunc("GET /sessions/{sessionId}/datasets/{dataset}", controller.GetSessionDataset)
 	mux.HandleFunc("GET /sessions/{sessionId}/standings/race", controller.GetSessionRaceStandings)
-	mux.HandleFunc("GET /sessions/{sessionId}/broadcast", controller.GetSessionBroadcast)
 	mux.HandleFunc("GET /sessions/{sessionId}/weather", controller.GetSessionWeather)
 	mux.HandleFunc("GET /sessions/{sessionId}/facts", controller.GetSessionFacts)
 	mux.HandleFunc("GET /sessions/{sessionId}/drivers/{driverNumber}/profile", controller.GetDriverProfile)
-	mux.HandleFunc("GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast", controller.GetDriverBroadcast)
 	mux.HandleFunc("GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}", controller.GetDriverDataset)
 	mux.HandleFunc("GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location", controller.GetDriverLapLocation)
 }

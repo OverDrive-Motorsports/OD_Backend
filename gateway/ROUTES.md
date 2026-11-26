@@ -36,6 +36,8 @@ Error body (shared `apierror` envelope):
 }
 ```
 
+A client-supplied `X-User-Id` header is dropped: upstreams never read an identity from a header.
+
 ### Versioning and transition
 
 `/auth` and `/presets` are also exposed as `/v1/auth` and `/v1/presets`, with the same
@@ -108,7 +110,6 @@ Response bodies are camelCase JSON; list endpoints return bare arrays (`[...]`),
 | `GET /v1/championship/sessions/{sessionId}` | `GET /sessions/{sessionId}` |
 | `GET /v1/championship/sessions/{sessionId}/drivers` | `GET /sessions/{sessionId}/drivers` (query: `teamId`) |
 | `GET /v1/championship/sessions/{sessionId}/teams` | `GET /sessions/{sessionId}/teams` |
-| `GET /v1/championship/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` |
 | `GET /v1/championship/sessions/{sessionId}/standings` | `GET /sessions/{sessionId}/standings` (query: `driverNumber`) |
 | `GET /v1/championship/sessions/{sessionId}/standings/race` | `GET /sessions/{sessionId}/standings/race` (deprecated alias) |
 | `GET /v1/championship/drivers/{driverNumber}/profile` | `GET /drivers/{driverNumber}/profile` (query: `championshipCode`) |
@@ -160,7 +161,6 @@ All routes below are exposed by gateway under `/v1/race-data/*` and proxied to `
 | --- | --- |
 | `GET /v1/race-data/sessions/{sessionId}/datasets/{dataset}` | `GET /sessions/{sessionId}/datasets/{dataset}` (query: `limit`, `offset`, see Pagination below) |
 | `GET /v1/race-data/sessions/{sessionId}/standings/race` | `GET /sessions/{sessionId}/standings/race` |
-| `GET /v1/race-data/sessions/{sessionId}/broadcast` | `GET /sessions/{sessionId}/broadcast` |
 | `GET /v1/race-data/sessions/{sessionId}/weather` | `GET /sessions/{sessionId}/weather` |
 | `GET /v1/race-data/sessions/{sessionId}/facts` | `GET /sessions/{sessionId}/facts` |
 
@@ -189,7 +189,6 @@ Gateway validates `{dataset}` for this route against:
 | Gateway | Upstream |
 | --- | --- |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/profile` | `GET /sessions/{sessionId}/drivers/{driverNumber}/profile` |
-| `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/broadcast` | `GET /sessions/{sessionId}/drivers/{driverNumber}/broadcast` |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{dataset}` | `GET /sessions/{sessionId}/drivers/{driverNumber}/{dataset}` (query: `limit`, `offset`) |
 | `GET /v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` | `GET /sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` |
 
@@ -313,7 +312,7 @@ clients reading session-wide sample lists must follow it.
 Gateway returns `400` with `{ "error": "invalid parameter" }` when one of these values is invalid on `/v1/race-data/*`:
 
 - `dataset` for `/sessions/{sessionId}/datasets/{dataset}`
-- `segment` for `/drivers/{driverNumber}/{segment}` (allowed: driver datasets + `profile` + `broadcast`)
+- `segment` for `/drivers/{driverNumber}/{segment}` (allowed: driver datasets + `profile`)
 - `action` for `/sessions/{sessionId}/race/{action}` (allowed: `position`, `laps`, `stints`, `pitstops`, `control`, `weather`, `radio`, `replay`)
 - `action` for `/sessions/{sessionId}/drivers/{driverNumber}/telemetry/{action}` (allowed: `speed`, `engine`, `location`, `intervals`)
 - `driverNumber` when present on a driver path or as a `driverNumber` query parameter (must be a positive integer)
@@ -347,6 +346,15 @@ any `driverNumber` query parameter on `/v1/championship/*` as a positive integer
   `/v1/race-data/.../race/replay` (10 minutes) and `/v1/ingestion` (30 minutes).
 - On `SIGTERM` the gateway and every service stop accepting connections and let in-flight
   requests finish for up to `SHUTDOWN_TIMEOUT` (default 35 s, above the 30 s long poll the gateway may be proxying); Compose waits 45 s before killing.
+
+## Ingestion (`/v1/ingestion`, admin)
+
+| Gateway route | Upstream route (`ingestion-service`) |
+| --- | --- |
+| `POST /v1/ingestion/providers/openf1/ingestions` | `POST /providers/openf1/ingestions` |
+| `POST /v1/ingestion/providers/openf1/live/{sessionKey}/start` | `POST /providers/openf1/live/{sessionKey}/start` |
+| `POST /v1/ingestion/providers/openf1/live/{sessionKey}/stop` | `POST /providers/openf1/live/{sessionKey}/stop` |
+| `GET /v1/ingestion/providers/openf1/live/{sessionKey}/status` | `GET /providers/openf1/live/{sessionKey}/status` |
 
 ## Auth (`/v1/auth`, public routes are an allow-list)
 

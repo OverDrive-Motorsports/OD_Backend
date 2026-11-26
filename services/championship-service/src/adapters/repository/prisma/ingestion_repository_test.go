@@ -270,21 +270,6 @@ func TestColorPtr(t *testing.T) {
 	}
 }
 
-// TestSessionBroadcastURL proves the placeholder broadcast URL is only built for a non-empty
-// session key, and embeds that key verbatim.
-func TestSessionBroadcastURL(t *testing.T) {
-	if got := sessionBroadcastURL(""); got != "" {
-		t.Fatalf("expected empty string for an empty session key, got %q", got)
-	}
-	if got := sessionBroadcastURL("  "); got != "" {
-		t.Fatalf("expected empty string for a whitespace-only session key, got %q", got)
-	}
-	got := sessionBroadcastURL("9998")
-	if got != "https://www.youtube.com/watch?v=dQw4w9WgXcQ&session=9998" {
-		t.Fatalf("unexpected broadcast URL: %q", got)
-	}
-}
-
 // TestTeamExternalKey proves the fallback chain: an explicit team_external_key wins, otherwise
 // the team name is slugified, and an entirely absent name falls back to a fixed placeholder.
 func TestTeamExternalKey(t *testing.T) {

@@ -29,11 +29,17 @@ type Dataset struct {
 	Metadata         map[string]any   `json:"metadata,omitempty"`
 }
 
+// WriteModeMerge asks the receiving service to add the rows it does not already store, instead of
+// replacing the stored rows of their scope (the default, an empty mode): a live batch only holds
+// the latest rows of the session, and consecutive batches may overlap.
+const WriteModeMerge = "merge"
+
 type Batch struct {
 	BatchID     string         `json:"batch_id"`
 	Provider    string         `json:"provider"`
 	TriggeredAt time.Time      `json:"triggered_at"`
 	Context     Context        `json:"context"`
+	WriteMode   string         `json:"write_mode,omitempty"`
 	Datasets    []Dataset      `json:"datasets"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }

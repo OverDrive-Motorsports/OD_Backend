@@ -17,7 +17,7 @@ This database stores normalized race read models, telemetry samples, race events
 
 - timing and telemetry
 - race flow and incidents
-- highlights and broadcast
+- highlights
 - archived datasets
 
 ## Relationship
@@ -214,17 +214,6 @@ wake its `POST /race/control` long-poll waiters. Rows are deleted 5 minutes afte
 | `transcript` | `String?` | No | None | Optional text transcription of the message | `Tyres are gone, mate.` |
 | `raw` | `Json` | Yes | None | Raw provider payload | `{"channel":"team_radio"}` |
 | `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
-
-### `SessionDriverBroadcast`
-
-| Field | Type | Required | Constraints | Description | Example |
-| --- | --- | --- | --- | --- | --- |
-| `id` | `String` | Yes | Primary key, UUID, default generated | Unique identifier of the broadcast link row | `5f836e95-6620-4dab-b913-3f1e15f31b84` |
-| `sessionId` | `String` | Yes | Unique with `driverId`, indexed | Session identifier | `session_2026_miami_race` |
-| `driverId` | `String` | Yes | Unique with `sessionId`, indexed | Internal driver identifier used by the app | `driver_1` |
-| `broadcastUrl` | `String` | Yes | `varchar(255)` | Video or stream URL for the driver's onboard feed | `https://stream.example.com/onboard/1` |
-| `createdAt` | `DateTime` | Yes | Default `now()` | Creation timestamp | `YYYY-MM-DDThh:mm:ssZ` |
-| `updatedAt` | `DateTime` | Yes | Auto-updated | Last update timestamp | `YYYY-MM-DDThh:mm:ssZ` |
 
 ### `RaceArchive`
 

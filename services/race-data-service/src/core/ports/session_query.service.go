@@ -28,9 +28,7 @@ type SessionQueryUseCase interface {
 	// the last page, and always nil for the datasets served by championship-service).
 	GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) (map[string]any, *int, error)
 	GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error)
-	GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error)
 	GetDriverProfile(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error)
-	GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (map[string]any, error)
 	GetDriverDataset(ctx context.Context, sessionID string, driverNumber int, dataset string, page domain.Page) (map[string]any, *int, error)
 	GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error)
 	GetSessionFacts(ctx context.Context, sessionID string) (map[string]any, error)

@@ -162,3 +162,29 @@ func TestReverseProxy_ReturnsUpstreamUnavailableOnDialFailure(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadGateway)
 	}
 }
+
+// TestReverseProxy_StripsClientUserID proves a client-supplied X-User-Id, in any case or repeated,
+// never reaches the upstream, while its Authorization header does.
+func TestReverseProxy_StripsClientUserID(t *testing.T) {
+	var got http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+	}))
+	defer upstream.Close()
+	target, _ := url.Parse(upstream.URL)
+	proxy, err := NewReverseProxy("/v1/race-data", "", []*url.URL{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/v1/race-data/championships", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	req.Header.Add("x-user-id", "victim")
+	req.Header.Add("X-User-ID", "another")
+	proxy.ServeHTTP(httptest.NewRecorder(), req)
+	if values := got.Values("X-User-Id"); len(values) != 0 {
+		t.Fatalf("X-User-Id reached the upstream: %v", values)
+	}
+	if got.Get("Authorization") != "Bearer token" {
+		t.Fatalf("Authorization = %q", got.Get("Authorization"))
+	}
+}

@@ -39,6 +39,8 @@ Access model at the gateway (`gateway/ROUTES.md`):
   user ID **only** from `sub`; no route accepts a user ID from the client. Another user's preset
   or session answers `404` (not `403`) so IDs cannot be probed. Session responses never carry
   the refresh token or its hash.
+- The gateway drops any client-supplied `X-User-Id` header. No service trusts such a header: the
+  identity always comes from the forwarded token.
 
 ### Roles
 
@@ -94,7 +96,7 @@ Service ports, reachable from the host only:
 | `user-data-service` | `3002` | `/presets` (user JWT required), health | none |
 | `championship-service` | `3003` | catalog and health endpoints | `POST /internal/ingestion/batches` |
 | `race-data-service` | `3004` | read facade and health endpoints | `POST /internal/ingestion/batches` |
-| `ingestion-service` | `3005` | `POST /providers/openf1/ingestions`, health | none |
+| `ingestion-service` | `3005` | `POST /providers/openf1/ingestions`, live jobs (`/providers/openf1/live/{sessionKey}/...`), health | none |
 
 The `/internal/ingestion/batches` endpoints are service-to-service endpoints. They require the
 shared secret `INTERNAL_INGESTION_TOKEN` in the `X-Internal-Token` header, compared in constant
@@ -190,6 +192,14 @@ development exceptions: they run the mounted sources in `golang:1.27`, for local
 | `OPENF1_MAX_RESPONSE_BYTES` | Maximum size of one OpenF1 response | `134217728` (128 MiB) |
 | `DISPATCH_TIMEOUT` | Downstream batch dispatch timeout | `10m` |
 
+Live jobs are bounded too: `OPENF1_LIVE_MAX_JOBS` (default `1`) jobs at once, 2 minutes per poll
+or catalog ingestion (retries and dispatch included), an end at the session end plus
+`OPENF1_LIVE_GRACE` (at most 2 hours more while the cars still send data), after
+`OPENF1_LIVE_MAX_FAILURES` failed rounds in a row once the session and its grace period are over
+or when OpenF1 refuses the credentials (an outage during the session is waited out), and a stop
+with the service. A resource that
+keeps failing does not hold the job past the session.
+
 `DISPATCH_TIMEOUT` is intentionally longer because downstream Prisma writes can take minutes for large OpenF1 datasets.
 
 ## Secrets And Local Config
@@ -207,6 +217,7 @@ hard-coded.
 | `GATEWAY_AUTH_TOKEN` | gateway | at least 32 bytes, compared in constant time; opens the admin routes only, never shipped in a client; rotated when the access model is deployed |
 | `AUTH_JWT_SECRET` | auth-service, gateway, user-data-service | at least 32 bytes, not a placeholder |
 | `INTERNAL_INGESTION_TOKEN` | ingestion-service, championship-service, race-data-service | at least 32 bytes |
+| `OPENF1_USERNAME` / `OPENF1_PASSWORD` | ingestion-service | optional, both or neither; only sent to `OPENF1_TOKEN_URL` (https required, as for `OPENF1_BASE_URL` with an account; redirects refused), exchanged for a one hour token; never logged |
 
 `docker-compose.yml` reads Postgres and gateway credentials (`POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, `GATEWAY_AUTH_TOKEN`, ...) from a root `.env`

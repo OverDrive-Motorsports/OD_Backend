@@ -320,7 +320,7 @@ func (m *Mapper) mapIntervals(rows []map[string]any) contracts.Dataset {
 			"driver_number":            row["driver_number"],
 			"sample_time_utc":          row["date"],
 			"gap_to_leader":            row["gap_to_leader"],
-			"interval_to_front_driver": row["interval_to_front"],
+			"interval_to_front_driver": row["interval"],
 			"raw":                      row,
 		})
 	}
@@ -356,7 +356,7 @@ func (m *Mapper) mapPit(rows []map[string]any) contracts.Dataset {
 			"driver_number":    row["driver_number"],
 			"lap_number":       row["lap_number"],
 			"date_utc":         row["date"],
-			"pit_duration_sec": row["pit_duration"],
+			"pit_duration_sec": pitLaneDuration(row),
 			"raw":              row,
 		})
 	}
@@ -436,6 +436,15 @@ func (m *Mapper) mapRaceControl(rows []map[string]any) contracts.Dataset {
 		})
 	}
 	return newDataset("race_control", "race_data", "race-data-service", "race_control", mapped)
+}
+
+// pitLaneDuration returns the time spent in the pit lane. OpenF1 sends it as lane_duration;
+// pit_duration, its former name, is deprecated and only read for rows that lack the new one.
+func pitLaneDuration(row map[string]any) any {
+	if duration, ok := row["lane_duration"]; ok && duration != nil {
+		return duration
+	}
+	return row["pit_duration"]
 }
 
 // newDataset implements the new dataset workflow for this package.

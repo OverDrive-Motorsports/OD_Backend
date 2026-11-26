@@ -120,7 +120,7 @@ Additional route-specific validation:
 - `/v1/championship/drivers/{driverNumber}/profile` validates `driverNumber` is a positive integer
 - `/v1/championship/*?driverNumber=` validates the `driverNumber` query parameter is a positive integer when present
 - `/v1/race-data/sessions/{sessionId}/datasets/{dataset}` validates race dataset enum at gateway edge
-- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`/`broadcast`) at gateway edge
+- `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/{segment}` validates `segment` (driver dataset or `profile`) at gateway edge
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/...` validates `driverNumber` is a positive integer
 - `/v1/race-data/sessions/{sessionId}/drivers/{driverNumber}/laps/{lapNumber}/location` validates `lapNumber` is a positive integer
 - `/v1/race-data/sessions/{sessionId}/race/{action}` validates `action` against the allowed race-live sub-resources (`position`, `laps`, `stints`, `pitstops`, `control`, `weather`, `radio`); `control` is a `POST` (long-poll) route, all others are `GET`
@@ -192,6 +192,8 @@ with `openssl rand -hex 32`.
 | `CHAMPIONSHIP_SERVICE_URLS` | Yes | `http://localhost:3003` | Championship upstream targets |
 | `RACE_DATA_SERVICE_URLS` | Yes | `http://localhost:3004` | Race-data upstream targets |
 | `INGESTION_SERVICE_URLS` | Yes | `http://localhost:3005` | Ingestion upstream targets |
+
+Run a single `ingestion-service` instance: its live jobs and their session guard live in memory.
 
 Multi-target example:
 

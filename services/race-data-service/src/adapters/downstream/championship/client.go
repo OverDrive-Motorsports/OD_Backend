@@ -153,16 +153,6 @@ func (c *Client) GetSessionRaceStandings(ctx context.Context, sessionID string) 
 	return payload, nil
 }
 
-// GetSessionBroadcast returns the requested session broadcast payload for the supplied identifiers.
-func (c *Client) GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error) {
-	var payload map[string]any
-	ok, err := c.getJSON(ctx, "/sessions/"+url.PathEscape(sessionID)+"/broadcast", &payload)
-	if err != nil || !ok {
-		return nil, err
-	}
-	return payload, nil
-}
-
 // maxResponseBytes bounds a championship-service response: its largest payloads (session
 // datasets, catalog lists) are well under a megabyte, so anything beyond this is refused instead
 // of being decoded into memory.

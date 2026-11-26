@@ -244,20 +244,6 @@ func TestClient_GetSessionRaceStandings_PathBuilding(t *testing.T) {
 	}
 }
 
-// TestClient_GetSessionBroadcast_PathBuilding proves the request hits the /broadcast path.
-func TestClient_GetSessionBroadcast_PathBuilding(t *testing.T) {
-	client := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/sessions/s1/broadcast" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"broadcastUrl": "https://x"})
-	})
-	got, err := client.GetSessionBroadcast(context.Background(), "s1")
-	if err != nil || got["broadcastUrl"] != "https://x" {
-		t.Fatalf("unexpected result: %v %v", got, err)
-	}
-}
-
 // TestNew_TrimsTrailingSlash proves New normalizes a trailing slash on baseURL so path
 // concatenation never produces a double slash.
 func TestNew_TrimsTrailingSlash(t *testing.T) {

@@ -63,6 +63,23 @@ After pulling this change:
    service's `environment:` in `docker-compose.yml`. This also holds with the development
    override: a variable Compose sets, even to an empty value (`GOOGLE_OAUTH_*`), wins over the
    service's `.env` file.
+4. The backend no longer stores video links (`Session.broadcastUrl`, table
+   `SessionDriverBroadcast`, placeholder values only). On a database that already holds them,
+   `db push` refuses to drop them: `championship-dbsync` and `race-data-dbsync` exit with a data
+   loss warning and the services do not start. Run once per service, on a development database
+   only, then start again:
+   ```bash
+   docker compose run --rm championship-dbsync go run github.com/steebchen/prisma-client-go \
+     db push --schema resources/schema.prisma --skip-generate --accept-data-loss
+   docker compose run --rm race-data-dbsync go run github.com/steebchen/prisma-client-go \
+     db push --schema resources/schema.prisma --skip-generate --accept-data-loss
+   docker compose up -d --build
+   ```
+   Never add the flag to `docker-compose.yml`. When deploying services one by one, update
+   `race-data-service` before `ingestion-service`: an older one ignores the `merge` write mode of
+   live batches and would replace the session's rows.
+5. Gaps, intervals and pit durations stored before this change keep their old values (gaps cut to
+   whole seconds, interval to the car ahead empty) until their sessions are ingested again.
 
 Only the gateway (`3000`) is reachable from the network; the service ports (`3001`-`3005`) and
 Postgres (`5432`) only answer on `localhost`.

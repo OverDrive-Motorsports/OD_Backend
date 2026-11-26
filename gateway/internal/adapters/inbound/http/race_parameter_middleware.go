@@ -54,8 +54,7 @@ var allowedRaceDriverDatasets = map[string]struct{}{
 // These are dedicated driver endpoints sharing the same 7-segment path shape
 // as /drivers/{driverNumber}/{dataset}.
 var allowedRaceDriverActions = map[string]struct{}{
-	"profile":   {},
-	"broadcast": {},
+	"profile": {},
 }
 
 // allowedRaceLiveActions lists the sub-resources under

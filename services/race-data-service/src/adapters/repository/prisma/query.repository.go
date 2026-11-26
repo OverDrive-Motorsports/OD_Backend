@@ -18,7 +18,6 @@ import (
 
 	db "overdrive/services/race-data-service/resources/db"
 	"overdrive/services/race-data-service/src/core/domain"
-	contracts "overdrive/shared/contracts/ingestion"
 )
 
 type QueryRepository struct {
@@ -176,25 +175,6 @@ func (r *QueryRepository) GetDriverLapLocation(ctx context.Context, sessionID st
 		"count":         len(data),
 		"data":          data,
 	}, nil
-}
-
-// GetDriverBroadcast returns the requested driver broadcast payload for the supplied identifiers.
-func (r *QueryRepository) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, error) {
-	driverID := contracts.DriverID("openf1", "f1", fmt.Sprintf("%d", driverNumber))
-	row, err := r.client.SessionDriverBroadcast.FindFirst(
-		db.SessionDriverBroadcast.SessionID.Equals(sessionID),
-		db.SessionDriverBroadcast.DriverID.Equals(driverID),
-	).Exec(ctx)
-	if err != nil {
-		if isNotFoundErr(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	if row == nil {
-		return "", nil
-	}
-	return row.BroadcastURL, nil
 }
 
 // lapRows loads lap rows ordered by lap number (then driver), optionally for one driver.

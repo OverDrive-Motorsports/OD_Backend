@@ -173,20 +173,6 @@ func (c *SessionController) GetSessionRaceStandings(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusOK, payload)
 }
 
-// GetSessionBroadcast returns the requested session broadcast payload for the supplied identifiers.
-func (c *SessionController) GetSessionBroadcast(w http.ResponseWriter, r *http.Request) {
-	payload, err := c.usecase.GetSessionBroadcast(r.Context(), r.PathValue("sessionId"))
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.UpstreamUnavailable("failed to reach championship-service", err))
-		return
-	}
-	if payload == nil {
-		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
-}
-
 // GetSessionWeather returns the requested session weather payload for the supplied identifiers.
 func (c *SessionController) GetSessionWeather(w http.ResponseWriter, r *http.Request) {
 	payload, next, err := c.usecase.GetSessionDataset(r.Context(), r.PathValue("sessionId"), "weather", domain.DefaultPage())
@@ -230,25 +216,6 @@ func (c *SessionController) GetDriverProfile(w http.ResponseWriter, r *http.Requ
 	}
 	if payload == nil {
 		apierror.Write(w, r.URL.Path, apierror.NotFound("DRIVER", "driver not found", nil))
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
-}
-
-// GetDriverBroadcast returns the requested driver broadcast payload for the supplied identifiers.
-func (c *SessionController) GetDriverBroadcast(w http.ResponseWriter, r *http.Request) {
-	driverNumber, err := strconv.Atoi(r.PathValue("driverNumber"))
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Validation("invalid driver number", err))
-		return
-	}
-	payload, err := c.usecase.GetDriverBroadcast(r.Context(), r.PathValue("sessionId"), driverNumber)
-	if err != nil {
-		apierror.Write(w, r.URL.Path, apierror.Internal("failed to load driver broadcast", err))
-		return
-	}
-	if payload == nil {
-		apierror.Write(w, r.URL.Path, apierror.NotFound("SESSION", "session not found", nil))
 		return
 	}
 	writeJSON(w, http.StatusOK, payload)

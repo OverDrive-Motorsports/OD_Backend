@@ -189,7 +189,7 @@ model RaceWeatherSample {
 }
 
 //-------------------------
-// Highlights And Broadcast
+// Highlights
 //-------------------------
 model RaceHighlight {
   id          String   @id @default(uuid())
@@ -227,19 +227,6 @@ model TeamRadioMessage {
   createdAt    DateTime  @default(now())
 
   @@index([sessionId, driverNumber, dateUtc])
-}
-
-model SessionDriverBroadcast {
-  id           String   @id @default(uuid())
-  sessionId    String
-  driverId     String
-  broadcastUrl String   @db.VarChar(255)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([sessionId, driverId])
-  @@index([sessionId])
-  @@index([driverId])
 }
 
 //-------------------------

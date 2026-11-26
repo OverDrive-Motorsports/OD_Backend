@@ -16,6 +16,7 @@ Default port: `3005`
 
 - exposes `GET /health`
 - exposes `POST /providers/openf1/ingestions`
+- runs live jobs following a session (`/providers/openf1/live/{sessionKey}/start`, `/stop`, `/status`)
 - fetches supported OpenF1 resources with retry and timeout handling
 - maps provider rows into an internal normalized batch format
 - dispatches catalog datasets to `championship-service`

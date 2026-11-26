@@ -12,6 +12,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -189,5 +190,73 @@ func TestLoad_InternalTokenRequired(t *testing.T) {
 				t.Fatal("expected an error")
 			}
 		})
+	}
+}
+
+// clearLiveEnv unsets the live settings for the test.
+func clearLiveEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{"OPENF1_USERNAME", "OPENF1_PASSWORD", "OPENF1_TOKEN_URL", "OPENF1_LIVE_POLL_INTERVAL", "OPENF1_LIVE_GRACE", "OPENF1_LIVE_MAX_FAILURES", "OPENF1_LIVE_MAX_JOBS"} {
+		t.Setenv(key, "")
+	}
+}
+
+// TestLoadLiveConfig proves the defaults (no account, documented tuning) and that every setting is
+// read; an empty value, as Compose passes for an unset variable, is the default.
+func TestLoadLiveConfig(t *testing.T) {
+	clearLiveEnv(t)
+	cfg, err := loadLiveConfig()
+	if err != nil || cfg.OpenF1Username != "" || cfg.OpenF1TokenURL != "https://api.openf1.org/token" ||
+		cfg.OpenF1LivePollInterval != 3*time.Second || cfg.OpenF1LiveGrace != 30*time.Minute || cfg.OpenF1LiveMaxFailures != 20 || cfg.OpenF1LiveMaxJobs != 1 {
+		t.Fatalf("defaults: %+v err=%v", cfg, err)
+	}
+	for key, value := range map[string]string{"OPENF1_USERNAME": "u", "OPENF1_PASSWORD": "p", "OPENF1_TOKEN_URL": "https://auth.example.com/token",
+		"OPENF1_LIVE_POLL_INTERVAL": "6s", "OPENF1_LIVE_GRACE": "1h", "OPENF1_LIVE_MAX_FAILURES": "5", "OPENF1_LIVE_MAX_JOBS": "2"} {
+		t.Setenv(key, value)
+	}
+	cfg, err = loadLiveConfig()
+	if err != nil || cfg.OpenF1Username != "u" || cfg.OpenF1Password != "p" || cfg.OpenF1TokenURL != "https://auth.example.com/token" ||
+		cfg.OpenF1LivePollInterval != 6*time.Second || cfg.OpenF1LiveGrace != time.Hour || cfg.OpenF1LiveMaxFailures != 5 || cfg.OpenF1LiveMaxJobs != 2 {
+		t.Fatalf("set: %+v err=%v", cfg, err)
+	}
+}
+
+// TestLoadLiveConfig_Invalid proves half an account, a token URL that would send the password in
+// clear and any non-positive or unparsable tuning refuse to start, without echoing a secret.
+func TestLoadLiveConfig_Invalid(t *testing.T) {
+	for _, tc := range []struct{ key, value string }{
+		{"OPENF1_USERNAME", "only"}, {"OPENF1_PASSWORD", "s3cret"},
+		{"OPENF1_TOKEN_URL", "http://api.openf1.org/token"}, {"OPENF1_TOKEN_URL", "https://"}, {"OPENF1_TOKEN_URL", "token"},
+		{"OPENF1_LIVE_POLL_INTERVAL", "0s"}, {"OPENF1_LIVE_POLL_INTERVAL", "3"}, {"OPENF1_LIVE_GRACE", "-1m"},
+		{"OPENF1_LIVE_MAX_FAILURES", "0"}, {"OPENF1_LIVE_MAX_JOBS", "many"},
+	} {
+		clearLiveEnv(t)
+		t.Setenv(tc.key, tc.value)
+		if _, err := loadLiveConfig(); err == nil || strings.Contains(err.Error(), "s3cret") {
+			t.Fatalf("%s=%s: err=%v", tc.key, tc.value, err)
+		}
+	}
+}
+
+// TestLoad_AccountNeedsHTTPS proves an OpenF1 account refuses a base URL in clear, since its token
+// is sent there, while anonymous access does not.
+func TestLoad_AccountNeedsHTTPS(t *testing.T) {
+	clearLiveEnv(t)
+	for key, value := range map[string]string{"HTTP_PORT": "3005", "APP_VERSION": "test", "RACE_DATA_SERVICE_URL": "http://r", "CHAMPIONSHIP_SERVICE_URL": "http://c",
+		"INTERNAL_INGESTION_TOKEN": strings.Repeat("a", 32), "OPENF1_BASE_URL": "http://api.openf1.org/v1"} {
+		t.Setenv(key, value)
+	}
+	t.Chdir(t.TempDir())
+	if _, err := Load(); err != nil {
+		t.Fatalf("anonymous: %v", err)
+	}
+	t.Setenv("OPENF1_USERNAME", "u")
+	t.Setenv("OPENF1_PASSWORD", "p")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error")
+	}
+	t.Setenv("OPENF1_BASE_URL", "https://api.openf1.org/v1")
+	if cfg, err := Load(); err != nil || cfg.OpenF1BaseURL != "https://api.openf1.org/v1" || cfg.OpenF1Username != "u" {
+		t.Fatalf("https: %+v %v", cfg, err)
 	}
 }

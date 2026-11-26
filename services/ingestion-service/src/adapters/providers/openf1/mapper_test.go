@@ -116,3 +116,38 @@ func TestMapper_MapTelemetry_CarriesDrsStateThrough(t *testing.T) {
 		t.Fatalf("expected drs_state=12, got %v", got)
 	}
 }
+
+// TestMapper_MapIntervals_ReadsInterval proves the gap to the car ahead is read from OpenF1's
+// "interval" field (rows shaped like the real API), alongside the gap to the leader.
+func TestMapper_MapIntervals_ReadsInterval(t *testing.T) {
+	dataset, err := NewMapper().Map("intervals", []map[string]any{{
+		"date": "2025-03-23T07:40:00.114000+00:00", "session_key": float64(9998), "interval": 1.741,
+		"meeting_key": float64(1255), "driver_number": float64(63), "gap_to_leader": 5.654,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := dataset.Rows[0]
+	if row["interval_to_front_driver"] != 1.741 || row["gap_to_leader"] != 5.654 || row["sample_time_utc"] != "2025-03-23T07:40:00.114000+00:00" {
+		t.Fatalf("row = %+v", row)
+	}
+}
+
+// TestMapper_MapPit_LaneDuration proves the pit duration comes from OpenF1's lane_duration, and
+// from the deprecated pit_duration only when lane_duration is absent or null.
+func TestMapper_MapPit_LaneDuration(t *testing.T) {
+	dataset, err := NewMapper().Map("pit", []map[string]any{
+		{"date": "2025-03-23T07:20:44.723000+00:00", "stop_duration": 3.1, "lap_number": float64(10), "lane_duration": 23.138, "pit_duration": 99.9, "driver_number": float64(5)},
+		{"lap_number": float64(1), "pit_duration": 23.385, "driver_number": float64(5)},
+		{"lap_number": float64(2), "lane_duration": nil, "pit_duration": 22.5, "driver_number": float64(5)},
+		{"lap_number": float64(3), "driver_number": float64(5)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, want := range []any{23.138, 23.385, 22.5, nil} {
+		if got := dataset.Rows[index]["pit_duration_sec"]; got != want {
+			t.Fatalf("row %d: pit_duration_sec = %v, want %v", index, got, want)
+		}
+	}
+}

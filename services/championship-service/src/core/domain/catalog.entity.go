@@ -11,7 +11,7 @@ package domain
 
 import "time"
 
-// NOTE: all response field names are camelCase — this is the public contract
+// NOTE: all response field names are camelCase - this is the public contract
 // consumed by the gateway's /v1/championship/* routes (AR/mobile clients).
 
 type ChampionshipSummary struct {
@@ -43,16 +43,15 @@ type EventSummary struct {
 }
 
 type SessionSummary struct {
-	ID           string     `json:"sessionId"`
-	EventID      string     `json:"eventId"`
-	Type         string     `json:"type"`
-	Status       string     `json:"status"`
-	Name         string     `json:"name,omitempty"`
-	Circuit      string     `json:"circuit,omitempty"`
-	ExternalKey  string     `json:"externalKey,omitempty"`
-	BroadcastURL string     `json:"broadcastUrl,omitempty"`
-	StartTime    time.Time  `json:"startTime"`
-	EndTime      *time.Time `json:"endTime,omitempty"`
+	ID          string     `json:"sessionId"`
+	EventID     string     `json:"eventId"`
+	Type        string     `json:"type"`
+	Status      string     `json:"status"`
+	Name        string     `json:"name,omitempty"`
+	Circuit     string     `json:"circuit,omitempty"`
+	ExternalKey string     `json:"externalKey,omitempty"`
+	StartTime   time.Time  `json:"startTime"`
+	EndTime     *time.Time `json:"endTime,omitempty"`
 }
 
 // ChampionshipSession is one session of a championship flattened with its event context
@@ -72,16 +71,17 @@ type ChampionshipSession struct {
 }
 
 type DriverSummary struct {
-	ID           string `json:"id,omitempty"`
-	DriverNumber int    `json:"driverNumber"`
-	FullName     string `json:"fullName"`
-	FirstName    string `json:"firstName,omitempty"`
-	LastName     string `json:"lastName,omitempty"`
-	Code         string `json:"code,omitempty"`
-	CountryCode  string `json:"countryCode,omitempty"`
-	TeamID       string `json:"teamId,omitempty"`
-	TeamName     string `json:"teamName,omitempty"`
-	TeamColor    string `json:"teamColor,omitempty"`
+	ID            string `json:"id,omitempty"`
+	DriverNumber  int    `json:"driverNumber"`
+	FullName      string `json:"fullName"`
+	FirstName     string `json:"firstName,omitempty"`
+	LastName      string `json:"lastName,omitempty"`
+	Code          string `json:"code,omitempty"`
+	CountryCode   string `json:"countryCode,omitempty"`
+	TeamID        string `json:"teamId,omitempty"`
+	TeamName      string `json:"teamName,omitempty"`
+	TeamColor     string `json:"teamColor,omitempty"`
+	DriverPicture string `json:"driverPicture,omitempty"`
 }
 
 type TeamSummary struct {
@@ -91,13 +91,27 @@ type TeamSummary struct {
 	ColorHex string `json:"color,omitempty"`
 }
 
+// Finishing statuses exposed on StandingRow.Status.
+const (
+	ResultStatusFinished = "finished"
+	ResultStatusDNF      = "dnf"
+	ResultStatusDNS      = "dns"
+	ResultStatusDSQ      = "dsq"
+)
+
 // StandingRow represents a single row of a session's generic standings
 // (race result, starting grid, or championship standings), generalized
 // under GET /sessions/{sessionId}/standings.
+//
+// Position is nil for a driver the provider did not classify (typically a
+// DNS / DSQ, or a DNF that did not complete enough distance) - never 0.
+// Status is one of the ResultStatus* values, omitted when the provider gave
+// no information.
 type StandingRow struct {
-	Position     int     `json:"position"`
+	Position     *int    `json:"position"`
 	DriverNumber int     `json:"driverNumber"`
 	TeamID       string  `json:"teamId,omitempty"`
+	Status       string  `json:"status,omitempty"`
 	GapToLeader  string  `json:"gapToLeader,omitempty"`
 	Points       float64 `json:"points,omitempty"`
 }

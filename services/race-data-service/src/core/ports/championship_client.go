@@ -28,7 +28,6 @@ type ChampionshipSessionRef struct {
 	Status       string `json:"status"`
 	Name         string `json:"name"`
 	ExternalKey  string `json:"externalKey"`
-	BroadcastURL string `json:"broadcastUrl"`
 	StartedAtUTC string `json:"startTime"`
 	EndedAtUTC   string `json:"endTime"`
 }
@@ -56,5 +55,4 @@ type ChampionshipClient interface {
 	ListSessionTeams(ctx context.Context, sessionID string) ([]map[string]any, error)
 	GetSessionDataset(ctx context.Context, sessionID string, dataset string) (map[string]any, error)
 	GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error)
-	GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error)
 }

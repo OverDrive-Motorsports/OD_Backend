@@ -69,15 +69,15 @@ Triggers a manual OpenF1 ingestion batch.
 | `starting_grid` | `championship-service` | `StartingGridRow` |
 | `championship_drivers` | `championship-service` | `DriverChampionshipStanding` |
 | `championship_teams` | `championship-service` | `TeamChampionshipStanding` |
-| `laps` | `race-data-service` | `RaceLap`, `SessionDriverBroadcast` |
-| `car_data` | `race-data-service` | `RaceTelemetrySample`, `SessionDriverBroadcast` |
-| `location` | `race-data-service` | `RaceLocationSample`, `SessionDriverBroadcast` |
-| `position` | `race-data-service` | `RacePositionSample`, `SessionDriverBroadcast` |
-| `intervals` | `race-data-service` | `RaceIntervalSample`, `SessionDriverBroadcast` |
-| `stints` | `race-data-service` | `RaceStint`, `SessionDriverBroadcast` |
-| `pit` | `race-data-service` | `RacePitStop`, `SessionDriverBroadcast` |
+| `laps` | `race-data-service` | `RaceLap` |
+| `car_data` | `race-data-service` | `RaceTelemetrySample` |
+| `location` | `race-data-service` | `RaceLocationSample` |
+| `position` | `race-data-service` | `RacePositionSample` |
+| `intervals` | `race-data-service` | `RaceIntervalSample` |
+| `stints` | `race-data-service` | `RaceStint` |
+| `pit` | `race-data-service` | `RacePitStop` |
 | `weather` | `race-data-service` | `RaceWeatherSample` |
-| `team_radio` | `race-data-service` | `TeamRadioMessage`, `SessionDriverBroadcast` |
+| `team_radio` | `race-data-service` | `TeamRadioMessage` |
 | `overtakes` | `race-data-service` | `OvertakeEvent` |
 | `race_control` | `race-data-service` | `RaceControlEvent` |
 
@@ -198,6 +198,81 @@ stop the others: each one reports its own `status`.
 | --- | --- | --- |
 | `400` | `VALIDATION_ERROR` | malformed body, `meeting_key`/`session_key` not positive, unknown resource name (checked before any OpenF1 call) |
 | `404` | `OPENF1_DATA_NOT_FOUND` | OpenF1 does not know this session (`sessions` empty) or every resource came back empty; nothing is dispatched |
+| `409` | `SESSION_INGESTION_CONFLICT` | a live job is following this session and the request would write race data (catalog resources and `dispatch: false` are accepted) |
 | `413` | `PAYLOAD_TOO_LARGE` | body over 1 MiB |
 | `502` | `UPSTREAM_UNAVAILABLE` | every resource failed (nothing ingested) |
 | `504` | `UPSTREAM_TIMEOUT` | the request context expired during the run |
+
+## Live jobs
+
+A live job follows one session and stores its data as OpenF1 publishes it. Access terms, account
+and tuning: `openf1-live-access.md`. `sessionKey` is the OpenF1 session key (positive integer). The
+three routes take no body and answer the same status object.
+
+| Route | Answer |
+| --- | --- |
+| `POST /providers/openf1/live/{sessionKey}/start` | `202` when the job starts, `200` with the current status when it is already running |
+| `POST /providers/openf1/live/{sessionKey}/stop` | `200`; state `stopped`, or `stopping` when the job needs more than 5 s to end; no-op on a finished job |
+| `GET /providers/openf1/live/{sessionKey}/status` | `200`, latest job of the session (the 20 latest finished jobs are kept) |
+
+```bash
+curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3000/v1/ingestion/providers/openf1/live/9998/start
+```
+
+```json
+{
+  "sessionKey": 9998,
+  "sessionId": "openf1:session:9998",
+  "meetingKey": 1255,
+  "state": "running",
+  "sessionStartUtc": "YYYY-MM-DDThh:mm:ssZ",
+  "sessionEndUtc": "YYYY-MM-DDThh:mm:ssZ",
+  "startedAtUtc": "YYYY-MM-DDThh:mm:ssZ",
+  "endedAtUtc": null,
+  "consecutiveFailures": 0,
+  "catalogIngested": true,
+  "resources": [
+    {
+      "resource": "race_control",
+      "rowCount": 12,
+      "latestRowAtUtc": "YYYY-MM-DDThh:mm:ssZ",
+      "lastSuccessAtUtc": "YYYY-MM-DDThh:mm:ssZ"
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `state` | `waiting` (more than 30 minutes before the session), `running`, `stopping`, then one of `stopped` (on request or service shutdown), `completed` (session over), `failed` |
+| `error` | short reason: a failed job (`<resource> incomplete: ...` when a resource was still failing at the session end: ingest it by hand), or `catalog not ingested yet` while the meeting, session and drivers are not all stored |
+| `consecutiveFailures` | rounds in a row where every poll failed; during the session an outage is waited out, the job only gives up on refused credentials |
+| `resources[].rowCount` | rows sent downstream (a row updated by OpenF1 counts each time) |
+| `resources[].error` | short reason of the latest failed poll: `OpenF1 request failed`, `OpenF1 request timed out`, `OpenF1 response too large`, `OpenF1 refused the credentials`, `dispatch to <service> failed` (details in the service log) |
+
+Behaviour:
+
+- A job on a past session stores the whole session, 5 minutes of `car_data` and `location` per
+  poll from one hour before the start (OpenF1 keeps the laps to the grid), then completes.
+- The session dates are read again every 100 intervals, and every 15 minutes by a waiting job. A
+  session still sending `location` or `car_data` past the grace period is followed until the data
+  stops, 2 hours more at most.
+- The meeting, session and drivers are stored again when the session starts and ends, so the
+  session `status` follows (`scheduled`, `live`, `finished`).
+- A waiting job counts in `OPENF1_LIVE_MAX_JOBS`.
+- Jobs live in memory: after a restart, start the job again, stored rows are not duplicated.
+- `overtakes`, results and standings are not live: ingest them by hand after the session.
+- A heavy period OpenF1 publishes after it was already passed, empty, for more than a minute is
+  not fetched again: a manual ingestion after the session fills it.
+
+| Status | Code | When |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | `sessionKey` is not a positive integer |
+| `404` | `OPENF1_SESSION_NOT_FOUND` | start: OpenF1 does not know the session |
+| `404` | `LIVE_JOB_NOT_FOUND` | stop, status: no job was started for the session |
+| `409` | `LIVE_JOB_CONFLICT` | start: `OPENF1_LIVE_MAX_JOBS` jobs are already running, or the job is being stopped (retry) |
+| `409` | `SESSION_INGESTION_CONFLICT` | start: a manual ingestion of the session is running |
+| `502` | `UPSTREAM_UNAVAILABLE` | start: OpenF1 failed or refused the credentials |
+| `503` | `SERVICE_UNAVAILABLE` | start: the service is shutting down |
+| `504` | `UPSTREAM_TIMEOUT` | start: OpenF1 did not answer within 20 s |

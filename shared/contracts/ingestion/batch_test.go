@@ -11,6 +11,7 @@ package ingestion
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -80,5 +81,16 @@ func TestDispatchAckJSONFieldNames(t *testing.T) {
 	want := `{"service":"race-data","batch_id":"b1","accepted":true,"dataset_count":2,"total_row_count":10,"processed_at_utc":"2026-01-02T03:04:05Z"}`
 	if string(raw) != want {
 		t.Fatalf("ack JSON = %s, want %s", raw, want)
+	}
+}
+
+// TestBatchJSONWriteMode pins the merge mode of live batches, absent from every other batch.
+func TestBatchJSONWriteMode(t *testing.T) {
+	raw, err := json.Marshal(Batch{BatchID: "b1", WriteMode: WriteModeMerge})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"write_mode":"merge"`) {
+		t.Fatalf("batch JSON = %s", raw)
 	}
 }

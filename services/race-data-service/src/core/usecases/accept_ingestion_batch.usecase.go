@@ -58,6 +58,13 @@ func (u *AcceptIngestionBatchUseCase) Execute(ctx context.Context, batch contrac
 			return domain.IngestionBatchAck{}, fmt.Errorf("dataset %s targets %s, not %s", dataset.Name, dataset.TargetService, u.serviceName)
 		}
 	}
+	switch batch.WriteMode {
+	case "":
+	case contracts.WriteModeMerge:
+		return u.merge(ctx, batch)
+	default:
+		return domain.IngestionBatchAck{}, fmt.Errorf("%w %q", domain.ErrUnknownWriteMode, batch.WriteMode)
+	}
 	storeErr := u.repository.StoreBatch(ctx, batch)
 	// StoreBatch deletes then inserts without a transaction: even a failed store may have changed
 	// the samples. The cached replays of the session are dropped on every exit path, with a
@@ -75,6 +82,37 @@ func (u *AcceptIngestionBatchUseCase) Execute(ctx context.Context, batch contrac
 	}
 	u.publishRaceControlEvents(batch)
 	return domain.NewIngestionBatchAck(u.serviceName, batch, u.now()), nil
+}
+
+// merge stores a live batch. The waiters are woken with the race control events it added only,
+// so an overlapping batch never delivers an event twice; they are published even when the rest
+// of the batch fails, because the retry will not see them as new.
+func (u *AcceptIngestionBatchUseCase) merge(ctx context.Context, batch contracts.Batch) (domain.IngestionBatchAck, error) {
+	added, mergeErr := u.repository.MergeBatch(ctx, batch)
+	u.publishRaceControlRows(contracts.SessionID(batch.Provider, batch.Context.SessionKey), added)
+	invalidateErr := u.invalidateReplays(ctx, batch)
+	if mergeErr != nil {
+		if invalidateErr != nil {
+			log.Printf("replay cache: invalidation after a failed batch %s: %v", batch.BatchID, invalidateErr)
+		}
+		return domain.IngestionBatchAck{}, mergeErr
+	}
+	if invalidateErr != nil {
+		return domain.IngestionBatchAck{}, fmt.Errorf("%w: %w", domain.ErrReplayCacheInvalidation, invalidateErr)
+	}
+	return domain.NewIngestionBatchAck(u.serviceName, batch, u.now()), nil
+}
+
+// publishRaceControlRows notifies the long poll waiters of the session of the given rows, if any.
+func (u *AcceptIngestionBatchUseCase) publishRaceControlRows(sessionID string, rows []map[string]any) {
+	if u.broadcaster == nil || len(rows) == 0 {
+		return
+	}
+	events := make([]domain.RaceControlEvent, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, mapRaceControlEvent(row))
+	}
+	u.broadcaster.Publish(sessionID, events)
 }
 
 // replayInvalidationTimeout bounds the cache invalidation, which outlives the request context.

@@ -41,8 +41,6 @@ type fakeChampionshipClientForSessionQuery struct {
 	sessionDatasetErr error
 	raceStandings     any
 	raceStandingsErr  error
-	broadcast         map[string]any
-	broadcastErr      error
 }
 
 func (f *fakeChampionshipClientForSessionQuery) ListChampionships(ctx context.Context) (any, error) {
@@ -75,9 +73,6 @@ func (f *fakeChampionshipClientForSessionQuery) GetSessionDataset(ctx context.Co
 func (f *fakeChampionshipClientForSessionQuery) GetSessionRaceStandings(ctx context.Context, sessionID string) (any, error) {
 	return f.raceStandings, f.raceStandingsErr
 }
-func (f *fakeChampionshipClientForSessionQuery) GetSessionBroadcast(ctx context.Context, sessionID string) (map[string]any, error) {
-	return f.broadcast, f.broadcastErr
-}
 
 // fakeSessionQueryRepository implements ports.SessionQueryRepository, keyed by dataset name so a
 // single fake can serve the multi-dataset aggregation in GetSessionFacts.
@@ -88,8 +83,6 @@ type fakeSessionQueryRepository struct {
 	driverDatasetErr         error
 	lapLocation              map[string]any
 	lapLocationErr           error
-	broadcastURL             string
-	broadcastErr             error
 }
 
 func (f *fakeSessionQueryRepository) GetSessionDataset(ctx context.Context, sessionID string, dataset string, page domain.Page) ([]map[string]any, error) {
@@ -104,16 +97,13 @@ func (f *fakeSessionQueryRepository) GetDriverDataset(ctx context.Context, sessi
 func (f *fakeSessionQueryRepository) GetDriverLapLocation(ctx context.Context, sessionID string, driverNumber int, lapNumber int) (map[string]any, error) {
 	return f.lapLocation, f.lapLocationErr
 }
-func (f *fakeSessionQueryRepository) GetDriverBroadcast(ctx context.Context, sessionID string, driverNumber int) (string, error) {
-	return f.broadcastURL, f.broadcastErr
-}
 
 func sq(client *fakeChampionshipClientForSessionQuery, repo *fakeSessionQueryRepository) *SessionQueryUseCase {
 	return NewSessionQueryUseCase(repo, client)
 }
 
 // TestSessionQueryUseCase_ThinPassThroughs proves ListChampionships/ListChampionshipEvents/
-// GetEvent/ListEventSessions/GetSessionRaceStandings/GetSessionBroadcast are unmodified
+// GetEvent/ListEventSessions/GetSessionRaceStandings are unmodified
 // pass-throughs to the championship-service client.
 func TestSessionQueryUseCase_ThinPassThroughs(t *testing.T) {
 	client := &fakeChampionshipClientForSessionQuery{
@@ -122,7 +112,6 @@ func TestSessionQueryUseCase_ThinPassThroughs(t *testing.T) {
 		eventPayload:  map[string]any{"eventId": "e1"},
 		eventSessions: []map[string]any{{"sessionId": "s1"}},
 		raceStandings: map[string]any{"leader": "VER"},
-		broadcast:     map[string]any{"broadcastUrl": "https://x"},
 	}
 	uc := sq(client, &fakeSessionQueryRepository{})
 
@@ -140,9 +129,6 @@ func TestSessionQueryUseCase_ThinPassThroughs(t *testing.T) {
 	}
 	if got, err := uc.GetSessionRaceStandings(context.Background(), "s1"); err != nil || got == nil {
 		t.Fatalf("GetSessionRaceStandings: got %v err %v", got, err)
-	}
-	if got, err := uc.GetSessionBroadcast(context.Background(), "s1"); err != nil || got == nil {
-		t.Fatalf("GetSessionBroadcast: got %v err %v", got, err)
 	}
 
 	boom := errors.New("downstream boom")
@@ -315,22 +301,21 @@ func TestSessionQueryUseCase_GetSessionDataset_UnknownSession(t *testing.T) {
 }
 
 // TestSessionQueryUseCase_GetDriverProfile proves it finds the driver by number in the
-// championship-service driver list and enriches it with a broadcast URL from the local repository,
-// or returns nil when the driver number is not present in the session, or the session itself
+// championship-service driver list, or returns nil when the driver number is not present in the session, or the session itself
 // doesn't exist.
 func TestSessionQueryUseCase_GetDriverProfile(t *testing.T) {
 	client := &fakeChampionshipClientForSessionQuery{drivers: []ports.ChampionshipDriverRef{
 		{DriverNumber: 44, DriverName: "Lewis", TeamName: "Mercedes"},
 	}}
-	repo := &fakeSessionQueryRepository{broadcastURL: "https://stream/44"}
+	repo := &fakeSessionQueryRepository{}
 	uc := sq(client, repo)
 
 	got, err := uc.GetDriverProfile(context.Background(), "s1", 44)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got["driver_name"] != "Lewis" || got["broadcast_url"] != "https://stream/44" {
-		t.Fatalf("expected enriched driver profile, got %+v", got)
+	if _, hasBroadcast := got["broadcast_url"]; got["driver_name"] != "Lewis" || got["team_name"] != "Mercedes" || hasBroadcast {
+		t.Fatalf("expected the driver profile without broadcast URL, got %+v", got)
 	}
 
 	got2, err := uc.GetDriverProfile(context.Background(), "s1", 999)
@@ -342,25 +327,6 @@ func TestSessionQueryUseCase_GetDriverProfile(t *testing.T) {
 	got3, err := uc2.GetDriverProfile(context.Background(), "missing", 44)
 	if err != nil || got3 != nil {
 		t.Fatalf("expected nil for unknown session, got %v %v", got3, err)
-	}
-}
-
-// TestSessionQueryUseCase_GetDriverBroadcast proves it loads session context, then the driver's
-// broadcast URL from the local repository, returning nil when the session doesn't exist.
-func TestSessionQueryUseCase_GetDriverBroadcast(t *testing.T) {
-	client := &fakeChampionshipClientForSessionQuery{session: &ports.ChampionshipSessionRef{ID: "s1", EventID: "e1"}}
-	repo := &fakeSessionQueryRepository{broadcastURL: "https://stream/1"}
-	uc := sq(client, repo)
-
-	got, err := uc.GetDriverBroadcast(context.Background(), "s1", 1)
-	if err != nil || got["broadcast_url"] != "https://stream/1" {
-		t.Fatalf("expected broadcast_url, got %+v err %v", got, err)
-	}
-
-	uc2 := sq(&fakeChampionshipClientForSessionQuery{session: nil}, &fakeSessionQueryRepository{})
-	got2, err := uc2.GetDriverBroadcast(context.Background(), "missing", 1)
-	if err != nil || got2 != nil {
-		t.Fatalf("expected nil for unknown session, got %v %v", got2, err)
 	}
 }
 
